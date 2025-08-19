@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>レース登録</title>
+</head>
+<body>
+    <h1>レース登録フォーム</h1>
+    <form th:action="@{/races/create}" method="post" th:object="${race}">
+        <label>レース名: <input type="text" th:field="*{name}" /></label><br>
+        <label>距離: <input type="text" th:field="*{distance}" /></label><br>
+        <label>馬場状態: <input type="text" th:field="*{condition}" /></label><br>
+        <button type="submit">登録</button>
+    </form>
+</body>
+</html>

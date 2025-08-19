@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>顔画像アップロード</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+    <h1>顔画像アップロード</h1>
+
+    <!-- ナビゲーション -->
+    <nav>
+        <a th:href="@{/faces}">一覧</a> |
+        <a th:href="@{/faces/upload}">画像アップロード</a> |
+        <a th:href="@{/races}">レース一覧</a> |
+        <a th:href="@{/races/new}">レース登録</a>
+    </nav>
+
+    <!-- th:object を faceForm に修正 -->
+    <form th:action="@{/faces/upload}" th:object="${faceForm}" method="post" enctype="multipart/form-data">
+        <label for="horseName">馬名：</label>
+        <input type="text" id="horseName" th:field="*{horseName}" required><br>
+
+        <label for="trackCondition">馬場状態：</label>
+        <input type="text" id="trackCondition" th:field="*{trackCondition}" required><br>
+
+        <label for="file">画像ファイル：</label>
+        <input type="file" id="file" name="file" required><br>
+
+        <button type="submit">アップロード</button>
+    </form>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!-- templates/faces/index.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>顔画像一覧</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+    <h1>顔画像一覧</h1>
+
+    <!-- ナビゲーション -->
+    <nav>
+        <a th:href="@{/faces}">一覧</a> |
+        <a th:href="@{/faces/upload}">画像アップロード</a> |
+        <a th:href="@{/races}">レース一覧</a> |
+        <a th:href="@{/races/new}">レース登録</a>
+    </nav>
+
+    <!-- 検索フォーム -->
+    <form th:action="@{/faces/search}" method="get" class="search-form">
+        <input type="text" name="horseName" placeholder="馬名を入力">
+        <input type="text" name="trackCondition" placeholder="馬場状態を入力">
+        <button type="submit">検索</button>
+    </form>
+
+    <!-- 一覧表示 -->
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>馬名</th>
+                <th>馬場状態</th>
+                <th>画像</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="face : ${faceImages}">
+                <td th:text="${face.id}"></td>
+                <td th:text="${face.horseName}"></td>
+                <td th:text="${face.trackCondition}"></td>
+                <td><img th:src="@{${face.imagePath}}" alt="顔画像" width="100"></td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>

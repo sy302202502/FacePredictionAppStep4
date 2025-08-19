@@ -1,0 +1,1 @@
+// HorseFace entity placeholder

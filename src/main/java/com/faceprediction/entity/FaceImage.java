@@ -1,5 +1,6 @@
 package com.faceprediction.entity;
 
+import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
@@ -18,6 +19,9 @@ public class FaceImage {
 
     private String imagePath;
 
+    @Column(nullable = false)
+    private int score;  // NOT NULL 制約を満たすよう、初期化が必要
+
     // --- コンストラクタ ---
     public FaceImage() {
     }
@@ -26,10 +30,10 @@ public class FaceImage {
         this.horseName = horseName;
         this.trackCondition = trackCondition;
         this.imagePath = imagePath;
+        this.score = 0;  // 初期スコアを0に設定
     }
 
     // --- Getter / Setter ---
-
     public Long getId() {
         return id;
     }
@@ -60,5 +64,13 @@ public class FaceImage {
 
     public void setImagePath(String imagePath) {
         this.imagePath = imagePath;
+    }
+
+    public int getScore() {
+        return score;
+    }
+
+    public void setScore(int score) {
+        this.score = score;
     }
 }

@@ -1,8 +1,17 @@
 package com.faceprediction.form;
 
 public class FaceForm {
+
     private String horseName;
     private String trackCondition;
+
+    public FaceForm() {
+    }
+
+    public FaceForm(String horseName, String trackCondition) {
+        this.horseName = horseName;
+        this.trackCondition = trackCondition;
+    }
 
     public String getHorseName() {
         return horseName;

@@ -8,6 +8,8 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.Table;
 
+import org.springframework.format.annotation.DateTimeFormat;
+
 @Entity
 @Table(name = "races")
 public class Race {
@@ -24,11 +26,13 @@ public class Race {
 
     private String trackCondition;
 
+    @DateTimeFormat(pattern = "yyyy-MM-dd") // ← 追加：日付変換用
     private LocalDate date;
 
-    // コンストラクタ
+    // デフォルトコンストラクタ
     public Race() {}
 
+    // 全項目を引数に取るコンストラクタ
     public Race(String raceName, String location, int distance, String trackCondition, LocalDate date) {
         this.raceName = raceName;
         this.location = location;

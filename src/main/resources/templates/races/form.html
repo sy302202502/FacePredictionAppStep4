@@ -17,23 +17,36 @@
         <a th:href="@{/races/new}">レース登録</a>
     </nav>
 
+    <!-- フォーム -->
     <form th:action="@{/races/save}" th:object="${race}" method="post">
-        <label for="raceName">レース名：</label>
-        <input type="text" id="raceName" th:field="*{raceName}" required><br>
+        <div>
+            <label for="raceName">レース名：</label>
+            <input type="text" id="raceName" th:field="*{raceName}" required>
+        </div>
 
-        <label for="location">開催場所：</label>
-        <input type="text" id="location" th:field="*{location}" required><br>
+        <div>
+            <label for="location">開催場所：</label>
+            <input type="text" id="location" th:field="*{location}" required>
+        </div>
 
-        <label for="distance">距離（m）：</label>
-        <input type="number" id="distance" th:field="*{distance}" required><br>
+        <div>
+            <label for="distance">距離（m）：</label>
+            <input type="number" id="distance" th:field="*{distance}" required>
+        </div>
 
-        <label for="trackCondition">馬場状態：</label>
-        <input type="text" id="trackCondition" th:field="*{trackCondition}" required><br>
+        <div>
+            <label for="trackCondition">馬場状態：</label>
+            <input type="text" id="trackCondition" th:field="*{trackCondition}" required>
+        </div>
 
-        <label for="date">開催日：</label>
-        <input type="date" id="date" th:field="*{date}" required><br>
+        <div>
+            <label for="date">開催日：</label>
+            <input type="date" id="date" th:field="*{date}" required>
+        </div>
 
-        <button type="submit">登録</button>
+        <div>
+            <button type="submit">登録</button>
+        </div>
     </form>
 </body>
 </html>

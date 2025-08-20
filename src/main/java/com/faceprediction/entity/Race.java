@@ -7,6 +7,10 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.Table;
+import javax.validation.constraints.Min;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Size;
 
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -18,21 +22,27 @@ public class Race {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "レース名を入力してください")
+    @Size(max = 100, message = "レース名は100文字以内で入力してください")
     private String raceName;
 
+    @NotBlank(message = "開催場所を入力してください")
+    @Size(max = 50, message = "開催場所は50文字以内で入力してください")
     private String location;
 
+    @Min(value = 100, message = "距離は100m以上で入力してください")
     private int distance;
 
+    @NotBlank(message = "馬場状態を入力してください")
     private String trackCondition;
 
-    @DateTimeFormat(pattern = "yyyy-MM-dd") // ← 追加：日付変換用
+    @NotNull(message = "開催日を入力してください")
+    @DateTimeFormat(pattern = "yyyy-MM-dd") // HTMLからの受け取り用
     private LocalDate date;
 
-    // デフォルトコンストラクタ
+    // --- コンストラクタ ---
     public Race() {}
 
-    // 全項目を引数に取るコンストラクタ
     public Race(String raceName, String location, int distance, String trackCondition, LocalDate date) {
         this.raceName = raceName;
         this.location = location;
@@ -41,7 +51,7 @@ public class Race {
         this.date = date;
     }
 
-    // Getter & Setter
+    // --- Getter & Setter ---
     public Long getId() {
         return id;
     }

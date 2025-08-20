@@ -17,31 +17,42 @@
         <a th:href="@{/races/new}">レース登録</a>
     </nav>
 
-    <!-- フォーム -->
+    <!-- 登録フォーム -->
     <form th:action="@{/races/save}" th:object="${race}" method="post">
+
+        <!-- フォーム全体のエラー -->
+        <div th:if="${#fields.hasErrors('*')}" style="color: red;">
+            入力に不備があります。各項目をご確認ください。
+        </div>
+
         <div>
             <label for="raceName">レース名：</label>
             <input type="text" id="raceName" th:field="*{raceName}" required>
+            <div th:if="${#fields.hasErrors('raceName')}" th:errors="*{raceName}" style="color: red;"></div>
         </div>
 
         <div>
             <label for="location">開催場所：</label>
             <input type="text" id="location" th:field="*{location}" required>
+            <div th:if="${#fields.hasErrors('location')}" th:errors="*{location}" style="color: red;"></div>
         </div>
 
         <div>
             <label for="distance">距離（m）：</label>
             <input type="number" id="distance" th:field="*{distance}" required>
+            <div th:if="${#fields.hasErrors('distance')}" th:errors="*{distance}" style="color: red;"></div>
         </div>
 
         <div>
             <label for="trackCondition">馬場状態：</label>
             <input type="text" id="trackCondition" th:field="*{trackCondition}" required>
+            <div th:if="${#fields.hasErrors('trackCondition')}" th:errors="*{trackCondition}" style="color: red;"></div>
         </div>
 
         <div>
             <label for="date">開催日：</label>
             <input type="date" id="date" th:field="*{date}" required>
+            <div th:if="${#fields.hasErrors('date')}" th:errors="*{date}" style="color: red;"></div>
         </div>
 
         <div>

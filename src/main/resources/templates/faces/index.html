@@ -4,12 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <title>顔画像一覧</title>
+    <!-- 外部CSSを読み込み -->
     <link rel="stylesheet" th:href="@{/css/style.css}">
 </head>
 <body>
     <h1>顔画像一覧</h1>
 
-    <!-- ナビゲーション -->
+    <!-- ナビゲーションメニュー -->
     <nav>
         <a th:href="@{/faces}">一覧</a> |
         <a th:href="@{/faces/upload}">画像アップロード</a> |
@@ -18,13 +19,14 @@
     </nav>
 
     <!-- 検索フォーム -->
+    <!-- GETメソッドで /faces/search に horseName と trackCondition を送信 -->
     <form th:action="@{/faces/search}" method="get" class="search-form">
         <input type="text" name="horseName" placeholder="馬名を入力">
         <input type="text" name="trackCondition" placeholder="馬場状態を入力">
         <button type="submit">検索</button>
     </form>
 
-    <!-- 一覧表示 -->
+    <!-- 一覧表示テーブル -->
     <table>
         <thead>
             <tr>
@@ -35,10 +37,12 @@
             </tr>
         </thead>
         <tbody>
+            <!-- faceImages（コントローラーから渡されたリスト）をループ -->
             <tr th:each="face : ${faceImages}">
                 <td th:text="${face.id}"></td>
                 <td th:text="${face.horseName}"></td>
                 <td th:text="${face.trackCondition}"></td>
+                <!-- 保存先のパスを img タグの src に設定 -->
                 <td><img th:src="@{${face.imagePath}}" alt="顔画像" width="100"></td>
             </tr>
         </tbody>

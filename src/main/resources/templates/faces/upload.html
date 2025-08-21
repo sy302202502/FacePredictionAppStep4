@@ -18,16 +18,27 @@
     </nav>
 
     <!-- アップロードフォーム -->
+    <!-- th:object="${faceForm}" で FaceForm クラスをバインド -->
+    <!-- enctype="multipart/form-data" がファイルアップロードに必須 -->
     <form th:action="@{/faces/upload}" th:object="${faceForm}" method="post" enctype="multipart/form-data">
+        
+        <!-- 馬名入力 -->
         <label for="horseName">馬名：</label>
-        <input type="text" id="horseName" th:field="*{horseName}" required><br><br>
+        <input type="text" id="horseName" th:field="*{horseName}" required>
+        <br><br>
 
+        <!-- 馬場状態入力 -->
         <label for="trackCondition">馬場状態：</label>
-        <input type="text" id="trackCondition" th:field="*{trackCondition}" required><br><br>
+        <input type="text" id="trackCondition" th:field="*{trackCondition}" required>
+        <br><br>
 
+        <!-- 顔画像ファイル -->
         <label for="file">画像ファイル：</label>
-        <input type="file" id="file" name="file" required><br><br>
+        <!-- th:field は使わず、MultipartFile 用に name="file" を指定 -->
+        <input type="file" id="file" name="file" required>
+        <br><br>
 
+        <!-- 送信ボタン -->
         <button type="submit">アップロード</button>
     </form>
 </body>

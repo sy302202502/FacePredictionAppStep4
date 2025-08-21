@@ -1,14 +1,16 @@
-<!-- templates/index.html -->
+<!-- templates/index.html: アプリケーションのトップページ -->
+
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org"> <!-- ThymeleafテンプレートとしてHTMLを宣言 -->
 <head>
     <meta charset="UTF-8">
-    <title>Face Prediction App</title>
+    <title>Face Prediction App</title> <!-- ページタイトル -->
 </head>
 <body>
+    <!-- ナビゲーションバー（fragments/navbar.htmlで定義されたフラグメントを読み込む） -->
     <div th:replace="fragments/navbar :: navbar"></div>
 
-    <h1>Face Prediction Appへようこそ</h1>
-    <p>上のナビゲーションから各機能をご利用ください。</p>
+    <h1>Face Prediction Appへようこそ</h1> <!-- サイトのメインタイトル -->
+    <p>上のナビゲーションから各機能をご利用ください。</p> <!-- 利用の案内 -->
 </body>
 </html>

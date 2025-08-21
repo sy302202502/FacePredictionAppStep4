@@ -1,13 +1,20 @@
+<!-- templates/fragments/header.html -->
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head></head>
+<head>
+    <meta charset="UTF-8">
+    <title>共通ヘッダー</title>
+</head>
 <body>
-<div th:fragment="header">
-    <nav>
-        <a href="/faces">顔画像一覧</a> |
-        <a href="/races">レース一覧</a>
-    </nav>
-    <hr />
-</div>
+    <!-- 共通ヘッダーのフラグメント -->
+    <div th:fragment="header">
+        <nav>
+            <a th:href="@{/faces}">顔画像一覧</a> |
+            <a th:href="@{/faces/upload}">画像アップロード</a> |
+            <a th:href="@{/races}">レース一覧</a> |
+            <a th:href="@{/races/new}">レース登録</a>
+        </nav>
+        <hr />
+    </div>
 </body>
 </html>

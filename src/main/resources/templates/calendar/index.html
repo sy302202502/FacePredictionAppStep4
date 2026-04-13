@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>予想カレンダー</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        :root {
+            --neon:        #7dff4f;
+            --neon-dim:    #3a7d22;
+            --neon-glow:   rgba(125,255,79,0.32);
+            --orange:      #ff8000;
+            --orange-glow: rgba(255,128,0,0.38);
+            --gold:        #c9a84c;
+            --gold-light:  #f5d878;
+            --crimson:     #ff2244;
+            --crimson-dim: #7a0818;
+            --purple:      #8b5cf6;
+            --purple-glow: rgba(139,92,246,0.35);
+            --deep:        #050708;
+            --surface:     #0b0e0b;
+            --surface2:    #111811;
+            --surface3:    #182018;
+            --panel:       rgba(10,14,10,0.93);
+            --text:        #d4e8cc;
+            --text-muted:  #607860;
+        }
+
+        body { font-family: 'Noto Sans JP', sans-serif; background: var(--deep); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+        body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px); background-size: 44px 44px; pointer-events: none; z-index: 0; }
+        body::after { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse at 10% 15%, rgba(139,92,246,0.12) 0%, transparent 50%), radial-gradient(ellipse at 90% 85%, rgba(255,128,0,0.08) 0%, transparent 50%); pointer-events: none; z-index: 0; }
+        .scanlines { position: fixed; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px); pointer-events: none; z-index: 1; }
+        .page-body { position: relative; z-index: 2; max-width: 1000px; margin: 0 auto; padding: 0 16px 100px; }
+
+        .glass-card { background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px; backdrop-filter: blur(10px); box-shadow: 0 4px 24px rgba(0,0,0,0.7); margin-bottom: 16px; overflow: hidden; position: relative; }
+        .glass-card::before { content: ''; position: absolute; top: 4px; left: 4px; width: 12px; height: 12px; border-top: 1px solid var(--neon-dim); border-left: 1px solid var(--neon-dim); opacity: 0.5; pointer-events: none; }
+        .glass-card::after { content: ''; position: absolute; bottom: 4px; right: 4px; width: 12px; height: 12px; border-bottom: 1px solid rgba(139,92,246,0.5); border-right: 1px solid rgba(139,92,246,0.5); opacity: 0.5; pointer-events: none; }
+        .glass-card-inner { padding: 18px 22px; }
+
+        .section-heading { display: flex; align-items: center; gap: 10px; font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 4px; color: var(--neon); margin: 34px 0 14px; text-shadow: 0 0 10px var(--neon-glow); }
+        .section-heading::before { content: '▶'; color: var(--purple); font-size: 11px; text-shadow: 0 0 8px var(--purple-glow); }
+        .section-heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent); opacity: 0.7; }
+        .neon-divider { height: 1px; background: linear-gradient(90deg, transparent, var(--neon-dim), var(--purple), var(--neon-dim), transparent); margin: 10px 0; opacity: 0.5; }
+
+        .page-header { padding: 32px 0 20px; border-bottom: 1px solid rgba(125,255,79,0.1); margin-bottom: 24px; position: relative; }
+        .page-header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--crimson), var(--orange), var(--neon), var(--purple), var(--neon), var(--orange), var(--crimson), transparent); background-size: 300%; animation: stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+        .page-title { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 5px; color: var(--neon); text-shadow: 0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; margin-top: 3px; }
+
+        .btn { padding: 8px 18px; border-radius: 3px; font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-block; border: none; }
+        .btn-neon { background: transparent; color: var(--neon); border: 1px solid var(--neon-dim); }
+        .btn-neon:hover { border-color: var(--neon); box-shadow: 0 0 16px var(--neon-glow); color: #fff; transform: translateY(-1px); }
+        .btn-fire { background: linear-gradient(135deg, rgba(255,34,68,0.2), rgba(255,128,0,0.15)); color: var(--orange); border: 1px solid rgba(255,128,0,0.4); }
+        .btn-fire:hover { border-color: var(--orange); box-shadow: 0 0 18px var(--orange-glow); color: #fff; transform: translateY(-1px); }
+        .btn-purple { background: rgba(139,92,246,0.15); color: var(--purple); border: 1px solid rgba(139,92,246,0.4); }
+        .btn-purple:hover { border-color: var(--purple); box-shadow: 0 0 16px var(--purple-glow); color: #fff; }
+        .btn-gold { background: rgba(201,168,76,0.15); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.4); }
+        .btn-gold:hover { border-color: var(--gold-light); box-shadow: 0 0 14px rgba(201,168,76,0.35); color: #fff; }
+        .btn-muted { background: rgba(96,120,96,0.2); color: var(--text-muted); border: 1px solid rgba(96,120,96,0.35); }
+        .btn-muted:hover { border-color: var(--text-muted); color: var(--text); }
+
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: var(--deep); } ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; } ::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+        @media (max-width: 640px) { .page-title { font-size: 22px; } }
+
+        /* サマリバー */
+        .summary-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+        .summary-box { background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px; padding: 16px 20px; flex: 1; min-width: 120px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+        .summary-num { font-family: 'Bebas Neue', sans-serif; font-size: 36px; line-height: 1; color: var(--neon); text-shadow: 0 0 14px var(--neon-glow); }
+        .summary-label { font-size: 11px; color: var(--text-muted); letter-spacing: 2px; margin-top: 5px; }
+
+        /* 操作バー */
+        .action-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; background: var(--panel); border: 1px solid rgba(125,255,79,0.1); border-radius: 5px; padding: 14px 18px; }
+        .action-bar-text { font-size: 12px; color: var(--text-muted); flex: 1; letter-spacing: 1px; }
+
+        /* 日付グループ */
+        .date-group { margin-bottom: 28px; }
+        .date-header { display: flex; align-items: center; gap: 12px; font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 4px; color: var(--text-muted); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(125,255,79,0.1); }
+        .date-header.date-today { color: var(--crimson); border-bottom-color: rgba(255,34,68,0.3); }
+        .today-badge { background: var(--crimson); color: #fff; font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 2px; padding: 2px 8px; border-radius: 2px; text-shadow: none; }
+        .date-count { font-size: 11px; color: var(--text-muted); font-family: 'Noto Sans JP', sans-serif; letter-spacing: 1px; }
+
+        /* レースカード */
+        .race-card { background: var(--panel); border: 1px solid rgba(125,255,79,0.1); border-radius: 5px; padding: 16px 20px; margin-bottom: 10px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; position: relative; overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; }
+        .race-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+        .race-card.today::before  { background: var(--crimson); box-shadow: 0 0 8px rgba(255,34,68,0.5); }
+        .race-card.urgent::before { background: var(--orange); box-shadow: 0 0 8px var(--orange-glow); }
+        .race-card.soon::before   { background: var(--gold); box-shadow: 0 0 8px rgba(201,168,76,0.4); }
+        .race-card.past::before   { background: var(--text-muted); opacity: 0.4; }
+        .race-card.future::before { background: var(--purple); box-shadow: 0 0 8px var(--purple-glow); }
+        .race-card:hover { border-color: rgba(125,255,79,0.25); box-shadow: 0 0 20px rgba(0,0,0,0.6); }
+        .race-card.past { opacity: 0.6; }
+
+        /* カウントダウン */
+        .countdown { min-width: 64px; text-align: center; flex-shrink: 0; padding-left: 8px; }
+        .countdown-num { font-family: 'Bebas Neue', sans-serif; font-size: 30px; line-height: 1; }
+        .countdown-unit { font-size: 10px; color: var(--text-muted); letter-spacing: 2px; margin-top: 2px; }
+        .c-today  { color: var(--crimson); text-shadow: 0 0 10px rgba(255,34,68,0.5); }
+        .c-urgent { color: var(--orange);  text-shadow: 0 0 10px var(--orange-glow); }
+        .c-soon   { color: var(--gold-light); }
+        .c-past   { color: var(--text-muted); }
+        .c-future { color: var(--purple); text-shadow: 0 0 8px var(--purple-glow); }
+
+        /* レース情報 */
+        .race-info { flex: 1; min-width: 200px; padding-left: 4px; }
+        .race-name { font-family: 'Noto Serif JP', serif; font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+        .race-meta { font-size: 11px; color: var(--text-muted); letter-spacing: 1px; display: flex; gap: 12px; flex-wrap: wrap; }
+        .race-meta-item { display: inline-flex; align-items: center; gap: 3px; }
+
+        /* アクション */
+        .race-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+        /* バッジ */
+        .analyzed-badge { background: rgba(125,255,79,0.12); color: var(--neon); font-size: 11px; letter-spacing: 1px; padding: 3px 10px; border-radius: 2px; border: 1px solid var(--neon-dim); font-family: 'Bebas Neue', sans-serif; }
+        .not-analyzed-badge { background: rgba(255,128,0,0.1); color: var(--orange); font-size: 11px; letter-spacing: 1px; padding: 3px 10px; border-radius: 2px; border: 1px solid rgba(255,128,0,0.3); font-family: 'Bebas Neue', sans-serif; }
+
+        /* 空状態 */
+        .empty-state { text-align: center; padding: 80px 40px; }
+        .empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+        .empty-state-text { font-size: 13px; color: var(--text-muted); letter-spacing: 1px; line-height: 2; }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <div class="page-header">
+            <div class="page-title">RACE CALENDAR</div>
+            <div class="page-subtitle">今後3週間の重賞レース一覧 / ワンクリックで分析・予想を開始</div>
+        </div>
+
+        <!-- サマリ -->
+        <div class="summary-bar">
+            <div class="summary-box">
+                <div class="summary-num" th:text="${totalEvents}">0</div>
+                <div class="summary-label">TOTAL RACES</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-num" style="color: var(--neon);" th:text="${analyzedCount}">0</div>
+                <div class="summary-label">ANALYZED</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-num" style="color: var(--orange);" th:text="${totalEvents - analyzedCount}">0</div>
+                <div class="summary-label">PENDING</div>
+            </div>
+        </div>
+
+        <!-- 操作バー -->
+        <div class="action-bar">
+            <span class="action-bar-text">出走馬を最新情報に更新してからカレンダーに反映されます</span>
+            <form method="post" action="/script/entries" style="display:inline; margin:0;">
+                <button type="submit" class="btn btn-fire">REFRESH ENTRIES</button>
+            </form>
+            <a href="/calendar" class="btn btn-muted">RELOAD</a>
+        </div>
+
+        <!-- レースなし -->
+        <div th:if="${groupedEvents == null or groupedEvents.isEmpty()}" class="glass-card">
+            <div class="glass-card-inner">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📅</div>
+                    <div class="empty-state-text">直近のレースデータがありません。<br>「REFRESH ENTRIES」ボタンを押して最新情報を取得してください。</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日付グループ -->
+        <div th:each="entry : ${groupedEvents}" class="date-group">
+            <div class="date-header"
+                 th:classappend="${entry.key == today ? 'date-today' : ''}">
+                <span th:text="${entry.key}"></span>
+                <span th:if="${entry.key == today}" class="today-badge">TODAY</span>
+                <span class="date-count" th:text="'— ' + #lists.size(entry.value) + ' RACES'"></span>
+            </div>
+
+            <div th:each="ev : ${entry.value}" class="race-card"
+                 th:classappend="${ev.urgency}">
+
+                <!-- カウントダウン -->
+                <div class="countdown">
+                    <div th:if="${ev.isPast}">
+                        <div class="countdown-num c-past" style="font-size:16px; letter-spacing:2px;">END</div>
+                    </div>
+                    <div th:unless="${ev.isPast}">
+                        <div class="countdown-num"
+                             th:classappend="'c-' + ${ev.urgency}"
+                             th:text="${ev.daysLeft == 0 ? 'TODAY' : ev.daysLeft}">0</div>
+                        <div class="countdown-unit" th:unless="${ev.daysLeft == 0}">DAYS</div>
+                    </div>
+                </div>
+
+                <div class="neon-divider" style="width:1px; height:48px; background: linear-gradient(180deg, transparent, var(--neon-dim), transparent); margin:0; opacity:0.3; flex-shrink:0;"></div>
+
+                <!-- レース情報 -->
+                <div class="race-info">
+                    <div class="race-name" th:text="${ev.raceName}">レース名</div>
+                    <div class="race-meta">
+                        <span class="race-meta-item" th:text="${ev.venue}">会場</span>
+                        <span class="race-meta-item" th:text="${ev.surface + ev.distance + 'm'}">芝2000m</span>
+                        <span class="race-meta-item" th:text="'[' + ev.categoryLabel + ']'">中距離</span>
+                        <span class="race-meta-item" th:text="${ev.entryCount + '頭'}">18頭</span>
+                    </div>
+                </div>
+
+                <!-- アクション -->
+                <div class="race-actions">
+                    <span th:if="${ev.isAnalyzed}"  class="analyzed-badge">ANALYZED</span>
+                    <span th:unless="${ev.isAnalyzed}" class="not-analyzed-badge">PENDING</span>
+
+                    <a th:if="${ev.isAnalyzed}"
+                       th:href="@{/predict-v2(raceName=${ev.raceName})}"
+                       class="btn btn-neon">VIEW RESULT</a>
+
+                    <a th:unless="${ev.isAnalyzed}"
+                       th:href="@{/predict-v2(raceName=${ev.raceName})}"
+                       class="btn btn-fire">ANALYZE</a>
+
+                    <form th:if="${ev.daysLeft <= 1 and !ev.isPast}"
+                          method="post" action="/script/odds-fetch" style="display:inline; margin:0;">
+                        <input type="hidden" name="raceName" th:value="${ev.raceName}">
+                        <button type="submit" class="btn btn-gold">GET ODDS</button>
+                    </form>
+
+                    <a th:if="${ev.isPast}"
+                       href="/accuracy" class="btn btn-purple">ACCURACY</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>パドック写真分析</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon:#7dff4f; --neon-dim:#3a7d22; --neon-glow:rgba(125,255,79,0.32);
+            --orange:#ff8000; --orange-glow:rgba(255,128,0,0.38);
+            --gold:#c9a84c; --gold-light:#f5d878;
+            --crimson:#ff2244; --crimson-dim:#7a0818;
+            --purple:#8b5cf6; --purple-glow:rgba(139,92,246,0.35);
+            --deep:#050708; --surface:#0b0e0b; --surface2:#111811; --surface3:#182018;
+            --panel:rgba(10,14,10,0.93); --text:#d4e8cc; --text-muted:#607860;
+        }
+        body { font-family:'Noto Sans JP',sans-serif; background:var(--deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(125,255,79,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(125,255,79,0.02) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+        body::after { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 10% 15%,rgba(139,92,246,0.12) 0%,transparent 50%),radial-gradient(ellipse at 90% 85%,rgba(255,128,0,0.08) 0%,transparent 50%); pointer-events:none; z-index:0; }
+        .scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.1) 0px,rgba(0,0,0,0.1) 1px,transparent 1px,transparent 3px); pointer-events:none; z-index:1; }
+        .page-body { position:relative; z-index:2; max-width:1000px; margin:0 auto; padding:0 16px 100px; }
+        .glass-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; backdrop-filter:blur(10px); box-shadow:0 4px 24px rgba(0,0,0,0.7); margin-bottom:16px; overflow:hidden; position:relative; }
+        .glass-card::before { content:''; position:absolute; top:4px; left:4px; width:12px; height:12px; border-top:1px solid var(--neon-dim); border-left:1px solid var(--neon-dim); opacity:0.5; pointer-events:none; }
+        .glass-card::after { content:''; position:absolute; bottom:4px; right:4px; width:12px; height:12px; border-bottom:1px solid rgba(139,92,246,0.5); border-right:1px solid rgba(139,92,246,0.5); opacity:0.5; pointer-events:none; }
+        .glass-card-inner { padding:18px 22px; }
+        .section-heading { display:flex; align-items:center; gap:10px; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:4px; color:var(--neon); margin:34px 0 14px; text-shadow:0 0 10px var(--neon-glow); }
+        .section-heading::before { content:'▶'; color:var(--purple); font-size:11px; }
+        .section-heading::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--neon-dim),rgba(139,92,246,0.3),transparent); opacity:0.7; }
+        .neon-divider { height:1px; background:linear-gradient(90deg,transparent,var(--neon-dim),var(--purple),var(--neon-dim),transparent); margin:10px 0; opacity:0.5; }
+        .page-header { padding:32px 0 20px; border-bottom:1px solid rgba(125,255,79,0.1); margin-bottom:24px; position:relative; }
+        .page-header::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,var(--crimson),var(--orange),var(--neon),var(--purple),var(--neon),var(--orange),var(--crimson),transparent); background-size:300%; animation:stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .page-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:5px; color:var(--neon); text-shadow:0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size:11px; color:var(--text-muted); letter-spacing:3px; margin-top:3px; }
+        .btn { padding:8px 18px; border-radius:3px; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:2px; cursor:pointer; transition:all 0.2s; text-decoration:none; display:inline-block; border:1px solid; }
+        .btn-neon { background:transparent; color:var(--neon); border-color:var(--neon-dim); }
+        .btn-neon:hover { border-color:var(--neon); box-shadow:0 0 16px var(--neon-glow); color:#fff; transform:translateY(-1px); }
+        input[type=text],input[type=number],input[type=file],select,textarea { background:var(--surface3); color:var(--text); border:1px solid rgba(125,255,79,0.2); border-radius:3px; padding:7px 11px; font-family:'Noto Sans JP',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s,box-shadow 0.2s; }
+        input:focus,select:focus,textarea:focus { border-color:var(--neon); box-shadow:0 0 10px var(--neon-glow); }
+        select option { background:var(--surface2); }
+        label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); }
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        thead { background:rgba(125,255,79,0.07); }
+        th { font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:2px; color:var(--neon); padding:10px 12px; text-align:left; border-bottom:1px solid rgba(125,255,79,0.2); }
+        td { padding:10px 12px; border-bottom:1px solid rgba(125,255,79,0.06); color:var(--text-muted); }
+        tr:hover td { background:rgba(125,255,79,0.03); }
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--deep)} ::-webkit-scrollbar-thumb{background:var(--neon-dim);border-radius:2px} ::-webkit-scrollbar-thumb:hover{background:var(--neon)}
+        @media(max-width:640px){.page-title{font-size:22px}}
+
+        /* Upload area */
+        .upload-area {
+            border: 2px dashed var(--neon-dim);
+            border-radius: 5px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s;
+            background: rgba(125,255,79,0.02);
+            margin-bottom: 16px;
+            position: relative;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--neon);
+            background: rgba(125,255,79,0.05);
+            box-shadow: 0 0 24px var(--neon-glow), inset 0 0 24px rgba(125,255,79,0.03);
+        }
+        .upload-area .icon { font-size: 44px; margin-bottom: 12px; line-height: 1; }
+        .upload-area .hint {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 15px;
+            letter-spacing: 4px;
+            color: var(--neon);
+            text-shadow: 0 0 10px var(--neon-glow);
+        }
+        .upload-area .hint-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; letter-spacing: 2px; }
+        #file-input { display: none; }
+
+        /* Preview */
+        #preview-wrap { display: none; margin-bottom: 16px; text-align: center; }
+        #preview-img {
+            max-width: 100%;
+            max-height: 280px;
+            border-radius: 4px;
+            border: 1px solid rgba(125,255,79,0.25);
+            box-shadow: 0 0 30px var(--neon-glow), 0 4px 24px rgba(0,0,0,0.6);
+        }
+        #preview-name { font-size: 11px; color: var(--text-muted); margin-top: 8px; letter-spacing: 2px; }
+
+        /* Form */
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; margin-bottom: 5px; }
+        .form-group select, .form-group input[type=text] { width: 100%; }
+
+        /* Analyze button */
+        .btn-analyze {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, rgba(125,255,79,0.12), rgba(125,255,79,0.06));
+            color: var(--neon);
+            border: 1px solid var(--neon-dim);
+            border-radius: 3px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 16px;
+            letter-spacing: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+        .btn-analyze:hover:not(:disabled) {
+            border-color: var(--neon);
+            box-shadow: 0 0 24px var(--neon-glow);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+        .btn-analyze:disabled {
+            opacity: 0.4;
+            cursor: default;
+            color: var(--text-muted);
+            border-color: rgba(125,255,79,0.1);
+        }
+
+        /* Log panel */
+        #log-panel {
+            display: none;
+            background: #020402;
+            color: var(--neon);
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 12px 18px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            border-radius: 3px;
+            border: 1px solid rgba(125,255,79,0.12);
+            line-height: 1.7;
+            margin-bottom: 16px;
+        }
+        .log-line { padding: 1px 0; }
+        .log-line.ok  { color: var(--neon); }
+        .log-line.err { color: var(--crimson); }
+        .log-line.info { color: var(--purple); }
+
+        /* Result panel */
+        #result-panel { display: none; }
+
+        /* Score display */
+        .score-display {
+            text-align: center;
+            padding: 28px 16px 20px;
+            background: rgba(125,255,79,0.04);
+            border-radius: 4px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(125,255,79,0.1);
+            position: relative;
+        }
+        .score-display::before {
+            content: '';
+            position: absolute;
+            top: 4px; left: 4px;
+            width: 10px; height: 10px;
+            border-top: 1px solid var(--neon-dim);
+            border-left: 1px solid var(--neon-dim);
+            opacity: 0.4;
+        }
+        .score-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 80px;
+            line-height: 1;
+            margin-bottom: 4px;
+            text-shadow: 0 0 40px currentColor;
+            letter-spacing: 2px;
+        }
+        .score-label { font-size: 11px; color: var(--text-muted); letter-spacing: 4px; }
+        .score-bar-wrap { margin: 16px 0 4px; background: rgba(125,255,79,0.08); border-radius: 999px; height: 6px; }
+        .score-bar { height: 100%; border-radius: 999px; transition: width 1s ease; }
+
+        /* Comment box */
+        .comment-box {
+            background: rgba(201,168,76,0.07);
+            border-left: 2px solid var(--gold);
+            border-radius: 0 3px 3px 0;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            line-height: 1.8;
+            color: var(--text);
+        }
+        .condition-box {
+            background: rgba(125,255,79,0.04);
+            border-left: 2px solid var(--neon-dim);
+            border-radius: 0 3px 3px 0;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: var(--text);
+        }
+        .condition-box .cond-label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 10px;
+            letter-spacing: 3px;
+            color: var(--neon-dim);
+            margin-bottom: 6px;
+        }
+
+        /* Rank badge */
+        .rank-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(139,92,246,0.15);
+            color: var(--purple);
+            border: 1px solid rgba(139,92,246,0.35);
+            border-radius: 2px;
+            padding: 5px 14px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 14px;
+            letter-spacing: 2px;
+            margin-bottom: 14px;
+        }
+
+        /* Diff table */
+        .diff-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px;
+            letter-spacing: 3px;
+            color: var(--neon);
+            margin: 14px 0 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .diff-pos { color: var(--neon); font-weight: bold; }
+        .diff-neg { color: var(--crimson); font-weight: bold; }
+        .diff-neutral { color: var(--text-muted); }
+
+        /* Entry list */
+        .entry-list-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px;
+            letter-spacing: 3px;
+            color: var(--neon);
+            margin: 14px 0 8px;
+        }
+        .entry-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 6px;
+            border-bottom: 1px solid rgba(125,255,79,0.06);
+            font-size: 13px;
+        }
+        .entry-item:last-child { border-bottom: none; }
+        .entry-item.you-horse {
+            background: rgba(125,255,79,0.06);
+            border-radius: 3px;
+            padding: 8px 12px;
+            border: 1px solid rgba(125,255,79,0.15);
+        }
+        .entry-rank {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(125,255,79,0.08);
+            border: 1px solid rgba(125,255,79,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        .entry-rank.top3 { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
+        .entry-name { flex: 1; color: var(--text); }
+        .entry-score { font-family: 'Bebas Neue', sans-serif; font-size: 17px; color: var(--neon); letter-spacing: 1px; text-shadow: 0 0 8px var(--neon-glow); }
+        .entry-you {
+            background: rgba(125,255,79,0.15);
+            color: var(--neon);
+            border: 1px solid rgba(125,255,79,0.3);
+            border-radius: 2px;
+            padding: 1px 6px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 10px;
+            letter-spacing: 1px;
+        }
+
+        /* Stars */
+        .stars { color: var(--gold); font-size: 14px; }
+
+        /* Error box */
+        .error-box {
+            background: rgba(255,34,68,0.08);
+            border-left: 2px solid var(--crimson);
+            border-radius: 0 3px 3px 0;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: var(--crimson);
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(125,255,79,0.2);
+            border-top-color: var(--neon);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Status bar */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(125,255,79,0.07);
+        }
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--neon-dim);
+            box-shadow: 0 0 6px var(--neon-dim);
+        }
+        .status-dot.active { background: var(--neon); box-shadow: 0 0 8px var(--neon-glow); animation: pulse 1.5s ease-in-out infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+
+        <div class="page-header">
+            <div class="page-title">PADDOCK VISION</div>
+            <div class="page-subtitle">HORSE PHOTO ANALYSIS / CLAUDE VISION AI / REAL-TIME SCORING</div>
+        </div>
+
+        <!-- Upload form -->
+        <div class="section-heading">PHOTO UPLOAD</div>
+        <div class="glass-card">
+            <div class="glass-card-inner">
+
+                <!-- Upload area -->
+                <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+                    <div class="icon">🐴</div>
+                    <div class="hint">CLICK OR DROP TO SELECT PHOTO</div>
+                    <div class="hint-sub">JPG / PNG / WEBP SUPPORTED</div>
+                </div>
+                <input type="file" id="file-input" accept="image/*" capture="environment">
+
+                <!-- Preview -->
+                <div id="preview-wrap">
+                    <img id="preview-img" src="" alt="プレビュー">
+                    <div id="preview-name"></div>
+                </div>
+
+                <div class="neon-divider"></div>
+
+                <!-- Race select -->
+                <div class="form-group" style="margin-top:14px;">
+                    <label for="race-select">TARGET RACE</label>
+                    <select id="race-select">
+                        <option value="">-- レースを選択 --</option>
+                        <option th:each="race : ${raceNames}" th:value="${race}" th:text="${race}"></option>
+                    </select>
+                </div>
+
+                <!-- Horse name -->
+                <div class="form-group">
+                    <label for="horse-name">HORSE NAME (OPTIONAL)</label>
+                    <input type="text" id="horse-name" placeholder="例: ドウデュース">
+                </div>
+
+                <!-- Analyze button -->
+                <button class="btn-analyze" id="analyze-btn" onclick="startAnalysis()" disabled>
+                    <span>写真を選択してください</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Real-time log -->
+        <div id="log-panel"></div>
+
+        <!-- Result panel -->
+        <div id="result-panel">
+            <div class="section-heading">ANALYSIS RESULT</div>
+            <div class="glass-card">
+                <div class="glass-card-inner" id="result-content"></div>
+            </div>
+        </div>
+
+    </div><!-- /page-body -->
+
+    <script>
+    let currentFile = null;
+    let currentKey  = null;
+    let es = null;
+
+    // ファイル選択
+    document.getElementById('file-input').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        currentFile = file;
+
+        // プレビュー表示
+        const reader = new FileReader();
+        reader.onload = ev => {
+            document.getElementById('preview-img').src = ev.target.result;
+            document.getElementById('preview-name').textContent = file.name;
+            document.getElementById('preview-wrap').style.display = 'block';
+            document.getElementById('upload-area').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+
+        updateBtn();
+    });
+
+    // ドラッグ&ドロップ
+    const uploadArea = document.getElementById('upload-area');
+    uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', e => {
+        e.preventDefault(); uploadArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) document.getElementById('file-input').files = e.dataTransfer.files;
+        document.getElementById('file-input').dispatchEvent(new Event('change'));
+    });
+
+    document.getElementById('race-select').addEventListener('change', updateBtn);
+
+    function updateBtn() {
+        const btn  = document.getElementById('analyze-btn');
+        const race = document.getElementById('race-select').value;
+        const ok   = currentFile && race;
+        btn.disabled = !ok;
+        btn.innerHTML = ok
+            ? '<span>🔍 分析を開始する</span>'
+            : '<span>写真とレースを選択してください</span>';
+    }
+
+    async function startAnalysis() {
+        const race  = document.getElementById('race-select').value;
+        const horse = document.getElementById('horse-name').value;
+        if (!currentFile || !race) return;
+
+        // UI リセット
+        const btn = document.getElementById('analyze-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span><span>分析中...</span>';
+        document.getElementById('result-panel').style.display = 'none';
+        const logPanel = document.getElementById('log-panel');
+        logPanel.style.display = 'block';
+        logPanel.innerHTML = '';
+
+        // フォームデータ
+        const fd = new FormData();
+        fd.append('image', currentFile);
+        fd.append('raceName', race);
+        fd.append('horseName', horse);
+
+        let key;
+        try {
+            const res = await fetch('/paddock/analyze', { method: 'POST', body: fd });
+            const json = await res.json();
+            if (json.error) { showError(json.error); resetBtn(); return; }
+            key = json.key;
+            currentKey = key;
+        } catch (e) {
+            showError('サーバーエラー: ' + e.message);
+            resetBtn();
+            return;
+        }
+
+        // SSEでログ受信
+        if (es) es.close();
+        es = new EventSource('/paddock/log?key=' + encodeURIComponent(key));
+        es.onmessage = e => {
+            const line = e.data;
+            if (line === '__DONE__') {
+                es.close();
+                resetBtn();
+                fetchResult(key);
+                return;
+            }
+            const div = document.createElement('div');
+            div.className = 'log-line' +
+                (line.includes('[エラー]') ? ' err' :
+                 line.startsWith('  →')   ? ' ok'  :
+                 line.startsWith('===')    ? ' info' : '');
+            div.textContent = line;
+            logPanel.appendChild(div);
+            logPanel.scrollTop = logPanel.scrollHeight;
+        };
+        es.onerror = () => {
+            es.close();
+            resetBtn();
+            fetchResult(key);
+        };
+    }
+
+    async function fetchResult(key) {
+        try {
+            const res  = await fetch('/paddock/result?key=' + encodeURIComponent(key));
+            if (res.status === 204) {
+                showError('結果が取得できませんでした');
+                return;
+            }
+            const data = await res.json();
+            renderResult(data);
+        } catch (e) {
+            showError('結果取得エラー: ' + e.message);
+        }
+    }
+
+    function renderResult(data) {
+        const panel   = document.getElementById('result-panel');
+        const content = document.getElementById('result-content');
+        panel.style.display = 'block';
+
+        if (!data.success) {
+            content.innerHTML = '<div class="error-box">❌ ' + escHtml(data.error || '分析失敗') + '</div>';
+            return;
+        }
+
+        const score = data.score || 0;
+        const color = score >= 75 ? 'var(--neon)' : score >= 55 ? 'var(--orange)' : 'var(--crimson)';
+        const barColor = score >= 75 ? 'linear-gradient(90deg, var(--neon-dim), var(--neon))' :
+                         score >= 55 ? 'linear-gradient(90deg, #7a3800, var(--orange))' :
+                                       'linear-gradient(90deg, var(--crimson-dim), var(--crimson))';
+        let html = '';
+
+        // スコア
+        html += `<div class="score-display">
+            <div class="score-num" style="color:${color}">${score.toFixed(1)}</div>
+            <div class="score-label">SCORE / 100</div>
+            <div class="score-bar-wrap">
+                <div class="score-bar" style="width:${score}%;background:${barColor}"></div>
+            </div>
+        </div>`;
+
+        // 推定順位
+        if (data.estimated_rank) {
+            html += `<div style="margin-bottom:12px;"><span class="rank-badge">ESTIMATED RANK: ${data.estimated_rank}</span></div>`;
+        }
+
+        // コメント
+        if (data.comment) {
+            html += `<div class="comment-box">${escHtml(data.comment)}</div>`;
+        }
+
+        // 当日コンディション
+        if (data.condition_comment) {
+            html += `<div class="condition-box">
+                <div class="cond-label">TODAY'S CONDITION</div>
+                ${escHtml(data.condition_comment)}
+            </div>`;
+        }
+
+        // 信頼度
+        if (data.confidence) {
+            const stars = '★'.repeat(data.confidence) + '☆'.repeat(5 - data.confidence);
+            html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;letter-spacing:1px;">
+                DATA CONFIDENCE: <span class="stars">${stars}</span>
+                ${data.top5_comment ? '<span style="font-size:11px;color:var(--text-muted);margin-left:8px;">' + escHtml(data.top5_comment.substring(0, 40)) + '…</span>' : ''}
+            </div>`;
+        }
+
+        // 特徴差分テーブル
+        if (data.diff_summary && data.diff_summary.length > 0) {
+            html += `<div class="diff-title">FEATURE PATTERN COMPARISON</div>
+            <table>
+                <thead><tr><th>特徴</th><th>判定値</th><th>有力馬頻度</th><th>下位頻度</th><th>差分</th></tr></thead>
+                <tbody>`;
+            for (const d of data.diff_summary) {
+                const cls = d.diff >= 20 ? 'diff-pos' : d.diff <= -20 ? 'diff-neg' : 'diff-neutral';
+                const sign = d.diff > 0 ? '+' : '';
+                html += `<tr>
+                    <td style="color:var(--text)">${escHtml(d.label)}</td>
+                    <td>${escHtml(d.value)}</td>
+                    <td>${d.t5_freq}%</td>
+                    <td>${d.bt_freq}%</td>
+                    <td class="${cls}">${sign}${d.diff}pt</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+        }
+
+        // 出走馬比較リスト
+        if (data.entry_list && data.entry_list.length > 0) {
+            const horseName = data.horse_name || 'アップロード馬';
+            html += `<div class="entry-list-title">ENTRY SCORE RANKING (TOP 10)</div>`;
+
+            // アップロード馬を挿入
+            let entries = [...data.entry_list];
+            const uploaded = { name: horseName, rank: null, score: data.score, _you: true };
+
+            // スコア順に並べてアップロード馬の位置を表示
+            entries.push(uploaded);
+            entries.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+            let displayRank = 1;
+            for (const e of entries) {
+                const isYou = e._you;
+                const rankCls = displayRank <= 3 ? 'top3' : '';
+                html += `<div class="entry-item ${isYou ? 'you-horse' : ''}">
+                    <div class="entry-rank ${rankCls}">${displayRank}</div>
+                    <div class="entry-name">${escHtml(e.name || '?')}${isYou ? ' <span class="entry-you">YOUR HORSE</span>' : ''}</div>
+                    <div class="entry-score">${e.score != null ? e.score.toFixed(1) : '-'}</div>
+                </div>`;
+                displayRank++;
+            }
+        }
+
+        // パターンなし警告
+        if (data.no_pattern) {
+            html += `<div class="comment-box" style="border-color:var(--orange);background:rgba(255,128,0,0.05);">
+                ⚠️ このレースのパターンデータが未登録です。<br>
+                先に「傾向分析予想」でレース分析を実行してください。
+            </div>`;
+        }
+
+        content.innerHTML = html;
+    }
+
+    function showError(msg) {
+        const content = document.getElementById('result-content');
+        document.getElementById('result-panel').style.display = 'block';
+        content.innerHTML = '<div class="error-box">❌ ' + escHtml(msg) + '</div>';
+    }
+
+    function resetBtn() {
+        const btn = document.getElementById('analyze-btn');
+        btn.disabled = false;
+        btn.innerHTML = '<span>🔍 もう一度分析する</span>';
+    }
+
+    function escHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+    </script>
+</body>
+</html>

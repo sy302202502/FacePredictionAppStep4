@@ -1,16 +1,353 @@
-<!-- templates/index.html: アプリケーションのトップページ -->
-
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org"> <!-- ThymeleafテンプレートとしてHTMLを宣言 -->
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Face Prediction App</title> <!-- ページタイトル -->
+    <title>競馬顔面予想アプリ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        :root {
+            --neon:        #7dff4f;
+            --neon-dim:    #3a7d22;
+            --neon-glow:   rgba(125,255,79,0.32);
+            --orange:      #ff8000;
+            --orange-glow: rgba(255,128,0,0.38);
+            --gold:        #c9a84c;
+            --gold-light:  #f5d878;
+            --crimson:     #ff2244;
+            --crimson-dim: #7a0818;
+            --purple:      #8b5cf6;
+            --purple-glow: rgba(139,92,246,0.35);
+            --deep:        #050708;
+            --surface:     #0b0e0b;
+            --surface2:    #111811;
+            --surface3:    #182018;
+            --panel:       rgba(10,14,10,0.93);
+            --text:        #d4e8cc;
+            --text-muted:  #607860;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--deep);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            margin: 0;
+        }
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background-image:
+                linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px);
+            background-size: 44px 44px;
+            pointer-events: none; z-index: 0;
+        }
+        body::after {
+            content: '';
+            position: fixed; inset: 0;
+            background:
+                radial-gradient(ellipse at 10% 15%, rgba(139,92,246,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 90% 85%, rgba(255,128,0,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(125,255,79,0.04) 0%, transparent 60%);
+            pointer-events: none; z-index: 0;
+        }
+        .scanlines {
+            position: fixed; inset: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px);
+            pointer-events: none; z-index: 1;
+        }
+        .page-body {
+            position: relative; z-index: 2;
+            max-width: 1000px; margin: 0 auto;
+            padding: 0 16px 100px;
+        }
+        /* Page Header */
+        .page-header {
+            padding: 32px 0 20px;
+            border-bottom: 1px solid rgba(125,255,79,0.1);
+            margin-bottom: 24px;
+            position: relative;
+        }
+        .page-header::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, transparent, var(--crimson), var(--orange), var(--neon), var(--purple), var(--neon), var(--orange), var(--crimson), transparent);
+            background-size: 300%; animation: stripe-slide 4s linear infinite;
+        }
+        @keyframes stripe-slide { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 28px; letter-spacing: 5px;
+            color: var(--neon); text-shadow: 0 0 16px var(--neon-glow);
+        }
+        .page-subtitle { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; margin-top: 3px; }
+        /* Section heading */
+        .section-heading {
+            display: flex; align-items: center; gap: 10px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 17px; letter-spacing: 4px;
+            color: var(--neon); margin: 34px 0 14px;
+            text-shadow: 0 0 10px var(--neon-glow);
+        }
+        .section-heading::before { content: '▶'; color: var(--purple); font-size: 11px; text-shadow: 0 0 8px var(--purple-glow); }
+        .section-heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent); opacity: 0.7; }
+        /* Neon divider */
+        .neon-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--neon-dim), var(--purple), var(--neon-dim), transparent);
+            margin: 10px 0; opacity: 0.5;
+        }
+        /* Glass card */
+        .glass-card {
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.13);
+            border-radius: 5px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+            margin-bottom: 16px;
+            overflow: hidden;
+            position: relative;
+        }
+        .glass-card::before {
+            content: '';
+            position: absolute; top: 4px; left: 4px;
+            width: 12px; height: 12px;
+            border-top: 1px solid var(--neon-dim);
+            border-left: 1px solid var(--neon-dim);
+            opacity: 0.5; pointer-events: none;
+        }
+        .glass-card::after {
+            content: '';
+            position: absolute; bottom: 4px; right: 4px;
+            width: 12px; height: 12px;
+            border-bottom: 1px solid rgba(139,92,246,0.5);
+            border-right: 1px solid rgba(139,92,246,0.5);
+            opacity: 0.5; pointer-events: none;
+        }
+        .glass-card-inner { padding: 18px 22px; }
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 8px 18px; border-radius: 3px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 14px; letter-spacing: 2px;
+            cursor: pointer; transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn-neon { background: transparent; color: var(--neon); border: 1px solid var(--neon-dim); }
+        .btn-neon:hover { border-color: var(--neon); box-shadow: 0 0 16px var(--neon-glow); color: #fff; transform: translateY(-1px); }
+        .btn-fire { background: linear-gradient(135deg, rgba(255,34,68,0.2), rgba(255,128,0,0.15)); color: var(--orange); border: 1px solid rgba(255,128,0,0.4); }
+        .btn-fire:hover { border-color: var(--orange); box-shadow: 0 0 18px var(--orange-glow); color: #fff; transform: translateY(-1px); }
+        .btn-purple { background: rgba(139,92,246,0.15); color: var(--purple); border: 1px solid rgba(139,92,246,0.4); }
+        .btn-purple:hover { border-color: var(--purple); box-shadow: 0 0 16px var(--purple-glow); color: #fff; }
+        .btn-crimson { background: rgba(255,34,68,0.12); color: var(--crimson); border: 1px solid rgba(255,34,68,0.4); }
+        .btn-crimson:hover { border-color: var(--crimson); box-shadow: 0 0 16px rgba(255,34,68,0.4); color: #fff; transform: translateY(-1px); }
+        /* Stat grid */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .stat-item {
+            background: var(--surface3);
+            border: 1px solid rgba(125,255,79,0.1);
+            border-radius: 4px;
+            padding: 14px 16px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-item::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-dim), transparent);
+        }
+        .stat-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 36px; letter-spacing: 3px;
+            color: var(--neon);
+            text-shadow: 0 0 12px var(--neon-glow);
+            line-height: 1;
+        }
+        .stat-lbl {
+            font-size: 11px; color: var(--text-muted);
+            letter-spacing: 1px; margin-top: 5px;
+        }
+        .stat-sub {
+            font-size: 10px; color: rgba(96,120,96,0.7);
+            margin-top: 3px; letter-spacing: 0.5px;
+        }
+        .stat-item.stat-highlight .stat-num { color: var(--gold); text-shadow: 0 0 12px rgba(201,168,76,0.4); }
+        .stat-item.stat-highlight::before { background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+        /* Feature card grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+        }
+        .feature-card {
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.1);
+            border-radius: 5px;
+            padding: 20px 22px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .feature-card:hover {
+            border-color: rgba(125,255,79,0.3);
+            box-shadow: 0 0 20px rgba(125,255,79,0.06);
+        }
+        .feature-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+        }
+        .feature-card.accent-crimson::before { background: linear-gradient(90deg, transparent, var(--crimson), transparent); }
+        .feature-card.accent-neon::before    { background: linear-gradient(90deg, transparent, var(--neon-dim), transparent); }
+        .feature-card.accent-orange::before  { background: linear-gradient(90deg, transparent, var(--orange), transparent); }
+        .feature-card.accent-purple::before  { background: linear-gradient(90deg, transparent, var(--purple), transparent); }
+        .feature-card.accent-gold::before    { background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+        .feature-card-label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 11px; letter-spacing: 3px;
+            margin-bottom: 6px;
+        }
+        .accent-crimson .feature-card-label { color: var(--crimson); }
+        .accent-neon    .feature-card-label { color: var(--neon); }
+        .accent-orange  .feature-card-label { color: var(--orange); }
+        .accent-purple  .feature-card-label { color: var(--purple); }
+        .accent-gold    .feature-card-label { color: var(--gold); }
+        .feature-card-title {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 16px; font-weight: 700;
+            color: var(--text); margin: 0 0 8px;
+        }
+        .feature-card-desc {
+            font-size: 12px; color: var(--text-muted);
+            line-height: 1.7; margin-bottom: 14px;
+        }
+        /* Hero area */
+        .hero-area {
+            text-align: center;
+            padding: 10px 0 6px;
+        }
+        .hero-sub {
+            font-size: 12px; color: var(--text-muted);
+            letter-spacing: 2px; line-height: 1.8;
+            max-width: 540px; margin: 8px auto 0;
+        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: var(--deep); }
+        ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+        @media (max-width: 640px) { .page-title { font-size: 22px; } .stat-num { font-size: 28px; } }
+    </style>
 </head>
 <body>
-    <!-- ナビゲーションバー（fragments/navbar.htmlで定義されたフラグメントを読み込む） -->
+    <div class="scanlines"></div>
     <div th:replace="fragments/navbar :: navbar"></div>
 
-    <h1>Face Prediction Appへようこそ</h1> <!-- サイトのメインタイトル -->
-    <p>上のナビゲーションから各機能をご利用ください。</p> <!-- 利用の案内 -->
+    <div class="page-body">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="hero-area">
+                <div class="page-title">競馬顔面予想システム</div>
+                <div class="page-subtitle">KEIBA FACE PREDICTION SYSTEM — POWERED BY CLAUDE VISION AI</div>
+                <p class="hero-sub">Claude Vision AI で競走馬の顔を分析し、過去の勝ち馬との類似度から優勝候補TOP5を予想します</p>
+            </div>
+        </div>
+
+        <!-- Dashboard Stats -->
+        <div class="section-heading">DASHBOARD</div>
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-num" th:text="${totalAnalyzed}">0</div>
+                        <div class="stat-lbl">顔分析済み</div>
+                        <div class="stat-sub" th:text="'勝ち馬 ' + ${analyzedWinners} + ' / 負け馬 ' + ${analyzedLosers}"></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-num" th:text="${totalPredictions}">0</div>
+                        <div class="stat-lbl">予想レコード数</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-num" th:text="${totalEntries}">0</div>
+                        <div class="stat-lbl">出走馬レコード数</div>
+                    </div>
+                    <div class="stat-item stat-highlight">
+                        <div class="stat-num" th:text="${winHitRate} + '%'">0%</div>
+                        <div class="stat-lbl">1位的中率</div>
+                        <div class="stat-sub" th:text="${totalRaces} + ' レース記録済み'"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature Cards -->
+        <div class="section-heading">FEATURES</div>
+        <div class="feature-grid">
+
+            <div class="feature-card accent-crimson">
+                <div class="feature-card-label">STATS — NO API REQUIRED</div>
+                <div class="feature-card-title">統計予想</div>
+                <p class="feature-card-desc">過去成績・距離適性・重馬場適性・重賞実績を集計してスコアリング。APIクレジット不要で今すぐ使えます。</p>
+                <a href="/stats-predict" class="btn btn-crimson">今すぐ予想する</a>
+            </div>
+
+            <div class="feature-card accent-neon">
+                <div class="feature-card-label">ANALYSIS — FACE TREND</div>
+                <div class="feature-card-title">傾向分析予想</div>
+                <p class="feature-card-desc">レースを選択すると過去の全着順を分析。5着内 vs 6着以下の顔の傾向から有力馬を導き出します。</p>
+                <a href="/predict-v2" class="btn btn-neon">傾向分析予想へ</a>
+            </div>
+
+            <div class="feature-card accent-orange">
+                <div class="feature-card-label">PADDOCK — LIVE PHOTO</div>
+                <div class="feature-card-title">パドック写真分析</div>
+                <p class="feature-card-desc">当日パドックで撮影した写真をアップロード。Claude Vision AIが即座に分析し過去パターンと照合します。</p>
+                <a href="/paddock" class="btn btn-fire">パドック分析へ</a>
+            </div>
+
+            <div class="feature-card accent-gold">
+                <div class="feature-card-label">CALENDAR — SCHEDULE</div>
+                <div class="feature-card-title">予想カレンダー</div>
+                <p class="feature-card-desc">今後3週間の重賞レース一覧。分析済み/未分析を一覧表示し、ワンクリックで予想を開始できます。</p>
+                <a href="/calendar" class="btn btn-fire">カレンダーを見る</a>
+            </div>
+
+            <div class="feature-card accent-neon">
+                <div class="feature-card-label">ENTRY — RACE LINEUP</div>
+                <div class="feature-card-title">出走馬一覧</div>
+                <p class="feature-card-desc">直近の重賞レースの出走馬をnetkeibaから自動取得して確認できます。</p>
+                <a href="/entry" class="btn btn-neon">出走馬を確認</a>
+            </div>
+
+            <div class="feature-card accent-gold">
+                <div class="feature-card-label">ACCURACY — HIT RATE</div>
+                <div class="feature-card-title">的中率チェック</div>
+                <p class="feature-card-desc">予想の的中率を追跡・確認できます。新旧システムの比較や自動記録が可能です。</p>
+                <a href="/accuracy" class="btn btn-fire">精度を確認</a>
+            </div>
+
+            <div class="feature-card accent-orange">
+                <div class="feature-card-label">SCRIPT — EXECUTION</div>
+                <div class="feature-card-title">スクリプト実行</div>
+                <p class="feature-card-desc">スクレイピング・顔分析・重み学習などをブラウザから実行しリアルタイムログを確認できます。</p>
+                <a href="/script" class="btn btn-fire">スクリプトを実行</a>
+            </div>
+
+            <div class="feature-card accent-purple">
+                <div class="feature-card-label">SYSTEM — HEALTH CHECK</div>
+                <div class="feature-card-title">ヘルスチェック</div>
+                <p class="feature-card-desc">DB接続・APIキー設定・スクリプトファイルの状態を確認します。</p>
+                <a href="/health" class="btn btn-purple">状態を確認</a>
+            </div>
+
+        </div>
+    </div>
 </body>
 </html>

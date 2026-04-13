@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>スクリプト実行</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon:        #7dff4f;
+            --neon-dim:    #3a7d22;
+            --neon-glow:   rgba(125,255,79,0.32);
+            --orange:      #ff8000;
+            --orange-glow: rgba(255,128,0,0.38);
+            --gold:        #c9a84c;
+            --gold-light:  #f5d878;
+            --crimson:     #ff2244;
+            --crimson-dim: #7a0818;
+            --purple:      #8b5cf6;
+            --purple-glow: rgba(139,92,246,0.35);
+            --deep:        #050708;
+            --surface:     #0b0e0b;
+            --surface2:    #111811;
+            --surface3:    #182018;
+            --panel:       rgba(10,14,10,0.93);
+            --text:        #d4e8cc;
+            --text-muted:  #607860;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Noto Sans JP', sans-serif; background: var(--deep); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+        body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px); background-size: 44px 44px; pointer-events: none; z-index: 0; }
+        body::after { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse at 10% 15%, rgba(139,92,246,0.12) 0%, transparent 50%), radial-gradient(ellipse at 90% 85%, rgba(255,128,0,0.08) 0%, transparent 50%); pointer-events: none; z-index: 0; }
+        .scanlines { position: fixed; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px); pointer-events: none; z-index: 1; }
+        .page-body { position: relative; z-index: 2; max-width: 1000px; margin: 0 auto; padding: 0 16px 100px; }
+        .glass-card { background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px; backdrop-filter: blur(10px); box-shadow: 0 4px 24px rgba(0,0,0,0.7); margin-bottom: 16px; overflow: hidden; position: relative; }
+        .glass-card::before { content: ''; position: absolute; top: 4px; left: 4px; width: 12px; height: 12px; border-top: 1px solid var(--neon-dim); border-left: 1px solid var(--neon-dim); opacity: 0.5; pointer-events: none; }
+        .glass-card::after { content: ''; position: absolute; bottom: 4px; right: 4px; width: 12px; height: 12px; border-bottom: 1px solid rgba(139,92,246,0.5); border-right: 1px solid rgba(139,92,246,0.5); opacity: 0.5; pointer-events: none; }
+        .glass-card-inner { padding: 18px 22px; }
+        .glass-card-highlight { border-color: rgba(125,255,79,0.35); box-shadow: 0 4px 28px rgba(0,0,0,0.7), 0 0 20px rgba(125,255,79,0.08); }
+        .section-heading { display: flex; align-items: center; gap: 10px; font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 4px; color: var(--neon); margin: 34px 0 14px; text-shadow: 0 0 10px var(--neon-glow); }
+        .section-heading::before { content: '▶'; color: var(--purple); font-size: 11px; text-shadow: 0 0 8px var(--purple-glow); }
+        .section-heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent); opacity: 0.7; }
+        .neon-divider { height: 1px; background: linear-gradient(90deg, transparent, var(--neon-dim), var(--purple), var(--neon-dim), transparent); margin: 10px 0; opacity: 0.5; }
+        .page-header { padding: 32px 0 20px; border-bottom: 1px solid rgba(125,255,79,0.1); margin-bottom: 24px; position: relative; }
+        .page-header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--crimson), var(--orange), var(--neon), var(--purple), var(--neon), var(--orange), var(--crimson), transparent); background-size: 300%; animation: stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+        .page-title { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 5px; color: var(--neon); text-shadow: 0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; margin-top: 3px; }
+        .btn { padding: 8px 18px; border-radius: 3px; font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-block; border: 1px solid; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-neon { background: transparent; color: var(--neon); border-color: var(--neon-dim); }
+        .btn-neon:hover:not(:disabled) { border-color: var(--neon); box-shadow: 0 0 16px var(--neon-glow); color: #fff; transform: translateY(-1px); }
+        .btn-fire { background: linear-gradient(135deg, rgba(255,34,68,0.2), rgba(255,128,0,0.15)); color: var(--orange); border-color: rgba(255,128,0,0.4); }
+        .btn-fire:hover:not(:disabled) { border-color: var(--orange); box-shadow: 0 0 18px var(--orange-glow); color: #fff; transform: translateY(-1px); }
+        .btn-purple { background: rgba(139,92,246,0.15); color: var(--purple); border-color: rgba(139,92,246,0.4); }
+        .btn-purple:hover:not(:disabled) { border-color: var(--purple); box-shadow: 0 0 16px var(--purple-glow); color: #fff; }
+        .btn-gold { background: rgba(201,168,76,0.15); color: var(--gold); border-color: rgba(201,168,76,0.4); }
+        .btn-gold:hover:not(:disabled) { border-color: var(--gold-light); box-shadow: 0 0 16px rgba(201,168,76,0.35); color: #fff; transform: translateY(-1px); }
+        input[type=text], input[type=number], input[type=file], select, textarea { background: var(--surface3); color: var(--text); border: 1px solid rgba(125,255,79,0.2); border-radius: 3px; padding: 7px 11px; font-family: 'Noto Sans JP', sans-serif; font-size: 13px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+        input:focus, select:focus, textarea:focus { border-color: var(--neon); box-shadow: 0 0 10px var(--neon-glow); }
+        input[type=checkbox] { accent-color: var(--neon); width: 14px; height: 14px; cursor: pointer; }
+        select option { background: var(--surface2); }
+        label { font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 2px; color: var(--text-muted); }
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: var(--deep); } ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; } ::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+        .log-box { background: #020402; color: var(--neon); font-family: 'Courier New', monospace; font-size: 11px; padding: 12px 18px; height: 220px; overflow-y: auto; white-space: pre-wrap; border-radius: 3px; border: 1px solid rgba(125,255,79,0.12); margin-top: 14px; display: none; }
+        .log-box.visible { display: block; }
+        .log-line-done { color: var(--neon); font-weight: bold; }
+        .log-line-error { color: var(--crimson); }
+
+        .card-title { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 3px; color: var(--text); margin-bottom: 6px; display: flex; align-items: center; gap: 12px; }
+        .card-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.6; }
+        .form-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .form-label { font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 2px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+
+        .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 2px; font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 2px; }
+        .status-running { background: rgba(125,255,79,0.12); color: var(--neon); border: 1px solid var(--neon-dim); animation: pulse-badge 1.2s ease-in-out infinite; }
+        .status-running::before { content: '●'; font-size: 8px; }
+        .status-idle { background: rgba(96,120,96,0.15); color: var(--text-muted); border: 1px solid rgba(96,120,96,0.3); }
+        .status-idle::before { content: '○'; font-size: 8px; }
+        @keyframes pulse-badge { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        .info-bar { background: rgba(125,255,79,0.07); border: 1px solid var(--neon-dim); border-left: 3px solid var(--neon); padding: 10px 16px; border-radius: 3px; font-size: 13px; color: var(--neon); margin-bottom: 20px; display: none; }
+        .info-bar.visible { display: block; }
+
+        .link-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <div class="page-header">
+            <div class="page-title">SCRIPT RUNNER</div>
+            <div class="page-subtitle">PYTHON SCRIPT EXECUTION MANAGEMENT</div>
+        </div>
+
+        <div id="startedBar" class="info-bar"></div>
+
+        <!-- ①スクレイピング -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="card-title">
+                    ス크레이ピング
+                    <span id="scraper-badge" class="status-badge status-idle">待機中</span>
+                </div>
+                <div class="card-desc">netkeibaから重賞レースの出走馬・勝ち馬データを取得します。初回は5年分を推奨。</div>
+                <form id="scraperForm">
+                    <div class="form-row">
+                        <label class="form-label">
+                            取得年数：
+                            <input type="number" id="scraperYears" value="1" min="1" max="10" style="width:70px;">
+                            年分
+                        </label>
+                        <button type="button" id="scraperBtn" class="btn btn-neon"
+                                onclick="runScript('scraper')">実行</button>
+                    </div>
+                </form>
+                <div id="scraper-log" class="log-box"></div>
+            </div>
+        </div>
+
+        <!-- ②顔分析 -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="card-title">
+                    顔分析 / CLAUDE VISION AI
+                    <span id="analyzer-badge" class="status-badge status-idle">待機中</span>
+                </div>
+                <div class="card-desc">ダウンロード済みの馬画像をClaude Vision APIで分析し、顔特徴を抽出します。APIクレジットが必要です。</div>
+                <div class="form-row">
+                    <label class="form-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="winnersOnly">
+                        勝ち馬のみ分析
+                    </label>
+                    <button type="button" id="analyzerBtn" class="btn btn-purple"
+                            onclick="runScript('analyzer')">実行</button>
+                </div>
+                <div id="analyzer-log" class="log-box"></div>
+            </div>
+        </div>
+
+        <!-- ③出走馬取得 -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="card-title">
+                    出走馬取得
+                    <span id="entries-badge" class="status-badge status-idle">待機中</span>
+                </div>
+                <div class="card-desc">直近の重賞レースの出走馬一覧をnetkeibaから取得します。</div>
+                <div class="form-row">
+                    <button type="button" id="entriesBtn" class="btn btn-fire"
+                            onclick="runScript('entries')">実行</button>
+                </div>
+                <div id="entries-log" class="log-box"></div>
+            </div>
+        </div>
+
+        <!-- ④レース特化分析 -->
+        <div class="glass-card glass-card-highlight">
+            <div class="glass-card-inner">
+                <div class="card-title">
+                    レース特化型 傾向分析・予想
+                    <span id="race_analyzer-badge" class="status-badge status-idle">待機中</span>
+                </div>
+                <div class="card-desc">レース名を入力すると、過去の全着順を自動スクレイピング → 顔分析 → 5着内 vs 6着以下 の傾向を導き出し → 出走馬をスコアリングして予想します。</div>
+                <div class="form-row">
+                    <label class="form-label">
+                        レース名：
+                        <input type="text" id="raceNameInput" placeholder="例: 日本ダービー" style="width:200px;">
+                    </label>
+                    <label class="form-label">
+                        過去何年：
+                        <input type="number" id="raceYears" value="10" min="1" max="15" style="width:60px;">
+                        年
+                    </label>
+                    <label class="form-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="raceSupp" checked>
+                        補完データ使用
+                    </label>
+                    <button type="button" class="btn btn-neon" id="raceAnalyzerBtn" onclick="runRaceScript()">分析・予想開始</button>
+                </div>
+                <div id="race_analyzer-log" class="log-box"></div>
+            </div>
+        </div>
+
+        <!-- ⑤的中記録 自動取得 -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="card-title">
+                    的中記録 自動取得
+                    <span id="result_fetch-badge" class="status-badge status-idle">待機中</span>
+                </div>
+                <div class="card-desc">レース後にnetkeibaから実際の着順を取得して的中率を自動更新します。毎週月曜に実行推奨。</div>
+                <button type="button" id="result_fetchBtn" class="btn btn-purple"
+                        onclick="runScript('result_fetch')">自動取得</button>
+                <div id="result_fetch-log" class="log-box"></div>
+            </div>
+        </div>
+
+        <!-- ⑥オッズ取得 -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="card-title">
+                    当日オッズ取得
+                    <span id="odds_fetch-badge" class="status-badge status-idle">待機中</span>
+                </div>
+                <div class="card-desc">当日の単勝オッズを取得して顔スコアと組み合わせた複合スコアを計算します。レース当日に実行してください。</div>
+                <div class="form-row">
+                    <label class="form-label">
+                        レース名（空欄=全レース）：
+                        <input type="text" id="oddsRaceName" placeholder="例: 日本ダービー" style="width:200px;">
+                    </label>
+                    <button type="button" id="odds_fetchBtn" class="btn btn-gold"
+                            onclick="runOddsFetch()">オッズ取得</button>
+                </div>
+                <div id="odds_fetch-log" class="log-box"></div>
+            </div>
+        </div>
+
+        <!-- ⑦重み自動学習 -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="card-title">
+                    重み自動学習
+                    <span id="weight_learn-badge" class="status-badge status-idle">待機中</span>
+                </div>
+                <div class="card-desc">的中データから各顔特徴の重みを自動調整します。5件以上の的中記録が必要です。精度が上がるほど予想が鋭くなります。</div>
+                <button type="button" id="weight_learnBtn" class="btn btn-purple"
+                        onclick="runScript('weight_learn')">学習を実行</button>
+                <div id="weight_learn-log" class="log-box"></div>
+            </div>
+        </div>
+
+        <!-- ⑧予想確認リンク -->
+        <div class="section-heading">QUICK LINKS</div>
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="card-title">予想確認</div>
+                <div class="card-desc">分析完了後、結果を確認します。</div>
+                <div class="link-row">
+                    <a href="/predict-v2" class="btn btn-neon">傾向分析予想ページへ</a>
+                    <a href="/calendar" class="btn btn-fire">予想カレンダー</a>
+                    <a href="/prediction/run" class="btn btn-purple">旧予想ページへ</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const KEYS = ['scraper', 'analyzer', 'entries', 'result_fetch', 'odds_fetch', 'weight_learn'];
+        const eventSources = {};
+
+        // URLパラメータで開始通知
+        const params = new URLSearchParams(location.search);
+        const started = params.get('started');
+        if (started) {
+            const bar = document.getElementById('startedBar');
+            const labels = { scraper: 'スクレイピング', analyzer: '顔分析', entries: '出走馬取得' };
+            bar.textContent = labels[started] + ' を開始しました。ログは下のボックスに表示されます。';
+            bar.classList.add('visible');
+            openLog(started);
+        }
+
+        // 初期ステータス確認
+        pollStatus();
+        setInterval(pollStatus, 5000);
+
+        function pollStatus() {
+            fetch('/script/status')
+                .then(r => r.json())
+                .then(data => {
+                    KEYS.forEach(key => updateBadge(key, data[key]));
+                    updateBadge('race_analyzer', data['race_analyzer']);
+                });
+        }
+
+        function runOddsFetch() {
+            const raceName = document.getElementById('oddsRaceName').value.trim();
+            const key = 'odds_fetch';
+            const btn = document.getElementById('odds_fetchBtn');
+            btn.disabled = true;
+            let body = '';
+            if (raceName) body = 'raceName=' + encodeURIComponent(raceName);
+            fetch('/script/odds-fetch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body
+            }).then(() => { openLog(key); updateBadge(key, true); });
+        }
+
+        function runRaceScript() {
+            const raceName = document.getElementById('raceNameInput').value.trim();
+            if (!raceName) { alert('レース名を入力してください'); return; }
+            const years = document.getElementById('raceYears').value;
+            const supp  = document.getElementById('raceSupp').checked;
+            const btn   = document.getElementById('raceAnalyzerBtn');
+            btn.disabled = true;
+
+            const key = 'race_' + hashCode(raceName);
+            const body = `raceName=${encodeURIComponent(raceName)}&years=${years}&supplement=${supp}`;
+            fetch('/script/race-analyzer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body
+            }).then(() => {
+                openLog(key);
+                document.getElementById('race_analyzer-badge').textContent = '実行中...';
+                document.getElementById('race_analyzer-badge').className = 'status-badge status-running';
+            });
+        }
+
+        function hashCode(str) {
+            let h = 0;
+            for (let i = 0; i < str.length; i++) {
+                h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+            }
+            return h;
+        }
+
+        function updateBadge(key, isRunning) {
+            const badge = document.getElementById(key + '-badge');
+            const btn   = document.getElementById(key + 'Btn');
+            if (isRunning) {
+                badge.textContent = '実行中...';
+                badge.className = 'status-badge status-running';
+                if (btn) btn.disabled = true;
+                if (!eventSources[key]) openLog(key);
+            } else {
+                badge.textContent = '待機中';
+                badge.className = 'status-badge status-idle';
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        function runScript(key) {
+            const btn = document.getElementById(key + 'Btn');
+            btn.disabled = true;
+
+            let url = '/script/' + key;
+            let body = '';
+            if (key === 'scraper') {
+                const y = document.getElementById('scraperYears').value;
+                body = 'years=' + encodeURIComponent(y);
+            } else if (key === 'analyzer') {
+                const w = document.getElementById('winnersOnly').checked;
+                body = 'winnersOnly=' + w;
+            }
+
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body
+            }).then(r => {
+                if (r.redirected || r.ok) {
+                    openLog(key);
+                    updateBadge(key, true);
+                }
+            }).catch(e => console.error(e));
+        }
+
+        function openLog(key) {
+            if (eventSources[key]) return;
+            // race_xxxxx系は固定のlogBoxを使う
+            const logBoxId = key.startsWith('race_') ? 'race_analyzer-log' : key + '-log';
+            const logBox = document.getElementById(logBoxId);
+            if (!logBox) return;
+            logBox.classList.add('visible');
+            logBox.textContent = '';
+
+            const es = new EventSource('/script/log?key=' + key);
+            eventSources[key] = es;
+
+            es.onmessage = function(e) {
+                const line = e.data;
+                const div = document.createElement('div');
+                const logBoxId = key.startsWith('race_') ? 'race_analyzer-log' : key + '-log';
+                const currentLogBox = document.getElementById(logBoxId);
+                if (line === '__DONE__') {
+                    es.close();
+                    delete eventSources[key];
+                    if (key.startsWith('race_')) {
+                        document.getElementById('race_analyzer-badge').textContent = '完了';
+                        document.getElementById('race_analyzer-badge').className = 'status-badge status-idle';
+                        document.getElementById('raceAnalyzerBtn').disabled = false;
+                    } else {
+                        updateBadge(key, false);
+                    }
+                    return;
+                }
+                if (line.includes('=== 完了 ===')) {
+                    div.className = 'log-line-done';
+                } else if (line.includes('[エラー]') || line.toLowerCase().includes('error') || line.toLowerCase().includes('traceback')) {
+                    div.className = 'log-line-error';
+                }
+                div.textContent = line;
+                if (currentLogBox) {
+                    currentLogBox.appendChild(div);
+                    currentLogBox.scrollTop = currentLogBox.scrollHeight;
+                }
+            };
+
+            es.onerror = function() {
+                es.close();
+                delete eventSources[key];
+                updateBadge(key, false);
+            };
+        }
+    </script>
+</body>
+</html>

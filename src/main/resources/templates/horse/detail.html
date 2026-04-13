@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${horse.horseName} + ' - 馬詳細'">馬詳細</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon:#7dff4f; --neon-dim:#3a7d22; --neon-glow:rgba(125,255,79,0.32);
+            --orange:#ff8000; --orange-glow:rgba(255,128,0,0.38);
+            --gold:#c9a84c; --gold-light:#f5d878;
+            --crimson:#ff2244; --crimson-dim:#7a0818;
+            --purple:#8b5cf6; --purple-glow:rgba(139,92,246,0.35);
+            --deep:#050708; --surface:#0b0e0b; --surface2:#111811; --surface3:#182018;
+            --panel:rgba(10,14,10,0.93); --text:#d4e8cc; --text-muted:#607860;
+        }
+        body { font-family:'Noto Sans JP',sans-serif; background:var(--deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(125,255,79,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(125,255,79,0.02) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+        body::after { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 10% 15%,rgba(139,92,246,0.12) 0%,transparent 50%),radial-gradient(ellipse at 90% 85%,rgba(255,128,0,0.08) 0%,transparent 50%); pointer-events:none; z-index:0; }
+        .scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.1) 0px,rgba(0,0,0,0.1) 1px,transparent 1px,transparent 3px); pointer-events:none; z-index:1; }
+        .page-body { position:relative; z-index:2; max-width:1000px; margin:0 auto; padding:0 16px 100px; }
+        .glass-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; backdrop-filter:blur(10px); box-shadow:0 4px 24px rgba(0,0,0,0.7); margin-bottom:16px; overflow:hidden; position:relative; }
+        .glass-card::before { content:''; position:absolute; top:4px; left:4px; width:12px; height:12px; border-top:1px solid var(--neon-dim); border-left:1px solid var(--neon-dim); opacity:0.5; pointer-events:none; }
+        .glass-card::after { content:''; position:absolute; bottom:4px; right:4px; width:12px; height:12px; border-bottom:1px solid rgba(139,92,246,0.5); border-right:1px solid rgba(139,92,246,0.5); opacity:0.5; pointer-events:none; }
+        .glass-card-inner { padding:18px 22px; }
+        .page-header { padding:32px 0 20px; border-bottom:1px solid rgba(125,255,79,0.1); margin-bottom:24px; position:relative; }
+        .page-header::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,var(--crimson),var(--orange),var(--neon),var(--purple),var(--neon),var(--orange),var(--crimson),transparent); background-size:300%; animation:stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .page-title { font-family:'Noto Serif JP',serif; font-size:26px; font-weight:900; color:var(--text); letter-spacing:2px; }
+        .page-subtitle { font-size:11px; color:var(--text-muted); letter-spacing:3px; margin-top:4px; }
+        .section-heading { display:flex; align-items:center; gap:10px; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:4px; color:var(--neon); margin:28px 0 14px; text-shadow:0 0 10px var(--neon-glow); }
+        .section-heading::before { content:'▶'; color:var(--purple); font-size:11px; }
+        .section-heading::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--neon-dim),rgba(139,92,246,0.3),transparent); opacity:0.7; }
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--deep)} ::-webkit-scrollbar-thumb{background:var(--neon-dim);border-radius:2px} ::-webkit-scrollbar-thumb:hover{background:var(--neon)}
+
+        .back-link { font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:2px; color:var(--text-muted); text-decoration:none; display:inline-flex; align-items:center; gap:6px; margin-bottom:20px; transition:color 0.15s; }
+        .back-link:hover { color:var(--neon); }
+
+        .win-badge { background:linear-gradient(135deg,rgba(201,168,76,0.3),rgba(245,216,120,0.15)); color:var(--gold-light); border:1px solid rgba(201,168,76,0.5); border-radius:3px; font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:2px; padding:2px 10px; display:inline-block; margin-left:10px; box-shadow:0 0 10px rgba(201,168,76,0.2); }
+
+        /* 詳細レイアウト */
+        .detail-layout { display:grid; grid-template-columns:240px 1fr; gap:20px; }
+        @media(max-width:720px){.detail-layout{grid-template-columns:1fr}}
+
+        .horse-img-large { width:100%; height:180px; object-fit:cover; border-radius:3px; display:block; }
+        .no-img-large { width:100%; height:180px; background:var(--surface3); border-radius:3px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:2px; }
+        .horse-meta { font-size:11px; color:var(--text-muted); margin-top:8px; letter-spacing:1px; font-family:'Bebas Neue',sans-serif; }
+
+        /* 特徴テーブル */
+        .feature-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .feature-table th { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); padding:9px 12px; text-align:left; border-bottom:1px solid rgba(125,255,79,0.08); width:130px; background:rgba(125,255,79,0.04); }
+        .feature-table td { padding:9px 12px; border-bottom:1px solid rgba(125,255,79,0.06); color:var(--text); font-size:13px; }
+        .feature-table tr:last-child th,
+        .feature-table tr:last-child td { border-bottom:none; }
+
+        /* 数値バー */
+        .numeric-section { margin-top:4px; }
+        .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+        .bar-row-label { width:90px; font-size:11px; color:var(--text-muted); flex-shrink:0; font-family:'Bebas Neue',sans-serif; letter-spacing:1px; }
+        .bar-bg { background:rgba(125,255,79,0.07); border-radius:2px; height:10px; flex:1; overflow:hidden; }
+        .bar-val { height:10px; border-radius:2px; background:linear-gradient(90deg,var(--neon-dim),var(--neon)); box-shadow:0 0 4px var(--neon-glow); }
+        .bar-num { font-family:'Bebas Neue',sans-serif; font-size:11px; color:var(--neon); width:38px; text-align:right; flex-shrink:0; }
+
+        /* 類似馬 */
+        .similar-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:12px; margin-top:14px; }
+        .similar-card { background:var(--panel); border:1px solid rgba(125,255,79,0.1); border-radius:5px; overflow:hidden; text-decoration:none; color:inherit; display:block; transition:border-color 0.2s,box-shadow 0.2s,transform 0.2s; }
+        .similar-card:hover { border-color:rgba(125,255,79,0.35); box-shadow:0 0 14px rgba(125,255,79,0.08); transform:translateY(-2px); }
+        .similar-card img { width:100%; height:80px; object-fit:cover; display:block; }
+        .no-img-sm { width:100%; height:80px; background:var(--surface3); display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:10px; font-family:'Bebas Neue',sans-serif; letter-spacing:1px; }
+        .similar-card-body { padding:7px 9px; }
+        .similar-name { font-family:'Noto Serif JP',serif; font-size:12px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .similar-cat { font-size:10px; color:var(--text-muted); margin-top:2px; }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <a href="/horse" class="back-link">← 勝ち馬一覧に戻る</a>
+
+        <div class="page-header">
+            <div class="page-title">
+                <span th:text="${horse.horseName}">馬名</span>
+                <span class="win-badge" th:text="${horse.winCount} + '勝'">1勝</span>
+            </div>
+            <div class="page-subtitle" th:text="'種別: ' + ${horse.raceCategory} + '  /  分析回数: ' + ${horse.analysisCount} + '回'">種別 / 分析回数</div>
+        </div>
+
+        <!-- 詳細カード -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="detail-layout">
+                    <!-- 左: 画像 -->
+                    <div>
+                        <img th:if="${horse.imagePath != null}" class="horse-img-large"
+                             th:src="${horse.imagePath}" th:alt="${horse.horseName}">
+                        <div th:unless="${horse.imagePath != null}" class="no-img-large">NO IMAGE</div>
+                        <div class="horse-meta" th:text="'種別: ' + ${horse.raceCategory} + ' / 分析' + ${horse.analysisCount} + '回'"></div>
+                    </div>
+
+                    <!-- 右: 顔特徴テーブル -->
+                    <div>
+                        <div style="font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:3px; color:var(--gold); margin-bottom:12px; padding-bottom:6px; border-bottom:1px solid rgba(201,168,76,0.2);">顔の特徴</div>
+                        <table class="feature-table">
+                            <tr><th>鼻の形</th>      <td th:text="${horse.noseShape        ?: '-'}"></td></tr>
+                            <tr><th>目の大きさ</th>  <td th:text="${horse.eyeSize          ?: '-'}"></td></tr>
+                            <tr><th>目の形</th>      <td th:text="${horse.eyeShape         ?: '-'}"></td></tr>
+                            <tr><th>顔の輪郭</th>    <td th:text="${horse.faceContour      ?: '-'}"></td></tr>
+                            <tr><th>額の幅</th>      <td th:text="${horse.foreheadWidth    ?: '-'}"></td></tr>
+                            <tr><th>鼻孔の大きさ</th><td th:text="${horse.nostrilSize      ?: '-'}"></td></tr>
+                            <tr><th>顎のライン</th>  <td th:text="${horse.jawLine          ?: '-'}"></td></tr>
+                            <tr><th>全体的な印象</th><td th:text="${horse.overallImpression ?: '-'}"></td></tr>
+                            <tr><th>分析確信度</th>
+                                <td th:text="${horse.avgConfidence != null ? #numbers.formatDecimal(horse.avgConfidence,1,2) : '-'}"></td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数値特徴量 -->
+        <div th:if="${horse.eyeAspectRatio != null}">
+            <div class="section-heading">NUMERIC FEATURES</div>
+            <div class="glass-card">
+                <div class="glass-card-inner numeric-section">
+                    <div class="bar-row">
+                        <span class="bar-row-label">目の縦横比</span>
+                        <div class="bar-bg"><div class="bar-val" th:style="'width:' + ${horse.eyeAspectRatio * 100} + '%'"></div></div>
+                        <span class="bar-num" th:text="${#numbers.formatDecimal(horse.eyeAspectRatio,1,2)}"></span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-row-label">鼻幅比率</span>
+                        <div class="bar-bg"><div class="bar-val" th:style="'width:' + ${horse.noseWidthRatio * 100 / 0.6} + '%'"></div></div>
+                        <span class="bar-num" th:text="${#numbers.formatDecimal(horse.noseWidthRatio,1,2)}"></span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-row-label">顔の縦横比</span>
+                        <div class="bar-bg"><div class="bar-val" th:style="'width:' + ${horse.faceAspectRatio * 50} + '%'"></div></div>
+                        <span class="bar-num" th:text="${#numbers.formatDecimal(horse.faceAspectRatio,1,2)}"></span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-row-label">顎の強さ</span>
+                        <div class="bar-bg"><div class="bar-val" th:style="'width:' + ${horse.jawStrengthScore * 100} + '%'"></div></div>
+                        <span class="bar-num" th:text="${#numbers.formatDecimal(horse.jawStrengthScore,1,2)}"></span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-row-label">全体の迫力</span>
+                        <div class="bar-bg"><div class="bar-val" th:style="'width:' + ${horse.overallIntensity * 100} + '%'"></div></div>
+                        <span class="bar-num" th:text="${#numbers.formatDecimal(horse.overallIntensity,1,2)}"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 類似馬 -->
+        <div th:unless="${similar.isEmpty()}">
+            <div class="section-heading">SIMILAR WINNERS</div>
+            <div class="glass-card">
+                <div class="glass-card-inner">
+                    <div class="similar-grid">
+                        <a th:each="s : ${similar}" th:href="'/horse/' + ${s.id}" class="similar-card">
+                            <img th:if="${s.imagePath != null}" th:src="${s.imagePath}" th:alt="${s.horseName}">
+                            <div th:unless="${s.imagePath != null}" class="no-img-sm">NO IMAGE</div>
+                            <div class="similar-card-body">
+                                <div class="similar-name" th:text="${s.horseName}">馬名</div>
+                                <div class="similar-cat" th:text="${s.raceCategory}">種別</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

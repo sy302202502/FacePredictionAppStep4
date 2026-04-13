@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>予測精度トラッキング</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        :root {
+            --neon:        #7dff4f;
+            --neon-dim:    #3a7d22;
+            --neon-glow:   rgba(125,255,79,0.32);
+            --orange:      #ff8000;
+            --orange-glow: rgba(255,128,0,0.38);
+            --gold:        #c9a84c;
+            --gold-light:  #f5d878;
+            --crimson:     #ff2244;
+            --crimson-dim: #7a0818;
+            --purple:      #8b5cf6;
+            --purple-glow: rgba(139,92,246,0.35);
+            --deep:        #050708;
+            --surface:     #0b0e0b;
+            --surface2:    #111811;
+            --surface3:    #182018;
+            --panel:       rgba(10,14,10,0.93);
+            --text:        #d4e8cc;
+            --text-muted:  #607860;
+        }
+
+        body { font-family: 'Noto Sans JP', sans-serif; background: var(--deep); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+        body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px); background-size: 44px 44px; pointer-events: none; z-index: 0; }
+        body::after { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse at 10% 15%, rgba(139,92,246,0.12) 0%, transparent 50%), radial-gradient(ellipse at 90% 85%, rgba(255,128,0,0.08) 0%, transparent 50%); pointer-events: none; z-index: 0; }
+        .scanlines { position: fixed; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px); pointer-events: none; z-index: 1; }
+        .page-body { position: relative; z-index: 2; max-width: 1000px; margin: 0 auto; padding: 0 16px 100px; }
+
+        .glass-card { background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px; backdrop-filter: blur(10px); box-shadow: 0 4px 24px rgba(0,0,0,0.7); margin-bottom: 16px; overflow: hidden; position: relative; }
+        .glass-card::before { content: ''; position: absolute; top: 4px; left: 4px; width: 12px; height: 12px; border-top: 1px solid var(--neon-dim); border-left: 1px solid var(--neon-dim); opacity: 0.5; pointer-events: none; }
+        .glass-card::after { content: ''; position: absolute; bottom: 4px; right: 4px; width: 12px; height: 12px; border-bottom: 1px solid rgba(139,92,246,0.5); border-right: 1px solid rgba(139,92,246,0.5); opacity: 0.5; pointer-events: none; }
+        .glass-card-inner { padding: 18px 22px; }
+
+        .section-heading { display: flex; align-items: center; gap: 10px; font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 4px; color: var(--neon); margin: 34px 0 14px; text-shadow: 0 0 10px var(--neon-glow); }
+        .section-heading::before { content: '▶'; color: var(--purple); font-size: 11px; text-shadow: 0 0 8px var(--purple-glow); }
+        .section-heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent); opacity: 0.7; }
+        .neon-divider { height: 1px; background: linear-gradient(90deg, transparent, var(--neon-dim), var(--purple), var(--neon-dim), transparent); margin: 10px 0; opacity: 0.5; }
+
+        .page-header { padding: 32px 0 20px; border-bottom: 1px solid rgba(125,255,79,0.1); margin-bottom: 24px; position: relative; }
+        .page-header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--crimson), var(--orange), var(--neon), var(--purple), var(--neon), var(--orange), var(--crimson), transparent); background-size: 300%; animation: stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+        .page-title { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 5px; color: var(--neon); text-shadow: 0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; margin-top: 3px; }
+
+        .btn { padding: 8px 18px; border-radius: 3px; font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-block; border: none; }
+        .btn-neon { background: transparent; color: var(--neon); border: 1px solid var(--neon-dim); }
+        .btn-neon:hover { border-color: var(--neon); box-shadow: 0 0 16px var(--neon-glow); color: #fff; transform: translateY(-1px); }
+        .btn-fire { background: linear-gradient(135deg, rgba(255,34,68,0.2), rgba(255,128,0,0.15)); color: var(--orange); border: 1px solid rgba(255,128,0,0.4); }
+        .btn-fire:hover { border-color: var(--orange); box-shadow: 0 0 18px var(--orange-glow); color: #fff; transform: translateY(-1px); }
+        .btn-purple { background: rgba(139,92,246,0.15); color: var(--purple); border: 1px solid rgba(139,92,246,0.4); }
+        .btn-purple:hover { border-color: var(--purple); box-shadow: 0 0 16px var(--purple-glow); color: #fff; }
+        .btn-muted { background: rgba(96,120,96,0.2); color: var(--text-muted); border: 1px solid rgba(96,120,96,0.35); }
+        .btn-muted:hover { border-color: var(--text-muted); color: var(--text); }
+
+        input, select, textarea { background: var(--surface3); color: var(--text); border: 1px solid rgba(125,255,79,0.2); border-radius: 3px; padding: 7px 11px; font-family: 'Noto Sans JP', sans-serif; font-size: 13px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+        input:focus, select:focus, textarea:focus { border-color: var(--neon); box-shadow: 0 0 10px var(--neon-glow); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead { background: rgba(125,255,79,0.07); }
+        th { font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 2px; color: var(--neon); padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(125,255,79,0.2); }
+        td { padding: 10px 12px; border-bottom: 1px solid rgba(125,255,79,0.06); color: var(--text-muted); }
+        tr:hover td { background: rgba(125,255,79,0.03); }
+
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: var(--deep); } ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; } ::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+        @media (max-width: 640px) { .page-title { font-size: 22px; } }
+
+        /* アラート */
+        .alert { padding: 11px 16px; border-radius: 3px; margin-bottom: 16px; font-size: 13px; letter-spacing: 1px; }
+        .alert-success { background: rgba(125,255,79,0.08); border: 1px solid rgba(125,255,79,0.3); color: var(--neon); }
+        .alert-error   { background: rgba(255,34,68,0.08); border: 1px solid rgba(255,34,68,0.3); color: var(--crimson); }
+
+        /* 操作バー */
+        .action-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; background: var(--panel); border: 1px solid rgba(125,255,79,0.1); border-radius: 5px; padding: 14px 18px; }
+        .action-bar-text { font-size: 12px; color: var(--text-muted); flex: 1; letter-spacing: 1px; }
+
+        /* システム比較カード */
+        .compare-grid { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+        .system-card { flex: 1; min-width: 280px; background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px; padding: 20px; position: relative; overflow: hidden; }
+        .system-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+        .system-card.legacy::before { background: linear-gradient(90deg, var(--purple), var(--text-muted)); }
+        .system-card.new-sys::before { background: linear-gradient(90deg, var(--neon), var(--gold)); }
+        .system-card-title { font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 3px; margin-bottom: 16px; }
+        .system-card.legacy .system-card-title { color: var(--purple); }
+        .system-card.new-sys .system-card-title { color: var(--neon); text-shadow: 0 0 8px var(--neon-glow); }
+
+        .stat-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .stat-card { flex: 1; min-width: 90px; text-align: center; background: rgba(125,255,79,0.04); border: 1px solid rgba(125,255,79,0.08); border-radius: 3px; padding: 12px 8px; }
+        .stat-card.highlight { border-color: rgba(125,255,79,0.25); background: rgba(125,255,79,0.08); }
+        .stat-num { font-family: 'Bebas Neue', sans-serif; font-size: 28px; line-height: 1; color: var(--text); }
+        .stat-card.highlight .stat-num { color: var(--neon); text-shadow: 0 0 10px var(--neon-glow); }
+        .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; letter-spacing: 1px; }
+
+        /* タブ */
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 0; }
+        .tab-btn { padding: 9px 20px; background: rgba(10,14,10,0.7); border: 1px solid rgba(125,255,79,0.15); border-bottom: none; cursor: pointer; font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 2px; color: var(--text-muted); border-radius: 3px 3px 0 0; transition: all 0.2s; }
+        .tab-btn.active { background: var(--panel); color: var(--neon); border-color: rgba(125,255,79,0.3); text-shadow: 0 0 8px var(--neon-glow); }
+        .tab-btn:hover:not(.active) { color: var(--text); border-color: rgba(125,255,79,0.2); }
+        .tab-pane { display: none; background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 0 3px 3px 3px; padding: 22px; }
+        .tab-pane.active { display: block; }
+
+        /* 手動記録フォーム */
+        .record-form { background: rgba(125,255,79,0.04); border: 1px solid rgba(125,255,79,0.18); border-radius: 4px; padding: 18px 20px; margin-bottom: 20px; margin-top: 20px; }
+        .record-form-title { font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 3px; color: var(--neon); margin: 0 0 14px; }
+        .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+        .form-row label { font-size: 11px; color: var(--text-muted); letter-spacing: 2px; display: flex; flex-direction: column; gap: 5px; }
+        .form-row select, .form-row input[type=text] { display: block; margin-top: 0; }
+        .form-row select { width: 220px; }
+        .form-row input[type=text] { width: 180px; }
+
+        /* バー */
+        .bar-wrap { background: rgba(125,255,79,0.08); border-radius: 2px; height: 8px; width: 120px; display: inline-block; vertical-align: middle; border: 1px solid rgba(125,255,79,0.1); }
+        .bar-fill { height: 8px; border-radius: 2px; }
+        .bar-neon { background: linear-gradient(90deg, var(--neon-dim), var(--neon)); }
+        .bar-purple { background: linear-gradient(90deg, rgba(139,92,246,0.5), var(--purple)); }
+
+        /* 的中バッジ */
+        .hit-mark  { color: var(--neon); font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1px; }
+        .miss-mark { color: var(--crimson); font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1px; }
+
+        /* データソースバッジ */
+        .src-badge { display: inline-block; padding: 2px 8px; border-radius: 2px; font-size: 11px; letter-spacing: 1px; font-family: 'Bebas Neue', sans-serif; }
+        .src-image    { background: rgba(139,92,246,0.15); color: var(--purple); border: 1px solid rgba(139,92,246,0.3); }
+        .src-pedigree { background: rgba(255,128,0,0.12); color: var(--orange); border: 1px solid rgba(255,128,0,0.3); }
+        .src-no_data  { background: rgba(96,120,96,0.15); color: var(--text-muted); border: 1px solid rgba(96,120,96,0.2); }
+
+        /* 空状態 */
+        .empty-text { font-size: 12px; color: var(--text-muted); letter-spacing: 1px; padding: 16px 0; line-height: 2; }
+
+        /* サブ見出し */
+        .sub-heading { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 3px; color: var(--text-muted); margin: 18px 0 10px; border-left: 2px solid var(--neon-dim); padding-left: 8px; }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <div class="page-header">
+            <div class="page-title">ACCURACY TRACKING</div>
+            <div class="page-subtitle">予測精度モニタリング / 旧システム・新システム並行表示</div>
+        </div>
+
+        <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+        <div th:if="${error}"   class="alert alert-error"   th:text="${error}"></div>
+
+        <!-- 的中記録 自動取得バー -->
+        <div class="action-bar">
+            <span class="action-bar-text">レース後にnetkeibaから実際の着順を自動取得して的中率を更新します</span>
+            <form method="post" action="/script/result-fetch" style="display:inline; margin:0;">
+                <button type="submit" class="btn btn-fire">AUTO FETCH RESULTS</button>
+            </form>
+            <a href="/accuracy" class="btn btn-muted">RELOAD</a>
+        </div>
+
+        <!-- システム別 精度比較 -->
+        <div class="section-heading">SYSTEM COMPARISON</div>
+        <div class="compare-grid">
+
+            <!-- 旧システム -->
+            <div class="system-card legacy">
+                <div class="system-card-title">LEGACY SYSTEM — 類似度スコア</div>
+                <div class="stat-row">
+                    <div class="stat-card">
+                        <div class="stat-num" th:text="${totalRaces}">0</div>
+                        <div class="stat-label">TOTAL RACES</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-num" th:text="${winHitRate} + '%'">0%</div>
+                        <div class="stat-label">WIN HIT RATE</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-num" th:text="${top5HitRate} + '%'">0%</div>
+                        <div class="stat-label">TOP5 HIT RATE</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 新システム -->
+            <div class="system-card new-sys">
+                <div class="system-card-title">NEW SYSTEM — 顔面傾向分析予想</div>
+                <div class="stat-row">
+                    <div class="stat-card">
+                        <div class="stat-num" th:text="${v2TotalRaces}">0</div>
+                        <div class="stat-label">TOTAL RACES</div>
+                    </div>
+                    <div class="stat-card highlight">
+                        <div class="stat-num" th:text="${v2WinHitRate} + '%'">0%</div>
+                        <div class="stat-label">WIN HIT RATE</div>
+                    </div>
+                    <div class="stat-card highlight">
+                        <div class="stat-num" th:text="${v2Top5HitRate} + '%'">0%</div>
+                        <div class="stat-label">TOP5 HIT RATE</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 詳細記録タブ -->
+        <div class="section-heading">DETAIL RECORDS</div>
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="showTab('old', this)">LEGACY SYSTEM</button>
+            <button class="tab-btn"        onclick="showTab('new', this)">NEW SYSTEM — 顔面傾向分析</button>
+        </div>
+
+        <!-- 旧システムタブ -->
+        <div id="tab-old" class="tab-pane active">
+
+            <div class="sub-heading">CATEGORY ACCURACY</div>
+            <div th:if="${categoryRows.isEmpty()}">
+                <p class="empty-text">まだ記録データがありません。</p>
+            </div>
+            <table th:unless="${categoryRows.isEmpty()}">
+                <thead>
+                    <tr>
+                        <th>CATEGORY</th>
+                        <th>RACES</th>
+                        <th>WIN HIT RATE</th>
+                        <th>TOP5 HIT RATE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="row : ${categoryRows}">
+                        <td th:text="${row.category}">種別</td>
+                        <td th:text="${row.races} + 'R'">0R</td>
+                        <td>
+                            <div class="bar-wrap">
+                                <div class="bar-fill bar-neon" th:style="'width:' + ${row.winHitRate} + '%'"></div>
+                            </div>
+                            <span th:text="${row.winHitRate} + '%'" style="margin-left:8px; color: var(--neon);"></span>
+                        </td>
+                        <td>
+                            <div class="bar-wrap">
+                                <div class="bar-fill bar-purple" th:style="'width:' + ${row.top5HitRate} + '%'"></div>
+                            </div>
+                            <span th:text="${row.top5HitRate} + '%'" style="margin-left:8px; color: var(--purple);"></span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- 手動結果記録フォーム -->
+            <div class="record-form">
+                <div class="record-form-title">MANUAL RECORD — レース結果を手動記録</div>
+                <form method="post" action="/accuracy/record">
+                    <div class="form-row">
+                        <label>
+                            RACE NAME
+                            <select name="raceName" style="width:220px;">
+                                <option value="">-- SELECT --</option>
+                                <option th:each="r : ${raceNames}" th:value="${r}" th:text="${r}"></option>
+                            </select>
+                        </label>
+                        <label>
+                            ACTUAL WINNER
+                            <input type="text" name="actualWinner" placeholder="例: ドウデュース" style="width:180px;">
+                        </label>
+                        <button type="submit" class="btn btn-neon" style="margin-bottom:0;">RECORD</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 直近の記録 -->
+            <div class="sub-heading">RECENT PREDICTIONS</div>
+            <div th:if="${recentResults.isEmpty()}">
+                <p class="empty-text">まだ記録がありません。「AUTO FETCH RESULTS」を実行してください。</p>
+            </div>
+            <table th:unless="${recentResults.isEmpty()}">
+                <thead>
+                    <tr>
+                        <th>DATE</th>
+                        <th>RACE</th>
+                        <th>PREDICTED #1</th>
+                        <th>WIN</th>
+                        <th>TOP5</th>
+                        <th>SCORE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="r : ${recentResults}">
+                        <td th:text="${r.raceDate}">日付</td>
+                        <td th:text="${r.raceName}">レース名</td>
+                        <td th:text="${r.horseName}" style="color: var(--text);">馬名</td>
+                        <td>
+                            <span th:if="${r.hit}"     class="hit-mark">HIT</span>
+                            <span th:unless="${r.hit}" class="miss-mark">MISS</span>
+                        </td>
+                        <td>
+                            <span th:if="${r.top5Hit}"     class="hit-mark">HIT</span>
+                            <span th:unless="${r.top5Hit}" class="miss-mark">MISS</span>
+                        </td>
+                        <td th:text="${r.finalScore != null ? #numbers.formatDecimal(r.finalScore,1,1) + 'pt' : '—'}">—</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 新システムタブ -->
+        <div id="tab-new" class="tab-pane">
+            <div th:if="${v2RecentResults == null or #lists.isEmpty(v2RecentResults)}">
+                <p class="empty-text">
+                    まだ記録がありません。<br>
+                    ① 「顔面傾向分析予想」でレースを予想 → ② レース後に「AUTO FETCH RESULTS」を実行してください。
+                </p>
+            </div>
+            <table th:unless="${v2RecentResults == null or #lists.isEmpty(v2RecentResults)}">
+                <thead>
+                    <tr>
+                        <th>RACE</th>
+                        <th>PREDICTED #1</th>
+                        <th>ACTUAL RANK</th>
+                        <th>WIN</th>
+                        <th>TOP5</th>
+                        <th>SCORE</th>
+                        <th>DATA</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="r : ${v2RecentResults}">
+                        <td th:text="${r.race_name}">レース名</td>
+                        <td th:text="${r.horse_name}" style="color: var(--text);">馬名</td>
+                        <td th:text="${r.actual_rank != null ? r.actual_rank + '着' : '未記録'}">—</td>
+                        <td>
+                            <span th:if="${r.hit}"     class="hit-mark">HIT</span>
+                            <span th:unless="${r.hit}" class="miss-mark">MISS</span>
+                        </td>
+                        <td>
+                            <span th:if="${r.top5_hit}"     class="hit-mark">HIT</span>
+                            <span th:unless="${r.top5_hit}" class="miss-mark">MISS</span>
+                        </td>
+                        <td th:text="${r.score != null ? #numbers.formatDecimal(r.score,1,1) + 'pt' : '—'}">—</td>
+                        <td>
+                            <span class="src-badge"
+                                  th:classappend="${r.data_source == 'image' ? 'src-image' : (r.data_source == 'pedigree' ? 'src-pedigree' : 'src-no_data')}"
+                                  th:text="${r.data_source == 'image' ? '画像' : (r.data_source == 'pedigree' ? '血統' : 'なし')}">
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function showTab(name, btn) {
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            btn.classList.add('active');
+        }
+    </script>
+</body>
+</html>

@@ -1,1 +1,6 @@
 /target/
+.env
+uploads/
+__pycache__/
+*.pyc
+

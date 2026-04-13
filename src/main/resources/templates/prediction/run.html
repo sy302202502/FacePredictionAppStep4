@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>予想実行</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon:#7dff4f; --neon-dim:#3a7d22; --neon-glow:rgba(125,255,79,0.32);
+            --orange:#ff8000; --orange-glow:rgba(255,128,0,0.38);
+            --gold:#c9a84c; --gold-light:#f5d878;
+            --crimson:#ff2244; --crimson-dim:#7a0818;
+            --purple:#8b5cf6; --purple-glow:rgba(139,92,246,0.35);
+            --deep:#050708; --surface:#0b0e0b; --surface2:#111811; --surface3:#182018;
+            --panel:rgba(10,14,10,0.93); --text:#d4e8cc; --text-muted:#607860;
+        }
+        body { font-family:'Noto Sans JP',sans-serif; background:var(--deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(125,255,79,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(125,255,79,0.02) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+        body::after { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 10% 15%,rgba(139,92,246,0.12) 0%,transparent 50%),radial-gradient(ellipse at 90% 85%,rgba(255,128,0,0.08) 0%,transparent 50%); pointer-events:none; z-index:0; }
+        .scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.1) 0px,rgba(0,0,0,0.1) 1px,transparent 1px,transparent 3px); pointer-events:none; z-index:1; }
+        .page-body { position:relative; z-index:2; max-width:1000px; margin:0 auto; padding:0 16px 100px; }
+        .glass-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; backdrop-filter:blur(10px); box-shadow:0 4px 24px rgba(0,0,0,0.7); margin-bottom:16px; overflow:hidden; position:relative; }
+        .glass-card::before { content:''; position:absolute; top:4px; left:4px; width:12px; height:12px; border-top:1px solid var(--neon-dim); border-left:1px solid var(--neon-dim); opacity:0.5; pointer-events:none; }
+        .glass-card::after { content:''; position:absolute; bottom:4px; right:4px; width:12px; height:12px; border-bottom:1px solid rgba(139,92,246,0.5); border-right:1px solid rgba(139,92,246,0.5); opacity:0.5; pointer-events:none; }
+        .glass-card-inner { padding:18px 22px; }
+        .page-header { padding:32px 0 20px; border-bottom:1px solid rgba(125,255,79,0.1); margin-bottom:24px; position:relative; }
+        .page-header::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,var(--crimson),var(--orange),var(--neon),var(--purple),var(--neon),var(--orange),var(--crimson),transparent); background-size:300%; animation:stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .page-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:5px; color:var(--neon); text-shadow:0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size:11px; color:var(--text-muted); letter-spacing:3px; margin-top:3px; }
+        .section-heading { display:flex; align-items:center; gap:10px; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:4px; color:var(--neon); margin:28px 0 14px; text-shadow:0 0 10px var(--neon-glow); }
+        .section-heading::before { content:'▶'; color:var(--purple); font-size:11px; }
+        .section-heading::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--neon-dim),rgba(139,92,246,0.3),transparent); opacity:0.7; }
+        .neon-divider { height:1px; background:linear-gradient(90deg,transparent,var(--neon-dim),var(--purple),var(--neon-dim),transparent); margin:10px 0; opacity:0.5; }
+        .btn { padding:8px 18px; border-radius:3px; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:2px; cursor:pointer; transition:all 0.2s; text-decoration:none; display:inline-block; border:1px solid; }
+        .btn-neon { background:transparent; color:var(--neon); border-color:var(--neon-dim); }
+        .btn-neon:hover { border-color:var(--neon); box-shadow:0 0 16px var(--neon-glow); color:#fff; transform:translateY(-1px); }
+        .btn-fire { background:linear-gradient(135deg,rgba(255,34,68,0.2),rgba(255,128,0,0.15)); color:var(--orange); border-color:rgba(255,128,0,0.4); }
+        .btn-fire:hover { border-color:var(--orange); box-shadow:0 0 18px var(--orange-glow); color:#fff; transform:translateY(-1px); }
+        .btn-purple { background:rgba(139,92,246,0.15); color:var(--purple); border-color:rgba(139,92,246,0.4); }
+        .btn-purple:hover { border-color:var(--purple); box-shadow:0 0 16px var(--purple-glow); color:#fff; }
+        input[type=text], input[type=number], select, textarea { background:var(--surface3); color:var(--text); border:1px solid rgba(125,255,79,0.2); border-radius:3px; padding:7px 11px; font-family:'Noto Sans JP',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s,box-shadow 0.2s; width:100%; }
+        input:focus, select:focus, textarea:focus { border-color:var(--neon); box-shadow:0 0 10px var(--neon-glow); }
+        input[type=checkbox] { width:auto; accent-color:var(--neon); }
+        select option { background:var(--surface2); }
+        label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); }
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        thead { background:rgba(125,255,79,0.07); }
+        th { font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:2px; color:var(--neon); padding:10px 12px; text-align:left; border-bottom:1px solid rgba(125,255,79,0.2); }
+        td { padding:10px 12px; border-bottom:1px solid rgba(125,255,79,0.06); color:var(--text-muted); }
+        tr:hover td { background:rgba(125,255,79,0.03); }
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--deep)} ::-webkit-scrollbar-thumb{background:var(--neon-dim);border-radius:2px} ::-webkit-scrollbar-thumb:hover{background:var(--neon)}
+        .log-box { background:#020402; color:var(--neon); font-family:'Courier New',monospace; font-size:11px; padding:12px 18px; height:200px; overflow-y:auto; white-space:pre-wrap; border-radius:3px; border:1px solid rgba(125,255,79,0.12); }
+
+        .form-group { margin-bottom:14px; }
+        .form-group label { display:block; margin-bottom:5px; }
+        .hint { font-size:11px; color:var(--text-muted); margin-top:5px; line-height:1.5; }
+        .hint a { color:var(--neon); }
+
+        .select-all-bar { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+        .btn-sel { padding:4px 12px; font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:1px; border:1px solid rgba(125,255,79,0.25); border-radius:2px; cursor:pointer; background:transparent; color:var(--text-muted); transition:all 0.15s; }
+        .btn-sel:hover { border-color:var(--neon-dim); color:var(--neon); }
+        .selected-count { font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:1px; color:var(--neon); }
+        .chk { accent-color:var(--neon); width:15px; height:15px; cursor:pointer; }
+        .horse-num { font-family:'Bebas Neue',sans-serif; font-size:16px; color:var(--neon); letter-spacing:1px; }
+        .horse-name-cell { font-weight:bold; color:var(--text); }
+
+        .manual-toggle { font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:2px; color:var(--text-muted); cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px; margin-bottom:8px; transition:color 0.15s; }
+        .manual-toggle:hover { color:var(--neon); }
+        .manual-area { display:none; }
+        .manual-area textarea { height:160px; font-family:'Courier New',monospace; font-size:12px; }
+
+        .btn-run { background:linear-gradient(135deg,rgba(125,255,79,0.15),rgba(125,255,79,0.08)); color:var(--neon); border:1px solid var(--neon-dim); padding:14px 32px; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:4px; border-radius:3px; cursor:pointer; width:100%; margin-top:14px; transition:all 0.2s; }
+        .btn-run:hover { border-color:var(--neon); box-shadow:0 0 24px var(--neon-glow); color:#fff; }
+
+        .alert-success { background:rgba(125,255,79,0.07); border:1px solid var(--neon-dim); border-left:3px solid var(--neon); padding:12px 16px; border-radius:3px; color:var(--neon); font-size:13px; margin-bottom:12px; }
+        .alert-success a { color:var(--neon); font-weight:bold; }
+        .alert-error { background:rgba(255,34,68,0.07); border:1px solid var(--crimson-dim); border-left:3px solid var(--crimson); padding:12px 16px; border-radius:3px; color:var(--crimson); font-size:13px; margin-bottom:12px; }
+        .alert-warn { background:rgba(255,128,0,0.08); border:1px solid rgba(255,128,0,0.3); border-left:3px solid var(--orange); padding:12px 16px; border-radius:3px; color:var(--orange); font-size:13px; margin-bottom:14px; }
+        .alert-warn a { color:var(--orange); }
+
+        .pdf-btn { background:linear-gradient(135deg,rgba(255,34,68,0.2),rgba(255,128,0,0.15)); color:var(--orange); border:1px solid rgba(255,128,0,0.4); padding:4px 12px; border-radius:3px; text-decoration:none; font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:2px; }
+
+        @media(max-width:640px){.page-title{font-size:22px}}
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <div class="page-header">
+            <div class="page-title">RUN PREDICTION</div>
+            <div class="page-subtitle">SELECT RACE &amp; HORSES — EXECUTE FACE SCORE ANALYSIS</div>
+        </div>
+
+        <form method="post" action="/prediction/run" id="mainForm">
+
+            <!-- ① レース選択 -->
+            <div class="section-heading">STEP 1 — RACE SELECT</div>
+            <div class="glass-card">
+                <div class="glass-card-inner">
+                    <div class="form-group">
+                        <label>レース選択</label>
+                        <select name="raceName" id="raceSelect" style="margin-top:6px;">
+                            <option value="">-- レースを選択してください --</option>
+                            <option th:each="r : ${entryRaceNames}"
+                                    th:value="${r}" th:text="${r}"
+                                    th:selected="${r == selectedRace}">レース名</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <button type="button" class="btn btn-neon" onclick="loadRace()">馬一覧を読み込む</button>
+                    </div>
+                    <p class="hint" style="margin-top:8px;">
+                        出走馬が表示されない場合は
+                        <a href="/entry">「出走馬一覧」</a> ページで自動取得してください。
+                    </p>
+                </div>
+            </div>
+
+            <!-- ② 出走馬選択テーブル -->
+            <div th:if="${entries != null and !entries.isEmpty()}">
+                <div class="section-heading">STEP 2 — SELECT HORSES</div>
+                <div class="glass-card">
+                    <div class="glass-card-inner">
+                        <div class="select-all-bar">
+                            <button type="button" class="btn-sel" onclick="selectAll(true)">全選択</button>
+                            <button type="button" class="btn-sel" onclick="selectAll(false)">全解除</button>
+                            <span id="selectedCount" class="selected-count"></span>
+                        </div>
+                        <div class="neon-divider"></div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;">選択</th>
+                                    <th style="width:50px;">馬番</th>
+                                    <th style="width:50px;">枠番</th>
+                                    <th>馬名</th>
+                                    <th>騎手</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="e : ${entries}">
+                                    <td style="text-align:center;">
+                                        <input type="checkbox" class="horse-chk chk"
+                                               name="selectedHorseIds"
+                                               th:value="${e.horseId}"
+                                               checked
+                                               onchange="updateCount()">
+                                    </td>
+                                    <td class="horse-num" th:text="${e.horseNumber}">1</td>
+                                    <td style="text-align:center;" th:text="${e.postPosition}">1</td>
+                                    <td class="horse-name-cell"><strong th:text="${e.horseName}">馬名</strong></td>
+                                    <td th:text="${e.jockeyName != null ? e.jockeyName : '-'}">騎手</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 出走馬未登録メッセージ -->
+            <div class="alert-warn"
+                 th:if="${selectedRace != null and !#strings.isEmpty(selectedRace)
+                          and (entries == null or entries.isEmpty())}">
+                このレースの出走馬データがありません。
+                <a href="/entry">「出走馬一覧」</a> ページで自動取得してください。
+            </div>
+
+            <!-- ③ 手動入力（代替手段） -->
+            <div class="section-heading">MANUAL INPUT (OPTIONAL)</div>
+            <div class="glass-card">
+                <div class="glass-card-inner">
+                    <span class="manual-toggle" onclick="toggleManual()">
+                        ▶ 手動で馬名・IDを入力する（出走馬データがない場合）
+                    </span>
+                    <div class="manual-area" id="manualArea" style="margin-top:10px;">
+                        <textarea name="horseList"
+                                  placeholder="例:&#10;イクイノックス,2019105174&#10;ドウデュース,2019105175"></textarea>
+                        <p class="hint">1行につき「馬名,horse_id」形式。horse_id は netkeiba 馬ページのURLで確認できます。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ④ 実行ボタン -->
+            <button type="submit" class="btn-run">予想を実行する</button>
+        </form>
+
+        <!-- ⑤ 実行結果 -->
+        <div th:if="${output != null}" style="margin-top:28px;">
+            <div class="section-heading">RESULT</div>
+            <div th:if="${success}" class="alert-success">
+                予想が完了しました。
+                <a th:href="@{/prediction(raceName=${raceName})}">予想結果を見る →</a>
+                &nbsp;
+                <a th:href="@{/prediction/pdf(raceName=${raceName})}" class="pdf-btn">
+                    PDF ダウンロード
+                </a>
+            </div>
+            <div th:unless="${success}" class="alert-error">実行中にエラーが発生しました。</div>
+            <div th:if="${errorOutput != null and !#strings.isEmpty(errorOutput)}"
+                 class="alert-error" th:text="${errorOutput}"></div>
+            <div class="glass-card" style="margin-top:10px;">
+                <div class="glass-card-inner">
+                    <div style="font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:2px; color:var(--text-muted); margin-bottom:8px;">EXECUTION LOG</div>
+                    <div class="log-box" th:text="${output}"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', updateCount);
+
+        function loadRace() {
+            var sel = document.getElementById('raceSelect');
+            if (!sel.value) { alert('レースを選択してください'); return; }
+            window.location.href = '/prediction/run?selectedRace=' + encodeURIComponent(sel.value);
+        }
+
+        function selectAll(checked) {
+            document.querySelectorAll('.horse-chk').forEach(function(c) { c.checked = checked; });
+            updateCount();
+        }
+
+        function updateCount() {
+            var total    = document.querySelectorAll('.horse-chk').length;
+            var selected = document.querySelectorAll('.horse-chk:checked').length;
+            var el = document.getElementById('selectedCount');
+            if (el) el.textContent = selected + ' / ' + total + ' 頭選択中';
+        }
+
+        function toggleManual() {
+            var area = document.getElementById('manualArea');
+            area.style.display = (area.style.display === 'block') ? 'none' : 'block';
+        }
+    </script>
+</body>
+</html>

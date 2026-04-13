@@ -1,13 +1,171 @@
-<!-- fragments/navbar.html: ナビゲーションバーのフラグメント定義 -->
-<nav th:fragment="navbar"> <!-- Thymeleafのフラグメントとしてnavbarを定義 -->
-    <a href="/">トップ</a> <!-- トップページへのリンク -->
-    |
-    <a href="/faces">顔画像一覧</a> <!-- 顔画像の一覧ページへのリンク -->
-    |
-    <a href="/faces/upload">顔画像アップロード</a> <!-- 顔画像アップロードページへのリンク -->
-    |
-    <a href="/races">レース一覧</a> <!-- レース一覧ページへのリンク -->
-    |
-    <a href="/races/new">レース登録</a> <!-- レース新規登録ページへのリンク -->
+<!-- fragments/navbar.html -->
+<nav th:fragment="navbar" style="position:relative; z-index:1000;">
+    <style>
+        .nav-root {
+            background: linear-gradient(90deg, #08080f 0%, #111120 60%, #08080f 100%);
+            border-bottom: 1px solid rgba(201,168,76,0.25);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.7);
+        }
+        .nav-bar {
+            display:flex; align-items:center; gap:10px;
+            padding:6px 20px; flex-wrap:nowrap; max-width:1200px; margin:0 auto;
+        }
+        .nav-logo {
+            display:flex; align-items:center; gap:8px;
+            text-decoration:none; flex-shrink:0;
+        }
+        .nav-logo img {
+            height:40px; width:auto; display:block;
+            filter: drop-shadow(0 0 8px rgba(201,168,76,0.5));
+            transition: filter 0.3s;
+        }
+        .nav-logo:hover img {
+            filter: drop-shadow(0 0 14px rgba(201,168,76,0.85));
+        }
+        .nav-logo-text {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 15px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #f5d878, #c9a84c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+            white-space: nowrap;
+        }
+        .nav-divider {
+            width: 1px; height: 28px;
+            background: linear-gradient(180deg, transparent, rgba(201,168,76,0.3), transparent);
+            flex-shrink: 0;
+            margin: 0 4px;
+        }
+        .nav-links {
+            display:flex; align-items:center; gap:4px; flex-wrap:wrap; flex:1;
+        }
+        .nav-links a {
+            color: rgba(220,210,190,0.85);
+            text-decoration:none;
+            padding:6px 11px; border-radius:6px;
+            font-size:12px; font-weight:bold; white-space:nowrap;
+            display:flex; align-items:center; gap:4px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            letter-spacing: 0.5px;
+        }
+        .nav-links a:hover {
+            color: #f5d878;
+            border-color: rgba(201,168,76,0.3);
+            background: rgba(201,168,76,0.08) !important;
+        }
+        .nav-links a.active {
+            color: #f5d878;
+            border-color: rgba(201,168,76,0.4);
+            background: rgba(201,168,76,0.1) !important;
+        }
+        .nav-hamburger {
+            display:none; flex-direction:column; justify-content:center;
+            gap:5px; background:none; border:none; cursor:pointer;
+            padding:8px; margin-left:auto;
+        }
+        .nav-hamburger span {
+            display:block; width:22px; height:2px;
+            background: #c9a84c; border-radius:2px; transition:0.3s;
+        }
+        .nav-drawer {
+            display:none; flex-direction:column; gap:2px;
+            padding:8px 16px 14px;
+            background: #0d0d1a;
+            border-top: 1px solid rgba(201,168,76,0.15);
+        }
+        .nav-drawer a {
+            color: rgba(220,210,190,0.85); text-decoration:none;
+            padding:11px 14px; border-radius:6px;
+            font-size:14px; font-weight:bold;
+            display:flex; align-items:center; gap:8px;
+            border-bottom:1px solid rgba(201,168,76,0.07);
+            transition: all 0.2s;
+        }
+        .nav-drawer a:last-child { border-bottom:none; }
+        .nav-drawer a:hover { color: #f5d878; background: rgba(201,168,76,0.08); }
+        .nav-drawer.open { display:flex; }
+
+        /* 右下ウォーターマーク */
+        .nav-watermark {
+            position:fixed; bottom:16px; right:16px; z-index:9999; pointer-events:none;
+        }
+        .nav-watermark img {
+            height:64px; width:auto; display:block;
+            filter: drop-shadow(0 2px 12px rgba(201,168,76,0.4))
+                    drop-shadow(0 0 30px rgba(201,168,76,0.15));
+            opacity: 0.9;
+            animation: wm-float 4s ease-in-out infinite;
+        }
+        @keyframes wm-float {
+            0%, 100% { transform: translateY(0px); }
+            50%       { transform: translateY(-5px); }
+        }
+
+        @media (max-width:640px) {
+            .nav-links { display:none; }
+            .nav-hamburger { display:flex; }
+            .nav-bar { padding:6px 14px; }
+            .nav-logo-text { display:none; }
+            .nav-watermark img { height:44px; }
+        }
+    </style>
+
+    <div class="nav-root">
+        <div class="nav-bar">
+            <a href="/" class="nav-logo">
+                <img src="/images/maiki-logo.png" alt="舞鬼">
+                <span class="nav-logo-text">舞鬼競馬</span>
+            </a>
+            <div class="nav-divider"></div>
+            <div class="nav-links">
+                <a href="/script"        style="background:rgba(255,152,0,0.12);">🖥️ スクリプト</a>
+                <a href="/stats-predict" style="background:rgba(233,30,99,0.12);">📊 統計予想</a>
+                <a href="/weekly"        style="background:rgba(63,81,181,0.15);">📅 週次予想</a>
+                <a href="/predict-v2"   style="background:rgba(76,175,80,0.12);">👹 傾向分析</a>
+                <a href="/paddock"      style="background:rgba(255,193,7,0.12);">📸 パドック</a>
+                <a href="/calendar"     style="background:rgba(255,255,255,0.05);">📅 カレンダー</a>
+                <a href="/entry"        style="background:rgba(255,255,255,0.05);">🐴 出走馬</a>
+                <a href="/accuracy"     style="background:rgba(255,255,255,0.05);">📈 的中率</a>
+                <a href="/health"       style="background:rgba(255,255,255,0.03);">🩺 ヘルス</a>
+            </div>
+            <button class="nav-hamburger" onclick="toggleNav()" aria-label="メニュー">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- スマホ用ドロワー -->
+    <div class="nav-drawer" id="nav-drawer">
+        <a href="/stats-predict">📊 統計予想</a>
+        <a href="/weekly">📅 週次予想</a>
+        <a href="/predict-v2">👹 傾向分析予想</a>
+        <a href="/paddock">📸 パドック分析</a>
+        <a href="/calendar">📅 カレンダー</a>
+        <a href="/entry">🐴 出走馬</a>
+        <a href="/accuracy">📈 的中率</a>
+        <a href="/script">🖥️ スクリプト</a>
+        <a href="/health">🩺 ヘルス</a>
+    </div>
+
+    <!-- 右下ウォーターマーク（舞鬼ロゴ） -->
+    <div class="nav-watermark">
+        <img src="/images/maiki-logo.png" alt="舞鬼">
+    </div>
+
+    <script>
+        function toggleNav() {
+            document.getElementById('nav-drawer').classList.toggle('open');
+        }
+        // ドロワー外タップで閉じる
+        document.addEventListener('click', function(e) {
+            var drawer = document.getElementById('nav-drawer');
+            if (drawer && drawer.classList.contains('open')) {
+                if (!e.target.closest('nav')) drawer.classList.remove('open');
+            }
+        });
+    </script>
 </nav>
-<hr> <!-- 区切り線を表示 -->

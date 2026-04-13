@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>👹 鬼眼競馬予想 — MIKEY MASTER</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            /* ネオングリーン (B base) */
+            --neon:        #7dff4f;
+            --neon-dim:    #3a7d22;
+            --neon-glow:   rgba(125,255,79,0.32);
+            /* ゴールド (C premium accent — 1位専用) */
+            --gold:        #c9a84c;
+            --gold-light:  #f5d878;
+            --gold-dark:   #8a6a1a;
+            /* オレンジ (舞鬼Xバナー) */
+            --orange:      #ff8000;
+            --orange-glow: rgba(255,128,0,0.38);
+            /* クリムゾン */
+            --crimson:     #ff2244;
+            --crimson-dim: #7a0818;
+            /* パープル (VTuber stream) */
+            --purple:      #8b5cf6;
+            --purple-glow: rgba(139,92,246,0.35);
+            /* BASE */
+            --deep:        #050708;
+            --surface:     #0b0e0b;
+            --surface2:    #111811;
+            --surface3:    #182018;
+            --panel:       rgba(10,14,10,0.93);
+            --text:        #d4e8cc;
+            --text-muted:  #607860;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--deep);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 背景グリッド (B) + 紫グロー (VTuber stream) */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px);
+            background-size: 44px 44px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 10% 15%, rgba(139,92,246,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 90% 85%, rgba(255,128,0,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(125,255,79,0.04) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* スキャンライン */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px,
+                transparent 1px, transparent 3px
+            );
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .page-body {
+            position: relative;
+            z-index: 2;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 16px 100px;
+        }
+
+        /* ============================================================
+           HEADER — B×C中間 + VTuber stream演出
+        ============================================================ */
+        .site-header {
+            text-align: center;
+            padding: 38px 16px 30px;
+            position: relative;
+        }
+
+        /* トップライン：クリムゾン→オレンジ→ネオン（B）→ゴールド（C）→パープル（VTuber） */
+        .site-header::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg,
+                transparent,
+                var(--crimson),
+                var(--orange),
+                var(--neon),
+                var(--gold),
+                var(--purple),
+                var(--neon),
+                var(--orange),
+                var(--crimson),
+                transparent
+            );
+            background-size: 300%;
+            animation: stripe-slide 4s linear infinite;
+        }
+
+        @keyframes stripe-slide {
+            0%   { background-position: 200% center; }
+            100% { background-position: -200% center; }
+        }
+
+        /* VTuber stream overlay — 右上チャンネルバッジ風 */
+        .stream-badge {
+            position: absolute;
+            top: 14px; right: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(139,92,246,0.15);
+            border: 1px solid rgba(139,92,246,0.4);
+            border-radius: 3px;
+            padding: 3px 9px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--purple);
+        }
+
+        .stream-badge::before {
+            content: '';
+            width: 6px; height: 6px;
+            background: var(--purple);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--purple);
+            animation: blink 1.4s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.1; }
+        }
+
+        /* LIVE バッジ */
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255,34,68,0.15);
+            border: 1px solid rgba(255,34,68,0.45);
+            border-radius: 3px;
+            padding: 3px 12px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            letter-spacing: 3px;
+            color: var(--crimson);
+            margin-bottom: 12px;
+        }
+
+        .live-badge::before {
+            content: '';
+            width: 6px; height: 6px;
+            background: var(--crimson);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--crimson);
+            animation: blink 1s ease-in-out infinite;
+        }
+
+        /* ちび舞鬼：ネオン+ゴールド+パープル三重グロー */
+        .header-oni {
+            display: block;
+            width: 125px;
+            height: 125px;
+            object-fit: contain;
+            margin: 0 auto 10px;
+            filter:
+                drop-shadow(0 0 16px var(--neon-glow))
+                drop-shadow(0 0 40px var(--orange-glow))
+                drop-shadow(0 0 60px var(--purple-glow));
+            animation: oni-float 3s ease-in-out infinite;
+        }
+
+        @keyframes oni-float {
+            0%, 100% {
+                transform: translateY(0) rotate(-1deg);
+                filter: drop-shadow(0 0 14px var(--neon-glow)) drop-shadow(0 0 36px var(--orange-glow));
+            }
+            50% {
+                transform: translateY(-7px) rotate(1deg);
+                filter: drop-shadow(0 0 28px var(--neon-glow)) drop-shadow(0 0 60px var(--orange-glow)) drop-shadow(0 0 80px var(--purple-glow));
+            }
+        }
+
+        /* タイトル：ネオン(B) + グリッチ(格ゲー) */
+        .header-title {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 38px;
+            font-weight: 900;
+            color: var(--neon);
+            letter-spacing: 6px;
+            text-shadow: 0 0 22px var(--neon-glow), 0 0 60px rgba(125,255,79,0.15);
+            animation: glitch-main 5s infinite;
+            margin: 4px 0 2px;
+        }
+
+        @keyframes glitch-main {
+            0%, 88%, 100% { text-shadow: 0 0 22px var(--neon-glow); transform: translate(0); }
+            90% { text-shadow: -2px 0 var(--orange), 2px 0 var(--crimson), 0 0 22px var(--neon-glow); transform: translate(2px, 0); }
+            92% { text-shadow: 2px 0 var(--purple), -2px 0 var(--neon); transform: translate(-2px, 0); }
+            94% { text-shadow: 0 0 22px var(--neon-glow); transform: translate(0); }
+        }
+
+        /* サブ：オレンジ Bebas (B) */
+        .header-en {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px;
+            letter-spacing: 6px;
+            color: var(--orange);
+            text-shadow: 0 0 10px var(--orange-glow);
+            margin-top: 3px;
+        }
+
+        /* チャム族 */
+        .header-tribe {
+            display: inline-block;
+            margin-top: 10px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 11px;
+            letter-spacing: 4px;
+            color: var(--text-muted);
+            border: 1px solid rgba(125,255,79,0.2);
+            padding: 2px 12px;
+            border-radius: 2px;
+        }
+
+        /* ============================================================
+           SECTION HEADINGS — B(ネオン) × VTuber(パープルマーカー)
+        ============================================================ */
+        .section-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 17px;
+            letter-spacing: 4px;
+            color: var(--neon);
+            margin: 34px 0 14px;
+            text-shadow: 0 0 10px var(--neon-glow);
+        }
+
+        .section-heading::before {
+            content: '▶';
+            color: var(--purple);
+            font-size: 11px;
+            text-shadow: 0 0 8px var(--purple-glow);
+        }
+
+        .section-heading::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent);
+            opacity: 0.7;
+        }
+
+        /* 区切り線：ネオン×パープル */
+        .neon-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--neon-dim), var(--purple), var(--neon-dim), transparent);
+            margin: 10px 0;
+            opacity: 0.5;
+        }
+
+        /* ============================================================
+           GLASS CARD — B パネル + コーナー装飾
+        ============================================================ */
+        .glass-card {
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.13);
+            border-radius: 5px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(125,255,79,0.04);
+            margin-bottom: 16px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ネオン左上コーナー */
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 4px; left: 4px;
+            width: 12px; height: 12px;
+            border-top: 1px solid var(--neon-dim);
+            border-left: 1px solid var(--neon-dim);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        /* パープル右下コーナー (VTuber) */
+        .glass-card::after {
+            content: '';
+            position: absolute;
+            bottom: 4px; right: 4px;
+            width: 12px; height: 12px;
+            border-bottom: 1px solid rgba(139,92,246,0.5);
+            border-right: 1px solid rgba(139,92,246,0.5);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .glass-card-inner { padding: 18px 22px; }
+
+        /* ============================================================
+           RACE SELECT
+        ============================================================ */
+        .race-bar {
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .race-bar label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px;
+            letter-spacing: 3px;
+            color: var(--neon);
+        }
+
+        .race-bar select {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--neon-dim);
+            border-radius: 3px;
+            padding: 7px 12px;
+            font-size: 13px;
+            font-family: 'Noto Sans JP', sans-serif;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .race-bar select:focus {
+            border-color: var(--neon);
+            box-shadow: 0 0 10px var(--neon-glow);
+        }
+
+        .race-bar select option { background: var(--surface2); }
+
+        /* ============================================================
+           BUTTONS
+        ============================================================ */
+        .btn {
+            padding: 8px 18px;
+            border-radius: 3px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 15px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+
+        .btn-neon {
+            background: transparent;
+            color: var(--neon);
+            border: 1px solid var(--neon-dim);
+        }
+
+        .btn-neon:hover {
+            border-color: var(--neon);
+            box-shadow: 0 0 16px var(--neon-glow);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        .btn-fire {
+            background: linear-gradient(135deg, rgba(255,34,68,0.2), rgba(255,128,0,0.15));
+            color: var(--orange);
+            border: 1px solid rgba(255,128,0,0.4);
+        }
+
+        .btn-fire:hover {
+            border-color: var(--orange);
+            box-shadow: 0 0 18px var(--orange-glow);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        /* ============================================================
+           RUN PANEL
+        ============================================================ */
+        .run-panel-head {
+            background: linear-gradient(90deg, rgba(139,92,246,0.15), rgba(125,255,79,0.06), transparent);
+            border-bottom: 1px solid rgba(125,255,79,0.12);
+            padding: 11px 20px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 16px;
+            letter-spacing: 3px;
+            color: var(--neon);
+            text-shadow: 0 0 8px var(--neon-glow);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            padding: 14px 20px;
+        }
+
+        .form-row label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .form-row input[type=text],
+        .form-row input[type=number] {
+            background: var(--surface3);
+            color: var(--neon);
+            border: 1px solid rgba(125,255,79,0.2);
+            border-radius: 3px;
+            padding: 7px 11px;
+            font-size: 13px;
+            font-family: 'Noto Sans JP', sans-serif;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-row input[type=text]   { width: 190px; }
+        .form-row input[type=number] { width: 65px; }
+
+        .form-row input:focus {
+            border-color: var(--neon);
+            box-shadow: 0 0 10px var(--neon-glow);
+        }
+
+        .form-row input[type=checkbox] { accent-color: var(--neon); }
+
+        .log-box {
+            background: #020402;
+            color: var(--neon);
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 12px 18px;
+            height: 170px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin: 0 14px 14px;
+            border-radius: 3px;
+            border: 1px solid rgba(125,255,79,0.1);
+            display: none;
+        }
+
+        .log-box.visible { display: block; }
+
+        .progress-bar-wrap {
+            height: 4px;
+            background: rgba(125,255,79,0.07);
+            display: none;
+        }
+
+        /* プログレス：ネオン→パープル→ゴールド→オレンジ */
+        .progress-bar-fill {
+            height: 4px;
+            background: linear-gradient(90deg, var(--neon), var(--purple), var(--gold), var(--orange));
+            width: 0;
+            transition: width 0.5s;
+            box-shadow: 0 0 10px var(--neon);
+        }
+
+        /* ============================================================
+           META STATS — VTuber スタッツ表示
+        ============================================================ */
+        .meta-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .meta-box {
+            flex: 1;
+            min-width: 85px;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(125,255,79,0.1);
+            border-top: 2px solid var(--neon-dim);
+            border-radius: 3px;
+            padding: 10px 12px;
+            text-align: center;
+            transition: border-top-color 0.2s, box-shadow 0.2s;
+        }
+
+        .meta-box:hover {
+            border-top-color: var(--neon);
+            box-shadow: 0 0 12px var(--neon-glow);
+        }
+
+        .meta-box .val {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 26px;
+            letter-spacing: 2px;
+            color: var(--neon);
+            display: block;
+            text-shadow: 0 0 8px var(--neon-glow);
+        }
+
+        .meta-box .lbl {
+            font-size: 10px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            margin-top: 2px;
+            display: block;
+            text-transform: uppercase;
+        }
+
+        /* ============================================================
+           PATTERN CARDS
+        ============================================================ */
+        .pattern-grid {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .pattern-card {
+            flex: 1;
+            min-width: 260px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .pattern-card-head {
+            padding: 9px 14px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 14px;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pattern-card.top5 .pattern-card-head {
+            background: linear-gradient(90deg, rgba(125,255,79,0.2), transparent);
+            color: var(--neon);
+            border-bottom: 1px solid rgba(125,255,79,0.2);
+            text-shadow: 0 0 8px var(--neon-glow);
+        }
+
+        .pattern-card.bottom .pattern-card-head {
+            background: linear-gradient(90deg, rgba(255,34,68,0.2), transparent);
+            color: var(--crimson);
+            border-bottom: 1px solid rgba(255,34,68,0.2);
+        }
+
+        .pattern-card-body {
+            padding: 14px 16px;
+            font-size: 12.5px;
+            line-height: 2;
+            background: rgba(0,0,0,0.45);
+            color: var(--text-muted);
+        }
+
+        /* ============================================================
+           HORSE CARDS
+           1位：ゴールド(C) × オレンジ炎
+           2位：ネオン(B)
+           3位以下：ネオンdim
+        ============================================================ */
+        .horse-card {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 18px 18px 18px 22px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.1);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+            overflow: hidden;
+            opacity: 0;
+            translate: 0 20px;
+        }
+
+        .horse-card.revealed {
+            opacity: 1;
+            translate: 0 0;
+            transition: opacity 0.45s, translate 0.45s, transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+
+        .horse-card::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: var(--neon-dim);
+        }
+
+        .horse-card:hover {
+            transform: translateX(3px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.7), -4px 0 18px var(--neon-glow);
+            border-color: rgba(125,255,79,0.28);
+        }
+
+        /* 1位：GOLD × ORANGE (C の金を1位だけに採用) */
+        .horse-card.rank-top1 {
+            border-color: rgba(201,168,76,0.5);
+            background: linear-gradient(90deg, rgba(28,18,2,0.96), var(--panel));
+            box-shadow:
+                0 0 40px rgba(201,168,76,0.1),
+                0 4px 24px rgba(0,0,0,0.6);
+        }
+
+        .horse-card.rank-top1::before {
+            background: linear-gradient(180deg, var(--gold-light), var(--gold), var(--orange));
+            width: 4px;
+            box-shadow: 2px 0 14px rgba(201,168,76,0.5);
+        }
+
+        .horse-card.rank-top1:hover {
+            transform: translateX(3px);
+            box-shadow: 0 10px 36px rgba(0,0,0,0.75), -4px 0 24px var(--orange-glow), 0 0 40px rgba(201,168,76,0.12);
+            border-color: rgba(201,168,76,0.6);
+        }
+
+        /* 1位シマー：ゴールド */
+        .horse-card.rank-top1::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -120%;
+            width: 70%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(245,216,120,0.05), transparent);
+            animation: shimmer 4s ease-in-out 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0%   { left: -120%; }
+            60%  { left: 160%; }
+            100% { left: 160%; }
+        }
+
+        /* 2位：NEON (B) */
+        .horse-card.rank-top2 {
+            border-color: rgba(125,255,79,0.3);
+            background: linear-gradient(90deg, rgba(4,16,4,0.96), var(--panel));
+        }
+
+        .horse-card.rank-top2::before {
+            background: linear-gradient(180deg, var(--neon), var(--neon-dim));
+            box-shadow: 2px 0 10px var(--neon-glow);
+        }
+
+        .horse-card.rank-top2:hover {
+            box-shadow: 0 8px 30px rgba(0,0,0,0.7), -4px 0 20px var(--neon-glow);
+            border-color: rgba(125,255,79,0.45);
+        }
+
+        /* 3位：パープル (VTuber) */
+        .horse-card.rank-top3::before {
+            background: linear-gradient(180deg, var(--purple), rgba(139,92,246,0.4));
+            box-shadow: 2px 0 8px var(--purple-glow);
+        }
+
+        /* ========== 順位バッジ ========== */
+        .rank-badge {
+            width: 46px;
+            height: 46px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 22px;
+            letter-spacing: 1px;
+            flex-shrink: 0;
+            position: relative;
+            border: 1px solid;
+        }
+
+        /* 1位：金ラジアル（C） */
+        .rank-badge-1 {
+            background: radial-gradient(circle at 35% 35%, #f5d878, #c9a84c, #8a6a1a);
+            color: #1a1000;
+            border-color: var(--gold);
+            box-shadow: 0 0 22px rgba(201,168,76,0.7), 0 0 44px rgba(201,168,76,0.25);
+        }
+
+        /* 2位：ネオン（B） */
+        .rank-badge-2 {
+            background: linear-gradient(135deg, rgba(125,255,79,0.22), rgba(125,255,79,0.06));
+            color: var(--neon);
+            border-color: var(--neon-dim);
+            box-shadow: 0 0 14px var(--neon-glow);
+            text-shadow: 0 0 8px var(--neon-glow);
+        }
+
+        /* 3位：パープル（VTuber） */
+        .rank-badge-3 {
+            background: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(139,92,246,0.06));
+            color: var(--purple);
+            border-color: rgba(139,92,246,0.5);
+            box-shadow: 0 0 12px var(--purple-glow);
+            text-shadow: 0 0 8px var(--purple-glow);
+        }
+
+        .rank-badge-other {
+            background: rgba(16,24,16,0.9);
+            color: var(--text-muted);
+            border-color: rgba(125,255,79,0.1);
+            font-size: 17px;
+        }
+
+        .rank-mark {
+            position: absolute;
+            top: -8px; right: -8px;
+            font-size: 14px;
+            font-weight: 900;
+            font-family: 'Noto Serif JP', serif;
+            filter: drop-shadow(0 0 4px rgba(201,168,76,0.6));
+        }
+
+        /* 馬画像 */
+        .horse-img {
+            width: 96px;
+            height: 68px;
+            object-fit: cover;
+            border-radius: 3px;
+            flex-shrink: 0;
+            border: 1px solid rgba(125,255,79,0.14);
+            filter: brightness(0.9) contrast(1.1) saturate(0.85);
+            transition: filter 0.3s;
+        }
+
+        .horse-card:hover .horse-img {
+            filter: brightness(1.05) contrast(1.1) saturate(1.1);
+        }
+
+        .no-img {
+            width: 96px; height: 68px;
+            background: rgba(8,14,8,0.9);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 10px;
+            flex-shrink: 0;
+            border: 1px dashed rgba(125,255,79,0.1);
+        }
+
+        .horse-info { flex: 1; min-width: 0; }
+
+        .horse-name-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 7px;
+        }
+
+        .horse-name {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 19px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: 1px;
+        }
+
+        /* 1位名：ゴールド (C) */
+        .horse-card.rank-top1 .horse-name {
+            color: var(--gold-light);
+            text-shadow: 0 0 16px rgba(201,168,76,0.5);
+        }
+
+        /* 2位名：ネオン (B) */
+        .horse-card.rank-top2 .horse-name {
+            color: var(--neon);
+            text-shadow: 0 0 10px var(--neon-glow);
+        }
+
+        /* 3位名：パープル (VTuber) */
+        .horse-card.rank-top3 .horse-name {
+            color: var(--purple);
+            text-shadow: 0 0 8px var(--purple-glow);
+        }
+
+        .src-badge {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 10px;
+            letter-spacing: 1px;
+            padding: 1px 7px;
+            border-radius: 2px;
+        }
+
+        .src-image    { background: rgba(25,100,210,0.2); color: #64b5f6; border: 1px solid rgba(100,181,246,0.3); }
+        .src-pedigree { background: rgba(200,100,0,0.2);  color: var(--orange); border: 1px solid rgba(255,128,0,0.3); }
+        .src-no_data  { background: rgba(24,32,24,0.5);   color: var(--text-muted); border: 1px solid rgba(125,255,79,0.1); }
+
+        .confidence-stars {
+            font-size: 11px;
+            color: var(--neon);
+            letter-spacing: 1px;
+            text-shadow: 0 0 6px var(--neon-glow);
+        }
+
+        /* スコア */
+        .score-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 9px;
+        }
+
+        .score-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 30px;
+            letter-spacing: 1px;
+            min-width: 78px;
+            line-height: 1;
+        }
+
+        /* 1位：ゴールド (C) */
+        .horse-card.rank-top1 .score-num { color: var(--gold-light); text-shadow: 0 0 14px rgba(201,168,76,0.6); }
+        /* 2位：ネオン (B) */
+        .horse-card.rank-top2 .score-num { color: var(--neon); text-shadow: 0 0 10px var(--neon-glow); }
+        /* 3位：パープル */
+        .horse-card.rank-top3 .score-num { color: var(--purple); text-shadow: 0 0 8px var(--purple-glow); }
+        .horse-card:not(.rank-top1):not(.rank-top2):not(.rank-top3) .score-num { color: var(--text-muted); }
+
+        .score-pt {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+        }
+
+        /* HP バー */
+        .score-bar-wrap {
+            flex: 1;
+            height: 10px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 2px;
+            overflow: hidden;
+            border: 1px solid rgba(125,255,79,0.1);
+            position: relative;
+        }
+
+        .score-bar-wrap::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent 0px, transparent 9px,
+                rgba(0,0,0,0.35) 9px, rgba(0,0,0,0.35) 10px
+            );
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .score-bar-fill {
+            height: 10px;
+            border-radius: 2px;
+            width: 0;
+            transition: width 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 1位バー：クリムゾン→ゴールド→オレンジ */
+        .horse-card.rank-top1 .score-bar-fill {
+            background: linear-gradient(90deg, var(--crimson-dim), var(--gold), var(--gold-light), var(--orange));
+            box-shadow: 0 0 12px rgba(201,168,76,0.55);
+        }
+
+        /* 2位バー：ネオン */
+        .horse-card.rank-top2 .score-bar-fill {
+            background: linear-gradient(90deg, var(--neon-dim), var(--neon));
+            box-shadow: 0 0 8px var(--neon-glow);
+        }
+
+        /* 3位バー：パープル */
+        .horse-card.rank-top3 .score-bar-fill {
+            background: linear-gradient(90deg, rgba(80,30,180,0.8), var(--purple));
+            box-shadow: 0 0 8px var(--purple-glow);
+        }
+
+        .horse-card:not(.rank-top1):not(.rank-top2):not(.rank-top3) .score-bar-fill {
+            background: linear-gradient(90deg, rgba(40,60,40,1), rgba(70,100,70,1));
+        }
+
+        /* コメント */
+        .horse-comment {
+            font-size: 11.5px;
+            line-height: 1.9;
+            background: rgba(0,0,0,0.35);
+            border-radius: 3px;
+            padding: 9px 13px;
+            border-left: 2px solid rgba(125,255,79,0.18);
+        }
+
+        .horse-comment .comment-main {
+            color: #b4d4ac;
+            font-size: 12px;
+            line-height: 1.9;
+        }
+
+        /* サブコメント：パープル (VTuber) */
+        .horse-comment .comment-sub {
+            display: block;
+            margin-top: 4px;
+            padding-left: 10px;
+            border-left: 2px solid rgba(139,92,246,0.3);
+            color: var(--text-muted);
+            font-size: 11px;
+            line-height: 1.8;
+        }
+
+        /* ============================================================
+           VTuber スーパーチャット風 — 1位専用バナー
+        ============================================================ */
+        .superchat-banner {
+            background: linear-gradient(90deg, rgba(201,168,76,0.15), rgba(255,128,0,0.1), transparent);
+            border: 1px solid rgba(201,168,76,0.3);
+            border-radius: 4px;
+            padding: 6px 14px;
+            margin-bottom: 10px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px;
+            letter-spacing: 3px;
+            color: var(--gold);
+            text-shadow: 0 0 8px rgba(201,168,76,0.4);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ============================================================
+           EMPTY STATE
+        ============================================================ */
+        .empty-state {
+            text-align: center;
+            padding: 70px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-img {
+            width: 92px; height: 92px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto 18px;
+            opacity: 0.55;
+            filter: drop-shadow(0 0 16px var(--neon-glow)) drop-shadow(0 0 30px var(--purple-glow));
+            animation: oni-float 4s ease-in-out infinite;
+        }
+
+        .empty-state p { font-size: 14px; line-height: 2.1; }
+        .empty-state strong { color: var(--neon); text-shadow: 0 0 8px var(--neon-glow); }
+
+        .empty-tribe {
+            display: inline-block;
+            margin-top: 18px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            letter-spacing: 4px;
+            color: var(--text-muted);
+            border: 1px solid rgba(125,255,79,0.2);
+            padding: 4px 14px;
+            border-radius: 2px;
+        }
+
+        /* ============================================================
+           TOAST
+        ============================================================ */
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(255,34,68,0.95);
+            color: #fff;
+            border: 1px solid var(--crimson);
+            border-radius: 3px;
+            padding: 9px 20px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 15px;
+            letter-spacing: 2px;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--deep); }
+        ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+
+        @media (max-width: 640px) {
+            .horse-card { flex-wrap: wrap; }
+            .horse-img, .no-img { width: 76px; height: 54px; }
+            .header-title { font-size: 28px; letter-spacing: 3px; }
+            .score-num { font-size: 24px; }
+            .pattern-grid { flex-direction: column; }
+            .stream-badge { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+
+        <!-- HEADER -->
+        <div class="site-header">
+            <div class="stream-badge">🎙 ON AIR</div>
+            <div class="live-badge">LIVE ANALYSIS</div>
+            <img class="header-oni"
+                 th:src="@{/images/chibi-maiki.png}"
+                 src="/images/chibi-maiki.png"
+                 alt="舞鬼法師">
+            <h1 class="header-title">鬼眼競馬予想</h1>
+            <div class="header-en">MIKEY MASTER × FACE ORACLE</div>
+            <div class="header-tribe">🌈🍊 CHAMU TRIBE</div>
+        </div>
+
+        <!-- レース選択 -->
+        <div class="glass-card">
+            <div class="race-bar">
+                <label>⛩ SELECT RACE</label>
+                <form method="get" action="/predict-v2" style="display:flex; gap:8px; align-items:center;">
+                    <select name="raceName" onchange="this.form.submit()">
+                        <option value="">— レースを選択 —</option>
+                        <option th:each="rn : ${raceNames}"
+                                th:value="${rn}"
+                                th:text="${rn}"
+                                th:selected="${rn == selectedRace}">
+                        </option>
+                    </select>
+                </form>
+                <a href="/predict-v2" class="btn btn-neon" style="font-size:12px; padding:6px 14px;">LATEST</a>
+            </div>
+        </div>
+
+        <!-- 新規分析パネル -->
+        <div class="glass-card">
+            <div class="run-panel-head">🔮 NEW RACE ANALYSIS</div>
+            <div class="form-row">
+                <div>
+                    <label>RACE NAME</label>
+                    <input type="text" id="analyzeRaceName" placeholder="例: 日本ダービー">
+                </div>
+                <div>
+                    <label>YEARS</label>
+                    <input type="number" id="analyzeYears" value="10" min="1" max="15">
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; padding-top:16px;">
+                    <input type="checkbox" id="useSupp" checked style="width:14px; height:14px;">
+                    <label style="font-size:12px; color:var(--text-muted);">不足時補完</label>
+                </div>
+                <button type="button" class="btn btn-fire" style="margin-top:16px;" onclick="runRaceAnalyzer()">
+                    🩸 ANALYZE
+                </button>
+            </div>
+            <div class="progress-bar-wrap" id="progressWrap">
+                <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+            <div class="log-box" id="analyzeLog"></div>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div th:if="${selectedRace == null or (results == null or #lists.isEmpty(results)) and pattern == null}">
+            <div class="neon-divider"></div>
+            <div class="empty-state">
+                <img class="empty-state-img"
+                     th:src="@{/images/chibi-maiki.png}"
+                     src="/images/chibi-maiki.png"
+                     alt="舞鬼法師">
+                <p>まだ鬼の目が開かれていない…<br><br>
+                   レース名を入力して<strong>分析を開始</strong>せよ。<br>
+                   鬼は見逃さない。<strong>勝ち馬の顔</strong>を。
+                </p>
+                <div class="empty-tribe">🌈🍊 CHAMU TRIBE · @mai1k_master</div>
+            </div>
+        </div>
+
+        <!-- 分析結果 -->
+        <div th:if="${selectedRace != null}">
+
+            <div th:if="${pattern != null}">
+                <div class="section-heading">
+                    <span th:text="${selectedRace}"></span> — ANALYSIS SUMMARY
+                </div>
+                <div class="glass-card">
+                    <div class="glass-card-inner">
+                        <div class="meta-row">
+                            <div class="meta-box">
+                                <span class="val" th:text="${pattern.totalHorses}">0</span>
+                                <span class="lbl">TOTAL</span>
+                            </div>
+                            <div class="meta-box">
+                                <span class="val" th:text="${pattern.top5Horses}">0</span>
+                                <span class="lbl">TOP 5</span>
+                            </div>
+                            <div class="meta-box">
+                                <span class="val" th:text="${pattern.bottomHorses}">0</span>
+                                <span class="lbl">BOTTOM</span>
+                            </div>
+                            <div class="meta-box">
+                                <span class="val" th:text="${pattern.supplementalCount != null ? pattern.supplementalCount : 0}">0</span>
+                                <span class="lbl">SUPPL</span>
+                            </div>
+                            <div class="meta-box">
+                                <span class="val" th:text="${confidenceStars}">★★★☆☆</span>
+                                <span class="lbl">TRUST Lv<span th:text="${pattern.confidenceLevel}">3</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-heading">FACE TREND ANALYSIS</div>
+                <div class="neon-divider"></div>
+                <div class="pattern-grid">
+                    <div class="glass-card pattern-card top5" style="margin-bottom:0;">
+                        <div class="pattern-card-head">✅ 5着内馬の顔の傾向</div>
+                        <div class="pattern-card-body" th:text="${pattern.top5Comment}">—</div>
+                    </div>
+                    <div class="glass-card pattern-card bottom" style="margin-bottom:0;">
+                        <div class="pattern-card-head">☠️ 6着以下の顔の傾向</div>
+                        <div class="pattern-card-body" th:text="${pattern.bottomComment}">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-heading">RACE RANKING — 鬼眼スコア</div>
+            <div class="neon-divider"></div>
+
+            <!-- 1位スーパーチャット風バナー -->
+            <div th:if="${results != null and !#lists.isEmpty(results)}" class="superchat-banner">
+                🏆 本命 ◎ — <span th:text="${results[0].horseName}">馬名</span>
+            </div>
+
+            <div th:if="${results == null or #lists.isEmpty(results)}"
+                 style="text-align:center; padding:40px; color:var(--text-muted); font-size:13px;">
+                出走馬データがありません。
+            </div>
+
+            <div th:each="r : ${results}"
+                 th:classappend="${r.rankPosition == 1 ? 'rank-top1' : (r.rankPosition == 2 ? 'rank-top2' : (r.rankPosition == 3 ? 'rank-top3' : ''))}"
+                 class="horse-card">
+
+                <div class="rank-badge"
+                     th:classappend="${r.rankPosition == 1 ? 'rank-badge-1' : (r.rankPosition == 2 ? 'rank-badge-2' : (r.rankPosition == 3 ? 'rank-badge-3' : 'rank-badge-other'))}">
+                    <span th:text="${r.rankPosition}">1</span>
+                    <span class="rank-mark"
+                          th:text="${r.rankPosition == 1 ? '◎' : (r.rankPosition == 2 ? '○' : (r.rankPosition == 3 ? '▲' : (r.rankPosition == 4 ? '△' : '')))}">
+                    </span>
+                </div>
+
+                <div th:if="${r.imagePath != null}">
+                    <img class="horse-img" th:src="${r.imagePath}" th:alt="${r.horseName}">
+                </div>
+                <div th:unless="${r.imagePath != null}" class="no-img">📷 NO IMG</div>
+
+                <div class="horse-info">
+                    <div class="horse-name-row">
+                        <span class="horse-name" th:text="${r.horseName}">馬名</span>
+                        <span class="src-badge"
+                              th:classappend="${r.dataSource == 'image' ? 'src-image' : (r.dataSource == 'pedigree' ? 'src-pedigree' : 'src-no_data')}"
+                              th:text="${r.dataSource == 'image' ? '画像分析' : (r.dataSource == 'pedigree' ? '血統推定' : 'NO DATA')}">
+                        </span>
+                        <span class="confidence-stars"
+                              th:text="${'★'.repeat(r.confidenceLevel != null ? r.confidenceLevel : 3) + '☆'.repeat(5 - (r.confidenceLevel != null ? r.confidenceLevel : 3))}">
+                        </span>
+                    </div>
+
+                    <div class="score-row">
+                        <span class="score-num">
+                            <span th:text="${r.score != null ? #numbers.formatDecimal(r.score, 1, 1) : '-'}">0</span>
+                            <span class="score-pt">PT</span>
+                        </span>
+                        <div class="score-bar-wrap">
+                            <div class="score-bar-fill"
+                                 th:attr="data-width=${r.score != null ? r.score : 0}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="horse-comment" th:if="${r.comment != null}">
+                        <span th:each="part,stat : ${#strings.arraySplit(r.comment, '　')}"
+                              th:classappend="${stat.index == 0 ? 'comment-main' : 'comment-sub'}"
+                              th:text="${part}">
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3500);
+        }
+
+        let _es = null;
+
+        function runRaceAnalyzer() {
+            const raceName = document.getElementById('analyzeRaceName').value.trim();
+            if (!raceName) { showToast('⚠ RACE NAME を入力せよ'); return; }
+            const years = document.getElementById('analyzeYears').value;
+            const supp  = document.getElementById('useSupp').checked;
+
+            const logBox = document.getElementById('analyzeLog');
+            logBox.textContent = '';
+            logBox.classList.add('visible');
+            const pw = document.getElementById('progressWrap');
+            pw.style.display = 'block';
+            let prog = 0;
+            const fill = document.getElementById('progressFill');
+            const interval = setInterval(() => {
+                if (prog < 90) { prog += 1; fill.style.width = prog + '%'; }
+            }, 4000);
+
+            const body = `raceName=${encodeURIComponent(raceName)}&years=${years}&supplement=${supp}`;
+            fetch('/script/race-analyzer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body
+            }).catch(err => {
+                clearInterval(interval);
+                pw.style.display = 'none';
+                showToast('🚨 ERROR: ' + err.message);
+            });
+
+            const key = 'race_' + hashCode(raceName);
+            if (_es) { _es.close(); _es = null; }
+
+            setTimeout(() => {
+                _es = new EventSource('/script/log?key=' + key);
+                _es.onmessage = function(e) {
+                    const line = e.data;
+                    if (line === '__DONE__') {
+                        _es.close(); _es = null;
+                        clearInterval(interval);
+                        fill.style.width = '100%';
+                        setTimeout(() => {
+                            location.href = '/predict-v2?raceName=' + encodeURIComponent(raceName);
+                        }, 1500);
+                        return;
+                    }
+                    const div = document.createElement('div');
+                    if      (line.includes('完了') || line.includes('===')) div.style.color = '#7dff4f';
+                    else if (line.includes('[エラー]') || line.includes('error')) div.style.color = '#ff2244';
+                    else if (line.includes('Step'))                          div.style.color = '#ff8000';
+                    div.textContent = line;
+                    logBox.appendChild(div);
+                    logBox.scrollTop = logBox.scrollHeight;
+                };
+                _es.onerror = function() { _es.close(); _es = null; clearInterval(interval); };
+            }, 1000);
+        }
+
+        function hashCode(str) {
+            let h = 0;
+            for (let i = 0; i < str.length; i++) h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+            return h;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    const card = entry.target;
+                    card.classList.add('revealed');
+                    const fill = card.querySelector('.score-bar-fill');
+                    if (fill && fill.dataset.width) {
+                        setTimeout(() => { fill.style.width = fill.dataset.width + '%'; }, 200);
+                    }
+                    observer.unobserve(card);
+                });
+            }, { threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
+
+            document.querySelectorAll('.horse-card').forEach((card, i) => {
+                card.style.transitionDelay = (i * 55) + 'ms';
+                observer.observe(card);
+            });
+        });
+    </script>
+</body>
+</html>

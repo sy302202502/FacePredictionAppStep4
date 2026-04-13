@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>勝ち馬 顔特徴統計（差分分析）</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon:#7dff4f; --neon-dim:#3a7d22; --neon-glow:rgba(125,255,79,0.32);
+            --orange:#ff8000; --orange-glow:rgba(255,128,0,0.38);
+            --gold:#c9a84c; --gold-light:#f5d878;
+            --crimson:#ff2244; --crimson-dim:#7a0818;
+            --purple:#8b5cf6; --purple-glow:rgba(139,92,246,0.35);
+            --deep:#050708; --surface:#0b0e0b; --surface2:#111811; --surface3:#182018;
+            --panel:rgba(10,14,10,0.93); --text:#d4e8cc; --text-muted:#607860;
+        }
+        body { font-family:'Noto Sans JP',sans-serif; background:var(--deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(125,255,79,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(125,255,79,0.02) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+        body::after { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 10% 15%,rgba(139,92,246,0.12) 0%,transparent 50%),radial-gradient(ellipse at 90% 85%,rgba(255,128,0,0.08) 0%,transparent 50%); pointer-events:none; z-index:0; }
+        .scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.1) 0px,rgba(0,0,0,0.1) 1px,transparent 1px,transparent 3px); pointer-events:none; z-index:1; }
+        .page-body { position:relative; z-index:2; max-width:1000px; margin:0 auto; padding:0 16px 100px; }
+        .glass-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; backdrop-filter:blur(10px); box-shadow:0 4px 24px rgba(0,0,0,0.7); margin-bottom:16px; overflow:hidden; position:relative; }
+        .glass-card::before { content:''; position:absolute; top:4px; left:4px; width:12px; height:12px; border-top:1px solid var(--neon-dim); border-left:1px solid var(--neon-dim); opacity:0.5; pointer-events:none; }
+        .glass-card::after { content:''; position:absolute; bottom:4px; right:4px; width:12px; height:12px; border-bottom:1px solid rgba(139,92,246,0.5); border-right:1px solid rgba(139,92,246,0.5); opacity:0.5; pointer-events:none; }
+        .glass-card-inner { padding:18px 22px; }
+        .page-header { padding:32px 0 20px; border-bottom:1px solid rgba(125,255,79,0.1); margin-bottom:24px; position:relative; }
+        .page-header::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,var(--crimson),var(--orange),var(--neon),var(--purple),var(--neon),var(--orange),var(--crimson),transparent); background-size:300%; animation:stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .page-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:5px; color:var(--neon); text-shadow:0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size:11px; color:var(--text-muted); letter-spacing:3px; margin-top:3px; }
+        .section-heading { display:flex; align-items:center; gap:10px; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:4px; color:var(--neon); margin:28px 0 14px; text-shadow:0 0 10px var(--neon-glow); }
+        .section-heading::before { content:'▶'; color:var(--purple); font-size:11px; }
+        .section-heading::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--neon-dim),rgba(139,92,246,0.3),transparent); opacity:0.7; }
+        .neon-divider { height:1px; background:linear-gradient(90deg,transparent,var(--neon-dim),var(--purple),var(--neon-dim),transparent); margin:10px 0; opacity:0.5; }
+        .btn { padding:8px 18px; border-radius:3px; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:2px; cursor:pointer; transition:all 0.2s; text-decoration:none; display:inline-block; border:1px solid; }
+        .btn-neon { background:transparent; color:var(--neon); border-color:var(--neon-dim); }
+        .btn-neon:hover { border-color:var(--neon); box-shadow:0 0 16px var(--neon-glow); color:#fff; transform:translateY(-1px); }
+        input[type=text], select { background:var(--surface3); color:var(--text); border:1px solid rgba(125,255,79,0.2); border-radius:3px; padding:7px 11px; font-family:'Noto Sans JP',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s,box-shadow 0.2s; }
+        input:focus, select:focus { border-color:var(--neon); box-shadow:0 0 10px var(--neon-glow); }
+        select option { background:var(--surface2); }
+        label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); }
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--deep)} ::-webkit-scrollbar-thumb{background:var(--neon-dim);border-radius:2px} ::-webkit-scrollbar-thumb:hover{background:var(--neon)}
+
+        .summary-bar { background:rgba(125,255,79,0.05); border:1px solid rgba(125,255,79,0.12); border-radius:3px; padding:12px 18px; margin-bottom:20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+        .summary-item { display:flex; align-items:baseline; gap:6px; }
+        .summary-label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); }
+        .summary-val { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--neon); }
+        .summary-note { font-size:11px; color:var(--text-muted); margin-left:auto; }
+
+        .legend { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+        .legend-item { display:flex; align-items:center; gap:6px; font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); }
+        .legend-box { width:14px; height:10px; border-radius:1px; }
+
+        .stat-section { background:var(--panel); border:1px solid rgba(125,255,79,0.1); border-radius:5px; padding:18px 22px; margin-bottom:12px; }
+        .stat-feature-name { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:3px; color:var(--gold); margin-bottom:14px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:6px; }
+        .stat-row { display:flex; align-items:center; margin-bottom:10px; gap:10px; }
+        .stat-label { width:100px; font-size:12px; color:var(--text-muted); flex-shrink:0; }
+        .bar-group { flex:1; display:flex; flex-direction:column; gap:3px; max-width:280px; }
+        .bar-wrap { background:rgba(125,255,79,0.05); border-radius:2px; height:10px; position:relative; overflow:hidden; }
+        .bar-winner { height:10px; background:linear-gradient(90deg,var(--neon-dim),var(--neon)); border-radius:2px; box-shadow:0 0 4px var(--neon-glow); }
+        .bar-loser  { height:10px; background:linear-gradient(90deg,var(--crimson-dim),var(--crimson)); border-radius:2px; opacity:0.7; }
+        .bar-diff-pos { height:10px; background:linear-gradient(90deg,rgba(139,92,246,0.4),var(--purple)); border-radius:2px; }
+        .bar-diff-neg { height:10px; background:linear-gradient(90deg,rgba(255,128,0,0.4),var(--orange)); border-radius:2px; }
+        .bar-label { font-family:'Bebas Neue',sans-serif; font-size:11px; width:40px; text-align:right; color:var(--text-muted); flex-shrink:0; }
+        .bar-label-winner { color:var(--neon); }
+        .bar-label-loser { color:var(--crimson); }
+
+        .diff-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:2px; font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:1px; }
+        .diff-pos { background:rgba(139,92,246,0.15); color:var(--purple); border:1px solid rgba(139,92,246,0.3); }
+        .diff-neg { background:rgba(255,128,0,0.1); color:var(--orange); border:1px solid rgba(255,128,0,0.3); }
+
+        .back-link { font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:2px; color:var(--text-muted); text-decoration:none; display:inline-flex; align-items:center; gap:6px; margin-top:20px; transition:color 0.15s; }
+        .back-link:hover { color:var(--neon); }
+
+        @media(max-width:640px){.page-title{font-size:22px} .summary-note{display:none}}
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <div class="page-header">
+            <div class="page-title">FACE FEATURE STATS</div>
+            <div class="page-subtitle">WINNER VS LOSER — DIFFERENTIAL ANALYSIS</div>
+        </div>
+
+        <!-- カテゴリ選択 -->
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <form method="get" action="/prediction/stats" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <label>レース種別：</label>
+                    <select name="category" onchange="this.form.submit()">
+                        <option th:each="entry : ${categoryLabels}"
+                                th:value="${entry.key}"
+                                th:text="${entry.value}"
+                                th:selected="${entry.key == selectedCategory}">
+                        </option>
+                    </select>
+                </form>
+            </div>
+        </div>
+
+        <!-- サマリ -->
+        <div class="summary-bar">
+            <div class="summary-item">
+                <span class="summary-label">勝ち馬</span>
+                <span class="summary-val" th:text="${winnerCount}">0</span>
+                <span class="summary-label">頭</span>
+            </div>
+            <div style="width:1px; height:28px; background:rgba(125,255,79,0.15);"></div>
+            <div class="summary-item">
+                <span class="summary-label">負け馬（2〜5着）</span>
+                <span class="summary-val" th:text="${loserCount}">0</span>
+                <span class="summary-label">頭</span>
+            </div>
+            <div class="summary-note">差分が大きい特徴ほど勝利との相関が強い</div>
+        </div>
+
+        <!-- 凡例 -->
+        <div class="legend">
+            <div class="legend-item"><div class="legend-box" style="background:var(--neon);"></div>勝ち馬の割合</div>
+            <div class="legend-item"><div class="legend-box" style="background:var(--crimson); opacity:0.7;"></div>負け馬の割合</div>
+            <div class="legend-item"><div class="legend-box" style="background:var(--purple);"></div>差分（勝ち馬に特有）</div>
+        </div>
+
+        <div th:if="${winnerCount == 0}" class="glass-card">
+            <div class="glass-card-inner">
+                <p style="color:var(--text-muted);">まだ分析データがありません。先にスクレイピングと顔分析を実行してください。</p>
+            </div>
+        </div>
+
+        <div th:unless="${winnerCount == 0}">
+            <div th:each="entry : ${diffStats}" class="stat-section">
+
+                <div class="stat-feature-name" th:text="${entry.key}">特徴名</div>
+
+                <!-- 各値のバー表示 -->
+                <div th:each="val : ${entry.value.winner}">
+                    <div class="stat-row">
+                        <span class="stat-label" th:text="${val.key}">値</span>
+                        <div class="bar-group">
+                            <!-- 勝ち馬バー -->
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <div class="bar-wrap" style="flex:1;">
+                                    <div class="bar-winner" th:style="'width:' + ${val.value} + '%'"></div>
+                                </div>
+                                <span class="bar-label bar-label-winner" th:text="${val.value} + '%'">0%</span>
+                            </div>
+                            <!-- 負け馬バー -->
+                            <div style="display:flex; align-items:center; gap:6px;"
+                                 th:if="${entry.value.loser != null and entry.value.loser[val.key] != null}">
+                                <div class="bar-wrap" style="flex:1;">
+                                    <div class="bar-loser"
+                                         th:style="'width:' + ${entry.value.loser[val.key]} + '%'"></div>
+                                </div>
+                                <span class="bar-label bar-label-loser"
+                                      th:text="${entry.value.loser[val.key]} + '%'">0%</span>
+                            </div>
+                        </div>
+                        <!-- 差分バッジ -->
+                        <div th:if="${entry.value.diff != null and entry.value.diff[val.key] != null}">
+                            <span class="diff-badge"
+                                  th:classappend="${entry.value.diff[val.key] > 0} ? 'diff-pos' : 'diff-neg'"
+                                  th:text="${entry.value.diff[val.key] > 0 ? '+' : ''} + ${entry.value.diff[val.key]} + '%'">
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <a href="/prediction" class="back-link">← TOP5予想に戻る</a>
+    </div>
+</body>
+</html>

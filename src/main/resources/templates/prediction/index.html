@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>優勝候補 TOP5予想</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon:#7dff4f; --neon-dim:#3a7d22; --neon-glow:rgba(125,255,79,0.32);
+            --orange:#ff8000; --orange-glow:rgba(255,128,0,0.38);
+            --gold:#c9a84c; --gold-light:#f5d878;
+            --crimson:#ff2244; --crimson-dim:#7a0818;
+            --purple:#8b5cf6; --purple-glow:rgba(139,92,246,0.35);
+            --deep:#050708; --surface:#0b0e0b; --surface2:#111811; --surface3:#182018;
+            --panel:rgba(10,14,10,0.93); --text:#d4e8cc; --text-muted:#607860;
+        }
+        body { font-family:'Noto Sans JP',sans-serif; background:var(--deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(125,255,79,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(125,255,79,0.02) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+        body::after { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 10% 15%,rgba(139,92,246,0.12) 0%,transparent 50%),radial-gradient(ellipse at 90% 85%,rgba(255,128,0,0.08) 0%,transparent 50%); pointer-events:none; z-index:0; }
+        .scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.1) 0px,rgba(0,0,0,0.1) 1px,transparent 1px,transparent 3px); pointer-events:none; z-index:1; }
+        .page-body { position:relative; z-index:2; max-width:1000px; margin:0 auto; padding:0 16px 100px; }
+        .glass-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; backdrop-filter:blur(10px); box-shadow:0 4px 24px rgba(0,0,0,0.7); margin-bottom:16px; overflow:hidden; position:relative; }
+        .glass-card::before { content:''; position:absolute; top:4px; left:4px; width:12px; height:12px; border-top:1px solid var(--neon-dim); border-left:1px solid var(--neon-dim); opacity:0.5; pointer-events:none; }
+        .glass-card::after { content:''; position:absolute; bottom:4px; right:4px; width:12px; height:12px; border-bottom:1px solid rgba(139,92,246,0.5); border-right:1px solid rgba(139,92,246,0.5); opacity:0.5; pointer-events:none; }
+        .glass-card-inner { padding:18px 22px; }
+        .page-header { padding:32px 0 20px; border-bottom:1px solid rgba(125,255,79,0.1); margin-bottom:24px; position:relative; }
+        .page-header::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,var(--crimson),var(--orange),var(--neon),var(--purple),var(--neon),var(--orange),var(--crimson),transparent); background-size:300%; animation:stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .page-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:5px; color:var(--neon); text-shadow:0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size:11px; color:var(--text-muted); letter-spacing:3px; margin-top:3px; }
+        .section-heading { display:flex; align-items:center; gap:10px; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:4px; color:var(--neon); margin:28px 0 14px; text-shadow:0 0 10px var(--neon-glow); }
+        .section-heading::before { content:'▶'; color:var(--purple); font-size:11px; }
+        .section-heading::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--neon-dim),rgba(139,92,246,0.3),transparent); opacity:0.7; }
+        .btn { padding:8px 18px; border-radius:3px; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:2px; cursor:pointer; transition:all 0.2s; text-decoration:none; display:inline-block; border:1px solid; }
+        .btn-neon { background:transparent; color:var(--neon); border-color:var(--neon-dim); }
+        .btn-neon:hover { border-color:var(--neon); box-shadow:0 0 16px var(--neon-glow); color:#fff; transform:translateY(-1px); }
+        .btn-fire { background:linear-gradient(135deg,rgba(255,34,68,0.2),rgba(255,128,0,0.15)); color:var(--orange); border-color:rgba(255,128,0,0.4); }
+        .btn-fire:hover { border-color:var(--orange); box-shadow:0 0 18px var(--orange-glow); color:#fff; transform:translateY(-1px); }
+        .btn-purple { background:rgba(139,92,246,0.15); color:var(--purple); border-color:rgba(139,92,246,0.4); }
+        .btn-purple:hover { border-color:var(--purple); box-shadow:0 0 16px var(--purple-glow); color:#fff; }
+        .btn-line { background:rgba(6,199,85,0.15); color:#06C755; border-color:rgba(6,199,85,0.4); width:100%; text-align:center; padding:10px; }
+        .btn-line:hover { border-color:#06C755; box-shadow:0 0 16px rgba(6,199,85,0.3); color:#fff; }
+        input[type=text], input[type=number], select, textarea { background:var(--surface3); color:var(--text); border:1px solid rgba(125,255,79,0.2); border-radius:3px; padding:7px 11px; font-family:'Noto Sans JP',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s,box-shadow 0.2s; }
+        input:focus, select:focus { border-color:var(--neon); box-shadow:0 0 10px var(--neon-glow); }
+        select option { background:var(--surface2); }
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--deep)} ::-webkit-scrollbar-thumb{background:var(--neon-dim);border-radius:2px} ::-webkit-scrollbar-thumb:hover{background:var(--neon)}
+
+        .control-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; padding:18px 22px; margin-bottom:16px; }
+        .control-card select { width:100%; margin-bottom:12px; }
+        .btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+        .btn-row .btn { flex:1; min-width:120px; text-align:center; }
+
+        .alert-success { background:rgba(125,255,79,0.07); border:1px solid var(--neon-dim); border-left:3px solid var(--neon); padding:10px 16px; border-radius:3px; color:var(--neon); font-size:13px; margin-bottom:12px; }
+        .alert-error { background:rgba(255,34,68,0.07); border:1px solid var(--crimson-dim); border-left:3px solid var(--crimson); padding:10px 16px; border-radius:3px; color:var(--crimson); font-size:13px; margin-bottom:12px; }
+
+        .horse-card { background:var(--panel); border:1px solid rgba(125,255,79,0.1); border-radius:5px; margin-bottom:10px; display:flex; align-items:stretch; overflow:hidden; transition:border-color 0.2s,box-shadow 0.2s; }
+        .horse-card:hover { border-color:rgba(125,255,79,0.3); box-shadow:0 0 16px rgba(125,255,79,0.06); }
+        .card-rank { display:flex; align-items:center; justify-content:center; padding:12px 16px; flex-shrink:0; border-right:1px solid rgba(125,255,79,0.08); }
+        .rank-badge { display:inline-flex; width:38px; height:38px; border-radius:3px; align-items:center; justify-content:center; font-family:'Bebas Neue',sans-serif; font-size:22px; font-weight:bold; flex-shrink:0; }
+        .rank-1 { background:linear-gradient(135deg,rgba(201,168,76,0.3),rgba(245,216,120,0.2)); color:var(--gold-light); border:1px solid var(--gold); box-shadow:0 0 12px rgba(201,168,76,0.4); }
+        .rank-2 { background:rgba(192,192,192,0.15); color:#c0c0c0; border:1px solid rgba(192,192,192,0.4); }
+        .rank-3 { background:rgba(205,127,50,0.15); color:#cd7f32; border:1px solid rgba(205,127,50,0.4); }
+        .rank-other { background:rgba(96,120,96,0.15); color:var(--text-muted); border:1px solid rgba(96,120,96,0.3); }
+        .horse-img { width:80px; height:100px; object-fit:cover; flex-shrink:0; }
+        .no-img { width:80px; height:100px; background:var(--surface3); flex-shrink:0; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:22px; border-right:1px solid rgba(125,255,79,0.08); }
+        .horse-info { flex:1; padding:12px 16px; min-width:0; }
+        .horse-name { font-family:'Noto Serif JP',serif; font-size:17px; font-weight:700; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text); }
+        .score-label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); }
+        .score-val { font-family:'Bebas Neue',sans-serif; font-size:16px; color:var(--neon); letter-spacing:1px; }
+        .score-bar-wrap { background:rgba(125,255,79,0.07); border-radius:2px; height:6px; margin:5px 0; overflow:hidden; }
+        .score-bar { height:6px; background:linear-gradient(90deg,var(--neon-dim),var(--neon)); border-radius:2px; box-shadow:0 0 6px var(--neon-glow); }
+        .race-meta { font-size:11px; color:var(--text-muted); margin-top:4px; letter-spacing:1px; }
+
+        .empty-card { background:var(--panel); border:1px solid rgba(125,255,79,0.1); border-radius:5px; padding:28px 22px; }
+        .empty-card pre { background:var(--surface3); color:var(--neon); font-family:'Courier New',monospace; font-size:11px; padding:12px 16px; border-radius:3px; border:1px solid rgba(125,255,79,0.12); white-space:pre-wrap; overflow-x:auto; margin-top:10px; }
+
+        .result-head { font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:3px; color:var(--gold); margin-bottom:14px; }
+
+        @media(max-width:640px){.page-title{font-size:22px}}
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <div class="page-header">
+            <div class="page-title">TOP 5 PREDICTION</div>
+            <div class="page-subtitle">RACE WINNER CANDIDATES — FACE SCORE RANKING</div>
+        </div>
+
+        <!-- レース選択 -->
+        <div class="control-card">
+            <form method="get" action="/prediction">
+                <select name="raceName" onchange="this.form.submit()">
+                    <option value="">-- 最新の予想結果 --</option>
+                    <option th:each="race : ${raceNames}"
+                            th:value="${race}" th:text="${race}"
+                            th:selected="${race == selectedRace}"></option>
+                </select>
+                <div class="btn-row">
+                    <a href="/prediction/stats" class="btn btn-purple">統計を見る</a>
+                    <a th:if="${selectedRace != null and selectedRace != ''}"
+                       th:href="@{/prediction/pdf(raceName=${selectedRace})}"
+                       class="btn btn-fire">PDF出力</a>
+                </div>
+            </form>
+            <form th:if="${selectedRace != null and selectedRace != ''}"
+                  method="post" action="/prediction/notify">
+                <input type="hidden" name="raceName" th:value="${selectedRace}">
+                <button type="submit" class="btn btn-line">LINE通知</button>
+            </form>
+        </div>
+
+        <!-- 通知結果メッセージ -->
+        <div th:if="${notifySuccess}" class="alert-success" th:text="${notifySuccess}"></div>
+        <div th:if="${notifyError}" class="alert-error" th:text="${notifyError}"></div>
+
+        <!-- 予想結果 -->
+        <div th:if="${results.isEmpty()}" class="empty-card">
+            <p style="color:var(--text-muted); margin-bottom:8px;">まだ予想データがありません。</p>
+            <p style="font-size:12px; color:var(--text-muted);">Pythonスクリプトを実行してデータを収集してください：</p>
+            <pre>cd python
+pip install -r requirements.txt
+python setup_db.py
+python scraper.py 5
+python face_analyzer.py
+python predictor.py</pre>
+        </div>
+
+        <div th:unless="${results.isEmpty()}">
+            <div class="result-head"
+                 th:text="${selectedRace != '' ? selectedRace + ' — 予想結果' : '最新の予想結果'}"></div>
+
+            <div th:each="r : ${results}" class="horse-card">
+                <div class="card-rank">
+                    <span class="rank-badge"
+                          th:classappend="${r.rankPosition == 1 ? 'rank-1' : (r.rankPosition == 2 ? 'rank-2' : (r.rankPosition == 3 ? 'rank-3' : 'rank-other'))}"
+                          th:text="${r.rankPosition}">1</span>
+                </div>
+                <img th:if="${r.imagePath != null}" class="horse-img"
+                     th:src="${r.imagePath}" th:alt="${r.horseName}">
+                <div th:unless="${r.imagePath != null}" class="no-img">▲</div>
+                <div class="horse-info">
+                    <div class="horse-name" th:text="${r.horseName}">馬名</div>
+                    <div style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
+                        <span class="score-label">SCORE</span>
+                        <span class="score-val" th:text="${r.finalScore} + 'pt'">0pt</span>
+                    </div>
+                    <div class="score-bar-wrap">
+                        <div class="score-bar" th:style="'width:' + ${r.finalScore} + '%'"></div>
+                    </div>
+                    <div class="race-meta"
+                         th:text="${r.targetRaceName} + ' (' + ${r.targetRaceDate} + ')'"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

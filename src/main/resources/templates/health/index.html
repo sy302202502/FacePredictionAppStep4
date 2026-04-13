@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>ヘルスチェック</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        :root {
+            --neon:        #7dff4f;
+            --neon-dim:    #3a7d22;
+            --neon-glow:   rgba(125,255,79,0.32);
+            --orange:      #ff8000;
+            --orange-glow: rgba(255,128,0,0.38);
+            --gold:        #c9a84c;
+            --gold-light:  #f5d878;
+            --crimson:     #ff2244;
+            --crimson-dim: #7a0818;
+            --purple:      #8b5cf6;
+            --purple-glow: rgba(139,92,246,0.35);
+            --deep:        #050708;
+            --surface:     #0b0e0b;
+            --surface2:    #111811;
+            --surface3:    #182018;
+            --panel:       rgba(10,14,10,0.93);
+            --text:        #d4e8cc;
+            --text-muted:  #607860;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--deep);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            margin: 0;
+        }
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background-image:
+                linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px);
+            background-size: 44px 44px;
+            pointer-events: none; z-index: 0;
+        }
+        body::after {
+            content: '';
+            position: fixed; inset: 0;
+            background:
+                radial-gradient(ellipse at 10% 15%, rgba(139,92,246,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 90% 85%, rgba(255,128,0,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(125,255,79,0.04) 0%, transparent 60%);
+            pointer-events: none; z-index: 0;
+        }
+        .scanlines {
+            position: fixed; inset: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px);
+            pointer-events: none; z-index: 1;
+        }
+        .page-body {
+            position: relative; z-index: 2;
+            max-width: 1000px; margin: 0 auto;
+            padding: 0 16px 100px;
+        }
+        /* Page Header */
+        .page-header {
+            padding: 32px 0 20px;
+            border-bottom: 1px solid rgba(125,255,79,0.1);
+            margin-bottom: 24px;
+            position: relative;
+        }
+        .page-header::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, transparent, var(--crimson), var(--orange), var(--neon), var(--purple), var(--neon), var(--orange), var(--crimson), transparent);
+            background-size: 300%; animation: stripe-slide 4s linear infinite;
+        }
+        @keyframes stripe-slide { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 28px; letter-spacing: 5px;
+            color: var(--neon); text-shadow: 0 0 16px var(--neon-glow);
+        }
+        .page-subtitle { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; margin-top: 3px; }
+        /* Section heading */
+        .section-heading {
+            display: flex; align-items: center; gap: 10px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 17px; letter-spacing: 4px;
+            color: var(--neon); margin: 34px 0 14px;
+            text-shadow: 0 0 10px var(--neon-glow);
+        }
+        .section-heading::before { content: '▶'; color: var(--purple); font-size: 11px; text-shadow: 0 0 8px var(--purple-glow); }
+        .section-heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent); opacity: 0.7; }
+        /* Neon divider */
+        .neon-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--neon-dim), var(--purple), var(--neon-dim), transparent);
+            margin: 10px 0; opacity: 0.5;
+        }
+        /* Glass card */
+        .glass-card {
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.13);
+            border-radius: 5px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+            margin-bottom: 16px;
+            overflow: hidden;
+            position: relative;
+        }
+        .glass-card::before {
+            content: '';
+            position: absolute; top: 4px; left: 4px;
+            width: 12px; height: 12px;
+            border-top: 1px solid var(--neon-dim);
+            border-left: 1px solid var(--neon-dim);
+            opacity: 0.5; pointer-events: none;
+        }
+        .glass-card::after {
+            content: '';
+            position: absolute; bottom: 4px; right: 4px;
+            width: 12px; height: 12px;
+            border-bottom: 1px solid rgba(139,92,246,0.5);
+            border-right: 1px solid rgba(139,92,246,0.5);
+            opacity: 0.5; pointer-events: none;
+        }
+        .glass-card-inner { padding: 18px 22px; }
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 8px 18px; border-radius: 3px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 14px; letter-spacing: 2px;
+            cursor: pointer; transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn-neon { background: transparent; color: var(--neon); border: 1px solid var(--neon-dim); }
+        .btn-neon:hover { border-color: var(--neon); box-shadow: 0 0 16px var(--neon-glow); color: #fff; transform: translateY(-1px); }
+        .btn-fire { background: linear-gradient(135deg, rgba(255,34,68,0.2), rgba(255,128,0,0.15)); color: var(--orange); border: 1px solid rgba(255,128,0,0.4); }
+        .btn-fire:hover { border-color: var(--orange); box-shadow: 0 0 18px var(--orange-glow); color: #fff; transform: translateY(-1px); }
+        .btn-purple { background: rgba(139,92,246,0.15); color: var(--purple); border: 1px solid rgba(139,92,246,0.4); }
+        .btn-purple:hover { border-color: var(--purple); box-shadow: 0 0 16px var(--purple-glow); color: #fff; }
+        .btn-refresh {
+            background: transparent; color: var(--neon);
+            border: 1px solid var(--neon-dim); border-radius: 3px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px; letter-spacing: 2px;
+            padding: 5px 14px; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-refresh:hover { border-color: var(--neon); box-shadow: 0 0 12px var(--neon-glow); color: #fff; }
+        /* Check rows */
+        .check-row {
+            display: flex; align-items: flex-start;
+            gap: 14px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(125,255,79,0.06);
+        }
+        .check-row:last-child { border-bottom: none; }
+        .check-label {
+            width: 200px; min-width: 160px;
+            font-size: 12px; letter-spacing: 1px;
+            color: var(--text-muted);
+            padding-top: 3px;
+        }
+        .check-value { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        /* Badges */
+        .badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 10px; border-radius: 2px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px; letter-spacing: 2px;
+        }
+        .badge-ok   { background: rgba(125,255,79,0.1);  color: var(--neon);    border: 1px solid rgba(125,255,79,0.3); }
+        .badge-ng   { background: rgba(255,34,68,0.1);   color: var(--crimson); border: 1px solid rgba(255,34,68,0.3); }
+        .badge-warn { background: rgba(255,128,0,0.1);   color: var(--orange);  border: 1px solid rgba(255,128,0,0.3); }
+        .check-err  { font-size: 11px; color: var(--crimson); }
+        .check-info { font-size: 11px; color: var(--text-muted); }
+        .path-text  { font-size: 10px; color: rgba(96,120,96,0.6); width: 100%; margin-top: 2px; letter-spacing: 0.5px; }
+        /* Stat grid */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+        .stat-item {
+            background: var(--surface3);
+            border: 1px solid rgba(125,255,79,0.1);
+            border-radius: 4px;
+            padding: 14px 16px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-item::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-dim), transparent);
+        }
+        .stat-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 36px; letter-spacing: 3px;
+            color: var(--neon); text-shadow: 0 0 12px var(--neon-glow);
+            line-height: 1;
+        }
+        .stat-lbl { font-size: 11px; color: var(--text-muted); letter-spacing: 1px; margin-top: 5px; }
+        /* Script list */
+        .script-list { margin: 0; padding: 0; list-style: none; }
+        .script-list li {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(125,255,79,0.05);
+            font-size: 13px; color: var(--text-muted);
+        }
+        .script-list li:last-child { border-bottom: none; }
+        /* Header meta */
+        .header-meta {
+            display: flex; align-items: center; gap: 16px;
+            flex-wrap: wrap; margin-top: 8px;
+        }
+        .checked-at-text { font-size: 11px; color: var(--text-muted); letter-spacing: 1px; }
+        /* Quick action buttons */
+        .action-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        /* Inputs */
+        input[type=text], input[type=number], select, textarea {
+            background: var(--surface3); color: var(--text);
+            border: 1px solid rgba(125,255,79,0.2); border-radius: 3px;
+            padding: 7px 11px; font-family: 'Noto Sans JP', sans-serif; font-size: 13px;
+            outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--neon); box-shadow: 0 0 10px var(--neon-glow);
+        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: var(--deep); }
+        ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+        @media (max-width: 640px) { .page-title { font-size: 22px; } .check-label { width: 130px; min-width: 110px; } }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="page-title">ヘルスチェック</div>
+            <div class="page-subtitle">SYSTEM HEALTH CHECK</div>
+            <div class="header-meta">
+                <span class="checked-at-text">確認日時: <span th:text="${checkedAt}"></span></span>
+                <button class="btn-refresh" onclick="location.reload()">再確認</button>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="section-heading">SYSTEM STATUS</div>
+        <div class="glass-card">
+            <div class="glass-card-inner">
+
+                <div class="check-row">
+                    <span class="check-label">データベース接続</span>
+                    <div class="check-value">
+                        <span th:if="${dbOk}"     class="badge badge-ok">✓ OK</span>
+                        <span th:unless="${dbOk}" class="badge badge-ng">✗ NG</span>
+                        <span th:if="${!dbOk and dbError != null}" class="check-err" th:text="${dbError}"></span>
+                    </div>
+                </div>
+
+                <div class="check-row">
+                    <span class="check-label">Anthropic API キー</span>
+                    <div class="check-value">
+                        <span th:if="${apiKeySet}"     class="badge badge-ok">✓ 設定済み</span>
+                        <span th:unless="${apiKeySet}" class="badge badge-ng">✗ 未設定</span>
+                        <span th:unless="${apiKeySet}" class="check-info">.env に ANTHROPIC_API_KEY を設定してください</span>
+                    </div>
+                </div>
+
+                <div class="check-row">
+                    <span class="check-label">LINE Notify トークン</span>
+                    <div class="check-value">
+                        <span th:if="${lineTokenSet}"     class="badge badge-ok">✓ 設定済み</span>
+                        <span th:unless="${lineTokenSet}" class="badge badge-warn">△ 未設定</span>
+                        <span th:unless="${lineTokenSet}" class="check-info">（任意）</span>
+                    </div>
+                </div>
+
+                <div class="check-row">
+                    <span class="check-label">Pythonスクリプトフォルダ</span>
+                    <div class="check-value">
+                        <span th:if="${scriptDirOk}"     class="badge badge-ok">✓ 存在する</span>
+                        <span th:unless="${scriptDirOk}" class="badge badge-ng">✗ 見つからない</span>
+                        <span class="path-text" th:text="${scriptDirPath}"></span>
+                    </div>
+                </div>
+
+                <div class="check-row">
+                    <span class="check-label">画像保存フォルダ</span>
+                    <div class="check-value">
+                        <span th:if="${imgDirOk}"     class="badge badge-ok">✓ 存在する</span>
+                        <span th:unless="${imgDirOk}" class="badge badge-warn">△ 未作成</span>
+                        <span th:if="${imgDirOk}" class="check-info" th:text="'(' + ${imgDirMB} + ' MB)'"></span>
+                        <span class="path-text" th:text="${imgDirPath}"></span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Script Files -->
+        <div class="section-heading">SCRIPT FILES</div>
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <ul class="script-list">
+                    <li th:each="entry : ${scripts}">
+                        <span th:if="${entry.value}"     class="badge badge-ok">✓</span>
+                        <span th:unless="${entry.value}" class="badge badge-ng">✗</span>
+                        <span th:text="${entry.key}"></span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- DB Counts -->
+        <div class="section-heading">DATABASE RECORDS</div>
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-num" th:text="${featureCount}">0</div>
+                        <div class="stat-lbl">顔特徴レコード</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-num" th:text="${predictionCount}">0</div>
+                        <div class="stat-lbl">予想結果レコード</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-num" th:text="${entryCount}">0</div>
+                        <div class="stat-lbl">出走馬レコード</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="section-heading">QUICK ACTIONS</div>
+        <div class="glass-card">
+            <div class="glass-card-inner">
+                <div class="action-row">
+                    <a href="/script" class="btn btn-neon">スクリプト実行</a>
+                    <a href="/prediction/run" class="btn btn-fire">予想実行</a>
+                    <a href="/prediction/stats" class="btn btn-purple">顔特徴統計</a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

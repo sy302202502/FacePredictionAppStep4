@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>週次重賞予想</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon:#7dff4f; --neon-dim:#3a7d22; --neon-glow:rgba(125,255,79,0.32);
+            --orange:#ff8000; --orange-glow:rgba(255,128,0,0.38);
+            --gold:#c9a84c; --gold-light:#f5d878;
+            --crimson:#ff2244; --crimson-dim:#7a0818;
+            --purple:#8b5cf6; --purple-glow:rgba(139,92,246,0.35);
+            --deep:#050708; --surface:#0b0e0b; --surface2:#111811; --surface3:#182018;
+            --panel:rgba(10,14,10,0.93); --text:#d4e8cc; --text-muted:#607860;
+        }
+        body { font-family:'Noto Sans JP',sans-serif; background:var(--deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(125,255,79,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(125,255,79,0.02) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+        body::after { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 10% 15%,rgba(139,92,246,0.12) 0%,transparent 50%),radial-gradient(ellipse at 90% 85%,rgba(255,128,0,0.08) 0%,transparent 50%); pointer-events:none; z-index:0; }
+        .scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.1) 0px,rgba(0,0,0,0.1) 1px,transparent 1px,transparent 3px); pointer-events:none; z-index:1; }
+        .page-body { position:relative; z-index:2; max-width:1000px; margin:0 auto; padding:0 16px 100px; }
+        .glass-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; backdrop-filter:blur(10px); box-shadow:0 4px 24px rgba(0,0,0,0.7); margin-bottom:16px; overflow:hidden; position:relative; }
+        .glass-card::before { content:''; position:absolute; top:4px; left:4px; width:12px; height:12px; border-top:1px solid var(--neon-dim); border-left:1px solid var(--neon-dim); opacity:0.5; pointer-events:none; }
+        .glass-card::after { content:''; position:absolute; bottom:4px; right:4px; width:12px; height:12px; border-bottom:1px solid rgba(139,92,246,0.5); border-right:1px solid rgba(139,92,246,0.5); opacity:0.5; pointer-events:none; }
+        .glass-card-inner { padding:18px 22px; }
+        .section-heading { display:flex; align-items:center; gap:10px; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:4px; color:var(--neon); margin:34px 0 14px; text-shadow:0 0 10px var(--neon-glow); }
+        .section-heading::before { content:'▶'; color:var(--purple); font-size:11px; }
+        .section-heading::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--neon-dim),rgba(139,92,246,0.3),transparent); opacity:0.7; }
+        .neon-divider { height:1px; background:linear-gradient(90deg,transparent,var(--neon-dim),var(--purple),var(--neon-dim),transparent); margin:10px 0; opacity:0.5; }
+        .page-header { padding:32px 0 20px; border-bottom:1px solid rgba(125,255,79,0.1); margin-bottom:24px; position:relative; }
+        .page-header::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,transparent,var(--crimson),var(--orange),var(--neon),var(--purple),var(--neon),var(--orange),var(--crimson),transparent); background-size:300%; animation:stripe-slide 4s linear infinite; }
+        @keyframes stripe-slide { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .page-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:5px; color:var(--neon); text-shadow:0 0 16px var(--neon-glow); }
+        .page-subtitle { font-size:11px; color:var(--text-muted); letter-spacing:3px; margin-top:3px; }
+        input[type=text],input[type=number],input[type=file],select,textarea { background:var(--surface3); color:var(--text); border:1px solid rgba(125,255,79,0.2); border-radius:3px; padding:7px 11px; font-family:'Noto Sans JP',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s,box-shadow 0.2s; }
+        input:focus,select:focus,textarea:focus { border-color:var(--neon); box-shadow:0 0 10px var(--neon-glow); }
+        select option { background:var(--surface2); }
+        label { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:2px; color:var(--text-muted); }
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--deep)} ::-webkit-scrollbar-thumb{background:var(--neon-dim);border-radius:2px} ::-webkit-scrollbar-thumb:hover{background:var(--neon)}
+        @media(max-width:640px){.page-title{font-size:22px}}
+
+        /* Pipeline run button */
+        .btn-run {
+            background: linear-gradient(135deg, rgba(255,128,0,0.15), rgba(255,34,68,0.1));
+            color: var(--orange);
+            border: 1px solid rgba(255,128,0,0.4);
+            border-radius: 3px;
+            padding: 10px 26px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 15px;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-run:hover:not(:disabled) { border-color: var(--orange); box-shadow: 0 0 22px var(--orange-glow); color: #fff; transform: translateY(-1px); }
+        .btn-run:disabled { opacity: 0.35; cursor: default; }
+
+        /* Log panel */
+        #log-panel {
+            display: none;
+            background: #020402;
+            color: var(--neon);
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 10px 14px;
+            max-height: 220px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            border-radius: 3px;
+            border: 1px solid rgba(125,255,79,0.12);
+            line-height: 1.7;
+            margin-top: 12px;
+        }
+        .log-done { color: var(--neon); }
+        .log-err  { color: var(--crimson); }
+
+        /* 2-column layout */
+        .layout { display: flex; gap: 14px; align-items: flex-start; }
+        .sidebar { width: 230px; flex-shrink: 0; }
+        .main { flex: 1; min-width: 0; }
+
+        /* Sidebar race list */
+        .race-list {
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.13);
+            border-radius: 5px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+            position: relative;
+        }
+        .race-list::before {
+            content: '';
+            position: absolute;
+            top: 4px; left: 4px;
+            width: 10px; height: 10px;
+            border-top: 1px solid var(--neon-dim);
+            border-left: 1px solid var(--neon-dim);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .race-list-header {
+            background: rgba(125,255,79,0.06);
+            border-bottom: 1px solid rgba(125,255,79,0.13);
+            padding: 10px 14px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 13px;
+            letter-spacing: 3px;
+            color: var(--neon);
+            text-shadow: 0 0 8px var(--neon-glow);
+        }
+        .race-item {
+            display: block;
+            padding: 9px 14px;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(125,255,79,0.06);
+            transition: background 0.15s;
+        }
+        .race-item:hover { background: rgba(125,255,79,0.04); }
+        .race-item.active {
+            background: rgba(125,255,79,0.07);
+            border-left: 2px solid var(--neon-dim);
+            padding-left: 12px;
+        }
+        .race-date { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; }
+        .race-name {
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--text);
+            margin-top: 2px;
+        }
+        .race-badges { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+        .badge {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 10px;
+            letter-spacing: 1px;
+            padding: 1px 6px;
+            border-radius: 2px;
+            background: rgba(125,255,79,0.08);
+            color: var(--neon-dim);
+            border: 1px solid rgba(125,255,79,0.15);
+        }
+        .badge.face {
+            background: rgba(139,92,246,0.1);
+            color: var(--purple);
+            border-color: rgba(139,92,246,0.25);
+        }
+        .badge.ok {
+            background: rgba(125,255,79,0.1);
+            color: var(--neon);
+            border-color: rgba(125,255,79,0.25);
+        }
+        .race-list-empty {
+            padding: 18px 14px;
+            font-size: 12px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            line-height: 1.8;
+        }
+
+        /* Horse cards */
+        .horse-card {
+            background: var(--surface2);
+            border: 1px solid rgba(125,255,79,0.1);
+            border-radius: 4px;
+            display: flex;
+            align-items: stretch;
+            margin-bottom: 10px;
+            overflow: hidden;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .horse-card:hover { border-color: rgba(125,255,79,0.28); box-shadow: 0 2px 18px rgba(0,0,0,0.6); }
+        .horse-card.rank1 { border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.03); }
+        .horse-card.rank2 { border-color: rgba(180,180,180,0.25); }
+        .horse-card.rank3 { border-color: rgba(205,127,50,0.4); background: rgba(205,127,50,0.02); }
+
+        /* Card left */
+        .card-left {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 5px;
+            padding: 10px 8px;
+            flex-shrink: 0;
+            min-width: 44px;
+        }
+        .mark {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 20px;
+            font-weight: 900;
+            line-height: 1;
+            color: var(--gold);
+            text-shadow: 0 0 8px rgba(201,168,76,0.4);
+        }
+        .rank-badge {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            border: 1px solid;
+        }
+        .rank1 .rank-badge { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
+        .rank2 .rank-badge { background: rgba(180,180,180,0.1); border-color: rgba(180,180,180,0.35); color: #b4b4b4; }
+        .rank3 .rank-badge { background: rgba(205,127,50,0.15); border-color: rgba(205,127,50,0.45); color: #cd7f32; }
+        .rank-badge.other  { background: rgba(125,255,79,0.05); border-color: rgba(125,255,79,0.14); color: var(--text-muted); }
+
+        /* Horse image */
+        .horse-img-wrap {
+            width: 72px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface3);
+        }
+        .horse-img-wrap img { width: 72px; height: 88px; object-fit: cover; display: block; }
+        .no-img {
+            width: 72px;
+            height: 88px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: var(--text-muted);
+        }
+        .no-img span { font-size: 9px; color: var(--text-muted); margin-top: 2px; opacity: 0.6; }
+
+        /* Horse body */
+        .horse-body { flex: 1; padding: 10px 12px; min-width: 0; }
+        .horse-meta { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; letter-spacing: 1px; }
+        .horse-name {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .score-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+        .score-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 20px;
+            color: var(--neon);
+            flex-shrink: 0;
+            letter-spacing: 1px;
+            text-shadow: 0 0 8px var(--neon-glow);
+        }
+        .score-bar-wrap { flex: 1; background: rgba(125,255,79,0.08); border-radius: 999px; height: 5px; }
+        .score-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--neon-dim), var(--neon)); }
+        .comment {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.55;
+            border-left: 2px solid rgba(139,92,246,0.35);
+            padding-left: 7px;
+            margin-bottom: 5px;
+        }
+        .face-comment {
+            font-size: 12px;
+            color: var(--purple);
+            line-height: 1.55;
+            border-left: 2px solid rgba(139,92,246,0.4);
+            padding: 4px 7px;
+            background: rgba(139,92,246,0.06);
+            border-radius: 0 3px 3px 0;
+            margin-top: 4px;
+        }
+        .face-badge {
+            display: inline-block;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 10px;
+            letter-spacing: 2px;
+            background: rgba(139,92,246,0.2);
+            color: var(--purple);
+            border: 1px solid rgba(139,92,246,0.35);
+            border-radius: 2px;
+            padding: 1px 6px;
+            margin-right: 5px;
+        }
+
+        /* Results header */
+        .results-header { margin-bottom: 12px; }
+        .results-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 18px;
+            letter-spacing: 4px;
+            color: var(--neon);
+            text-shadow: 0 0 10px var(--neon-glow);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .results-title::before { content: '▶'; color: var(--purple); font-size: 11px; }
+
+        /* Empty state */
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            font-size: 13px;
+            letter-spacing: 2px;
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.08);
+            border-radius: 5px;
+        }
+
+        /* Pipeline desc */
+        .pipeline-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin: 0 0 16px;
+            letter-spacing: 1px;
+            line-height: 1.8;
+            padding: 10px 14px;
+            background: rgba(125,255,79,0.03);
+            border-radius: 3px;
+            border: 1px solid rgba(125,255,79,0.07);
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255,128,0,0.2);
+            border-top-color: var(--orange);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 640px) {
+            .layout { flex-direction: column; }
+            .sidebar { width: 100%; }
+            .btn-run { width: 100%; padding: 12px; font-size: 15px; }
+            select { font-size: 16px; }
+            .horse-img-wrap { width: 60px; }
+            .horse-img-wrap img { width: 60px; height: 74px; }
+            .no-img { width: 60px; height: 74px; font-size: 20px; }
+            .card-left { min-width: 36px; padding: 8px 5px; }
+            .mark { font-size: 16px; }
+            .rank-badge { width: 22px; height: 22px; font-size: 11px; }
+            .horse-name { font-size: 14px; }
+            .score-num { font-size: 16px; }
+            .horse-body { padding: 8px 8px 8px 6px; }
+        }
+    </style>
+</head>
+<body>
+<div class="scanlines"></div>
+<div th:replace="fragments/navbar :: navbar"></div>
+
+<div class="page-body">
+
+    <div class="page-header">
+        <div class="page-title">WEEKLY PIPELINE</div>
+        <div class="page-subtitle">AUTO SCRAPING / ENTRY FETCH / STATS PREDICT / FACE ANALYSIS — ALL IN ONE</div>
+    </div>
+
+    <!-- パイプライン実行パネル -->
+    <div class="section-heading">PIPELINE EXECUTION</div>
+    <div class="glass-card">
+        <div class="glass-card-inner">
+            <p class="pipeline-desc">
+                今日から14日以内の重賞・OP・リステッドを自動取得し、出馬表・統計予想・顔面分析まで一括処理します。
+            </p>
+            <button class="btn-run" id="run-btn"
+                    th:disabled="${isPipelineRunning}"
+                    onclick="runPipeline()">
+                <span th:if="${isPipelineRunning}"><span class="spinner"></span> RUNNING...</span>
+                <span th:unless="${isPipelineRunning}">▶ RUN PIPELINE</span>
+            </button>
+            <div id="log-panel"></div>
+        </div>
+    </div>
+
+    <!-- 2カラムレイアウト -->
+    <div class="layout">
+
+        <!-- サイドバー: レース一覧 -->
+        <div class="sidebar">
+            <div class="race-list">
+                <div class="race-list-header">RACE LIST</div>
+                <div th:if="${raceList.isEmpty()}" class="race-list-empty">
+                    予想がありません。<br>パイプラインを実行してください。
+                </div>
+                <a th:each="r : ${raceList}"
+                   th:href="@{/weekly(raceName=${r.race_name})}"
+                   th:classappend="${r.race_name == selected} ? 'race-item active' : 'race-item'">
+                    <div class="race-date"
+                         th:text="${r.race_date != null} ? ${#dates.format(r.race_date, 'M/d(E)')} : '日付未定'">
+                    </div>
+                    <div class="race-name" th:text="${r.race_name}"></div>
+                    <div class="race-badges">
+                        <span class="badge ok"
+                              th:text="${r.horse_count} + '頭'"></span>
+                        <span class="badge face"
+                              th:if="${r.face_done > 0}"
+                              th:text="'顔' + ${r.face_done}"></span>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- メイン: 予想結果 -->
+        <div class="main">
+            <div th:if="${selected == null or results.isEmpty()}" class="empty">
+                ← SELECT A RACE
+            </div>
+
+            <div th:if="${selected != null and !results.isEmpty()}">
+                <div class="results-header">
+                    <div class="results-title">
+                        <span th:text="${selected}"></span> PREDICTION
+                    </div>
+                </div>
+
+                <div th:each="h, iter : ${results}"
+                     th:classappend="${iter.index == 0} ? 'horse-card rank1' : (${iter.index == 1} ? 'horse-card rank2' : (${iter.index == 2} ? 'horse-card rank3' : 'horse-card'))">
+
+                    <!-- 印 + 順位 -->
+                    <div class="card-left">
+                        <div class="mark"
+                             th:text="${iter.index == 0} ? '◎' : (${iter.index == 1} ? '○' : (${iter.index == 2} ? '▲' : (${iter.index == 3} ? '△' : (${iter.index == 4} ? '×' : ' '))))">
+                        </div>
+                        <div th:class="${iter.index < 3} ? 'rank-badge' : 'rank-badge other'"
+                             th:text="${h.rank_position}"></div>
+                    </div>
+
+                    <!-- 写真 -->
+                    <div class="horse-img-wrap">
+                        <img th:if="${h.image_path != null and !#strings.isEmpty(h.image_path)}"
+                             th:src="@{${h.image_path}}"
+                             th:alt="${h.horse_name}"
+                             onerror="this.parentElement.innerHTML='<div class=\'no-img\'>🐴<span>写真なし</span></div>'" />
+                        <div th:if="${h.image_path == null or #strings.isEmpty(h.image_path)}"
+                             class="no-img">🐴<span>写真なし</span></div>
+                    </div>
+
+                    <!-- 本体 -->
+                    <div class="horse-body">
+                        <div class="horse-meta">
+                            <span th:if="${h.horse_number != null}"
+                                  th:text="'No.' + ${h.horse_number}"></span>
+                            <span th:if="${h.jockey_name != null and !#strings.isEmpty(h.jockey_name)}"
+                                  th:text="'　/ ' + ${h.jockey_name}"></span>
+                        </div>
+                        <div class="horse-name" th:text="${h.horse_name}"></div>
+                        <div class="score-row">
+                            <div class="score-num" th:text="${h.score} + 'pt'"></div>
+                            <div class="score-bar-wrap">
+                                <div class="score-bar" th:style="'width:' + ${h.score} + '%'"></div>
+                            </div>
+                        </div>
+                        <div class="comment" th:text="${h.comment}"></div>
+                        <div th:if="${h.face_comment != null and !#strings.isEmpty(h.face_comment)}"
+                             class="face-comment">
+                            <span class="face-badge"
+                                  th:if="${h.face_score != null}"
+                                  th:text="'FACE ' + ${#numbers.formatDecimal(h.face_score,1,1)} + 'pt'"></span><span th:text="${h.face_comment}"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /layout -->
+
+</div><!-- /page-body -->
+
+<script>
+let es = null;
+
+function runPipeline() {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> RUNNING...';
+
+    const logPanel = document.getElementById('log-panel');
+    logPanel.style.display = 'block';
+    logPanel.innerHTML = '';
+
+    fetch('/weekly/run-pipeline', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { addLog(data.error, 'log-err'); resetBtn(); return; }
+
+            if (es) es.close();
+            es = new EventSource('/weekly/log');
+            es.onmessage = e => {
+                if (e.data === '__DONE__') {
+                    es.close();
+                    resetBtn();
+                    setTimeout(() => location.reload(), 1000);
+                    return;
+                }
+                const cls = e.data.includes('✅') || e.data.includes('完了') ? 'log-done' :
+                             e.data.includes('❌') || e.data.includes('失敗') || e.data.includes('エラー') ? 'log-err' : '';
+                addLog(e.data, cls);
+            };
+            es.onerror = () => { es.close(); resetBtn(); };
+        })
+        .catch(e => { addLog('通信エラー: ' + e.message, 'log-err'); resetBtn(); });
+}
+
+function addLog(text, cls) {
+    const p = document.getElementById('log-panel');
+    const d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = text;
+    p.appendChild(d);
+    p.scrollTop = p.scrollHeight;
+}
+
+function resetBtn() {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = false;
+    btn.innerHTML = '▶ RUN PIPELINE';
+}
+</script>
+</body>
+</html>

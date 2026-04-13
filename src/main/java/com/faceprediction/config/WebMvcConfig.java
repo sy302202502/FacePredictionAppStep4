@@ -26,21 +26,26 @@ public class WebMvcConfig implements WebMvcConfigurer {
      */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // プロジェクトの実行ディレクトリ直下の "uploads" フォルダを公開対象にする。
-        // System.getProperty("user.dir") は実行中のプロジェクトのルートディレクトリを取得する。
-        // そこに "uploads" を結合し、URI (file:/〜) に変換。
-        String uploadPath = Paths.get(System.getProperty("user.dir"), "uploads")
+        // ~/faceapp/uploads（既存パス）
+        String uploadPath = Paths.get(System.getProperty("user.home"), "faceapp", "uploads")
                                  .toUri()
                                  .toString();
 
-        // "/uploads/**" というURLパターンでアクセスされた場合に、
-        // 実際の uploads フォルダにあるファイルを返すように設定。
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations(uploadPath) // 実際のディレクトリの場所を指定
-                .setCachePeriod(3600);            // ブラウザキャッシュ有効期限を 3600 秒（1時間）に設定（任意）
+        // プロジェクト直下の uploads（馬写真など）
+        String projectUploadPath = Paths.get(System.getProperty("user.dir"), "uploads")
+                                        .toUri()
+                                        .toString();
 
-        // 実際にマッピングされるパスの例:
-        // file:/C:/Users/YourName/your-project/uploads/
-        // ↑ この場所にあるファイルが、http://localhost:8080/uploads/ファイル名 でアクセス可能になる。
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations(uploadPath, projectUploadPath)
+                .setCachePeriod(3600);
+
+        // classpath内の静的リソース（CSS・JS・画像など）を明示的に公開
+        registry.addResourceHandler("/css/**")
+                .addResourceLocations("classpath:/static/css/");
+        registry.addResourceHandler("/js/**")
+                .addResourceLocations("classpath:/static/js/");
+        registry.addResourceHandler("/images/**")
+                .addResourceLocations("classpath:/static/images/");
     }
 }

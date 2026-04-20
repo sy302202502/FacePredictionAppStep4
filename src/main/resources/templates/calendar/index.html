@@ -172,7 +172,7 @@
                  th:classappend="${entry.key == today ? 'date-today' : ''}">
                 <span th:text="${entry.key}"></span>
                 <span th:if="${entry.key == today}" class="today-badge">TODAY</span>
-                <span class="date-count" th:text="'— ' + #lists.size(entry.value) + ' RACES'"></span>
+                <span class="date-count" th:text="|— ${#lists.size(entry.value)} RACES|"></span>
             </div>
 
             <div th:each="ev : ${entry.value}" class="race-card"

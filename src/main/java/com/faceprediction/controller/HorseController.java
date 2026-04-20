@@ -41,6 +41,12 @@ public class HorseController {
         return "horse/list";
     }
 
+    // /horse/list → /horse にリダイレクト（誤ったURL対策）
+    @GetMapping("/list")
+    public String listRedirect() {
+        return "redirect:/horse";
+    }
+
     // 馬の詳細
     @GetMapping("/{id}")
     public String horseDetail(@PathVariable Long id, Model model) {

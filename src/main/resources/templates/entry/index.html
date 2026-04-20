@@ -143,6 +143,8 @@
         .btn-fire:hover { border-color: var(--orange); box-shadow: 0 0 18px var(--orange-glow); color: #fff; transform: translateY(-1px); }
         .btn-purple { background: rgba(139,92,246,0.15); color: var(--purple); border: 1px solid rgba(139,92,246,0.4); }
         .btn-purple:hover { border-color: var(--purple); box-shadow: 0 0 16px var(--purple-glow); color: #fff; }
+        .btn-gold { background: rgba(201,168,76,0.15); color: var(--gold); border: 1px solid rgba(201,168,76,0.4); }
+        .btn-gold:hover { border-color: var(--gold); box-shadow: 0 0 16px rgba(201,168,76,0.4); color: #fff; }
         /* Input / Select */
         input[type=text], input[type=number], select, textarea {
             background: var(--surface3); color: var(--text);
@@ -304,12 +306,11 @@
                 </div>
             </div>
 
-            <!-- Predict Form -->
-            <form method="post" action="/prediction/run" style="margin-bottom: 16px;">
-                <input type="hidden" name="raceName" th:value="${entries[0].raceName}">
-                <input type="hidden" name="horseList" th:value="${horseListText}">
-                <button type="submit" class="btn btn-fire">この出走馬でTOP5予想を実行 →</button>
-            </form>
+            <!-- Link to prediction pages -->
+            <div style="margin-bottom: 16px; display: flex; gap: 8px;">
+                <a th:href="@{/predict-v2}" class="btn btn-fire">傾向分析予想ページへ →</a>
+                <a th:href="@{/high-dividend}" class="btn btn-gold">💰 万馬券チャレンジ</a>
+            </div>
 
             <!-- Horse Table -->
             <div class="glass-card">

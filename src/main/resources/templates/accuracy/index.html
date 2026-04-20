@@ -303,10 +303,74 @@
 
         <!-- 新システムタブ -->
         <div id="tab-new" class="tab-pane">
+
+            <!-- 手動結果記録フォーム（新システム用） -->
+            <div class="record-form" id="record-v2-form">
+                <div class="record-form-title">MANUAL RECORD — 顔面予想の結果を手動入力</div>
+                <form method="post" action="/accuracy/record-v2" id="formV2">
+                    <div class="form-row" style="margin-bottom: 12px;">
+                        <label style="flex: 1; min-width: 200px;">
+                            RACE NAME
+                            <select name="raceName" id="raceSelect" onchange="updateHorseList(this.value)" style="width: 100%;">
+                                <option value="">-- SELECT --</option>
+                                <optgroup label="未記録" th:if="${!#lists.isEmpty(v2PendingRaces)}">
+                                    <option th:each="r : ${v2PendingRaces}"
+                                            th:value="${r.race_name}"
+                                            th:text="${r.race_name} + ' (' + ${r.horse_count} + '頭)'">
+                                    </option>
+                                </optgroup>
+                                <optgroup label="記録済み（上書き）">
+                                    <option th:each="r : ${v2RecentResults}"
+                                            th:value="${r.race_name}"
+                                            th:text="${r.race_name}">
+                                    </option>
+                                </optgroup>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="form-row" style="flex-wrap: wrap; gap: 10px; align-items: flex-start;">
+                        <label style="flex: 1; min-width: 160px;">
+                            🥇 1着（必須）
+                            <input type="text" name="first" id="input1st" placeholder="馬名を入力" list="horseList1" style="width: 100%;" autocomplete="off">
+                            <datalist id="horseList1"></datalist>
+                        </label>
+                        <label style="flex: 1; min-width: 160px;">
+                            🥈 2着（任意）
+                            <input type="text" name="second" id="input2nd" placeholder="省略可" list="horseList2" style="width: 100%;" autocomplete="off">
+                            <datalist id="horseList2"></datalist>
+                        </label>
+                        <label style="flex: 1; min-width: 160px;">
+                            🥉 3着（任意）
+                            <input type="text" name="third" id="input3rd" placeholder="省略可" list="horseList3" style="width: 100%;" autocomplete="off">
+                            <datalist id="horseList3"></datalist>
+                        </label>
+                        <div style="display: flex; align-items: flex-end; padding-bottom: 2px;">
+                            <button type="submit" class="btn btn-neon">RECORD</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 未記録レース一覧 -->
+            <div th:if="${!#lists.isEmpty(v2PendingRaces)}" style="margin-bottom: 20px;">
+                <div class="sub-heading">PENDING — 結果未記録のレース</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;">
+                    <span th:each="r : ${v2PendingRaces}"
+                          class="src-badge src-no_data"
+                          style="cursor: pointer; padding: 5px 12px; font-size: 12px;"
+                          th:text="${r.race_name}"
+                          th:onclick="'document.getElementById(\'raceSelect\').value=\'' + ${r.race_name} + '\'; updateHorseList(\'' + ${r.race_name} + '\')'">
+                    </span>
+                </div>
+                <p class="empty-text" style="margin: 0; font-size: 11px;">↑ クリックするとフォームにセットされます</p>
+            </div>
+
+            <!-- 記録済み一覧 -->
+            <div class="sub-heading">RECORDED RESULTS</div>
             <div th:if="${v2RecentResults == null or #lists.isEmpty(v2RecentResults)}">
                 <p class="empty-text">
                     まだ記録がありません。<br>
-                    ① 「顔面傾向分析予想」でレースを予想 → ② レース後に「AUTO FETCH RESULTS」を実行してください。
+                    ① 「顔面傾向分析予想」でレースを予想 → ② レース後に上のフォームか「AUTO FETCH RESULTS」で結果を入力してください。
                 </p>
             </div>
             <table th:unless="${v2RecentResults == null or #lists.isEmpty(v2RecentResults)}">
@@ -323,16 +387,19 @@
                 </thead>
                 <tbody>
                     <tr th:each="r : ${v2RecentResults}">
-                        <td th:text="${r.race_name}">レース名</td>
+                        <td th:text="${r.race_name}" style="cursor: pointer; color: var(--neon-dim);"
+                            th:onclick="'document.getElementById(\'raceSelect\').value=\'' + ${r.race_name} + '\'; updateHorseList(\'' + ${r.race_name} + '\'); document.getElementById(\'record-v2-form\').scrollIntoView({behavior:\'smooth\'}'">
+                        </td>
                         <td th:text="${r.horse_name}" style="color: var(--text);">馬名</td>
-                        <td th:text="${r.actual_rank != null ? r.actual_rank + '着' : '未記録'}">—</td>
+                        <td th:text="${r.actual_rank != null ? r.actual_rank + '着' : '未記録'}"
+                            th:style="${r.actual_rank == 1} ? 'color: var(--gold); font-weight: bold;' : ''">—</td>
                         <td>
-                            <span th:if="${r.hit}"     class="hit-mark">HIT</span>
-                            <span th:unless="${r.hit}" class="miss-mark">MISS</span>
+                            <span th:if="${r.hit}"     class="hit-mark">✅ HIT</span>
+                            <span th:unless="${r.hit}" class="miss-mark">✗ MISS</span>
                         </td>
                         <td>
-                            <span th:if="${r.top5_hit}"     class="hit-mark">HIT</span>
-                            <span th:unless="${r.top5_hit}" class="miss-mark">MISS</span>
+                            <span th:if="${r.top5_hit}"     class="hit-mark">✅ HIT</span>
+                            <span th:unless="${r.top5_hit}" class="miss-mark">✗ MISS</span>
                         </td>
                         <td th:text="${r.score != null ? #numbers.formatDecimal(r.score,1,1) + 'pt' : '—'}">—</td>
                         <td>
@@ -347,12 +414,28 @@
         </div>
     </div>
 
-    <script>
+    <!-- 出走馬リスト（JS用） -->
+    <script th:inline="javascript">
+        const raceHorseMap = /*[[${v2RaceHorseMap}]]*/ {};
+
+        function updateHorseList(raceName) {
+            const horses = raceHorseMap[raceName] || [];
+            ['horseList1','horseList2','horseList3'].forEach(id => {
+                const dl = document.getElementById(id);
+                dl.innerHTML = horses.map(h => `<option value="${h}">`).join('');
+            });
+        }
+
         function showTab(name, btn) {
             document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('tab-' + name).classList.add('active');
             btn.classList.add('active');
+        }
+
+        // URLハッシュで新タブを開く
+        if (window.location.hash === '#tab-new') {
+            showTab('new', document.querySelectorAll('.tab-btn')[1]);
         }
     </script>
 </body>

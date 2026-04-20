@@ -103,31 +103,64 @@ public class AccuracyController {
                 model.addAttribute("v2TotalRaces",  v2Total);
                 model.addAttribute("v2WinHitRate",  v2Total > 0 ? Math.round(v2Win  * 1000.0 / v2Total) / 10.0 : 0.0);
                 model.addAttribute("v2Top5HitRate", v2Total > 0 ? Math.round(v2Top5 * 1000.0 / v2Total) / 10.0 : 0.0);
+            } else {
+                model.addAttribute("v2TotalRaces", 0L);
+                model.addAttribute("v2WinHitRate", 0.0);
+                model.addAttribute("v2Top5HitRate", 0.0);
             }
 
-            // 新システム 直近記録
+            // 新システム 直近記録（予想1位のみ表示）
             List<Map<String, Object>> v2Recent = jdbc.queryForList(
                 "SELECT DISTINCT ON (race_name) race_name, predicted_rank, horse_name," +
                 " actual_rank, hit, top5_hit, score, data_source, recorded_at" +
                 " FROM race_specific_accuracy WHERE predicted_rank = 1" +
-                " ORDER BY race_name, recorded_at DESC LIMIT 20");
+                " ORDER BY race_name, recorded_at DESC LIMIT 30");
             model.addAttribute("v2RecentResults", v2Recent);
+
+            // 未記録レース（予想はあるが的中記録がないもの）
+            List<Map<String, Object>> v2Pending = jdbc.queryForList(
+                "SELECT rsr.race_name, COUNT(*) AS horse_count," +
+                " MIN(rsr.created_at)::date AS predicted_on" +
+                " FROM race_specific_result rsr" +
+                " WHERE NOT EXISTS (" +
+                "   SELECT 1 FROM race_specific_accuracy rsa" +
+                "   WHERE rsa.race_name = rsr.race_name" +
+                " )" +
+                " GROUP BY rsr.race_name" +
+                " ORDER BY MIN(rsr.created_at) DESC");
+            model.addAttribute("v2PendingRaces", v2Pending);
+
+            // 記録済みレースの馬名一覧（手動記録フォームの補助用）
+            List<Map<String, Object>> v2AllRaces = jdbc.queryForList(
+                "SELECT DISTINCT rsr.race_name, rsr.horse_name, rsr.rank_position" +
+                " FROM race_specific_result rsr" +
+                " ORDER BY rsr.race_name, rsr.rank_position");
+            // race_name → horses map に変換
+            Map<String, List<String>> raceHorseMap = new LinkedHashMap<>();
+            for (Map<String, Object> row : v2AllRaces) {
+                String rn = (String) row.get("race_name");
+                String hn = (String) row.get("horse_name");
+                raceHorseMap.computeIfAbsent(rn, k -> new ArrayList<>()).add(hn);
+            }
+            model.addAttribute("v2RaceHorseMap", raceHorseMap);
+
         } catch (Exception e) {
-            // テーブル未作成の場合は空リストで続行
             model.addAttribute("v2TotalRaces", 0L);
             model.addAttribute("v2WinHitRate", 0.0);
             model.addAttribute("v2Top5HitRate", 0.0);
             model.addAttribute("v2RecentResults", List.of());
+            model.addAttribute("v2PendingRaces", List.of());
+            model.addAttribute("v2RaceHorseMap", Map.of());
         }
 
-        // ── フォーム用：予想済みレース名 ─────────────────
+        // ── フォーム用：旧システム予想済みレース名 ─────────
         List<String> raceNames = predictionRepo.findDistinctRaceNames();
         model.addAttribute("raceNames", raceNames);
 
         return "accuracy/index";
     }
 
-    // 旧システム: 手動結果記録
+    // ── 旧システム: 手動結果記録 ────────────────────────
     @PostMapping("/record")
     public String recordResult(
             @RequestParam String raceName,
@@ -164,6 +197,78 @@ public class AccuracyController {
         ra.addFlashAttribute("success",
             raceName + " の結果を記録しました。1位的中: " + (hit1st ? "✓" : "✗")
             + "  TOP5的中: " + (top5Hit ? "✓" : "✗"));
+        return "redirect:/accuracy";
+    }
+
+    // ── 新システム: 手動結果記録 ────────────────────────
+    // 1〜3着を入力して race_specific_accuracy に書き込む
+    @PostMapping("/record-v2")
+    public String recordV2(
+            @RequestParam String raceName,
+            @RequestParam String first,
+            @RequestParam(required = false, defaultValue = "") String second,
+            @RequestParam(required = false, defaultValue = "") String third,
+            RedirectAttributes ra) {
+
+        if (raceName.isBlank() || first.isBlank()) {
+            ra.addFlashAttribute("error", "レース名と1着馬名は必須です");
+            return "redirect:/accuracy#tab-new";
+        }
+
+        try {
+            // 予想データ取得
+            List<Map<String, Object>> predictions = jdbc.queryForList(
+                "SELECT horse_name, rank_position, score, data_source" +
+                " FROM race_specific_result WHERE race_name = ?" +
+                " ORDER BY rank_position",
+                raceName);
+
+            if (predictions.isEmpty()) {
+                ra.addFlashAttribute("error", "予想データが見つかりません: " + raceName);
+                return "redirect:/accuracy#tab-new";
+            }
+
+            String first_  = first.trim();
+            String second_ = second.trim();
+            String third_  = third.trim();
+
+            List<String> top5Names = predictions.stream()
+                .limit(5).map(p -> (String) p.get("horse_name")).collect(Collectors.toList());
+
+            boolean hit1st  = predictions.get(0).get("horse_name").equals(first_);
+            boolean top5Hit = top5Names.contains(first_)
+                           || (!second_.isEmpty() && top5Names.contains(second_))
+                           || (!third_.isEmpty() && top5Names.contains(third_));
+
+            // 既存レコードを削除して上書き
+            jdbc.update("DELETE FROM race_specific_accuracy WHERE race_name = ?", raceName);
+
+            for (Map<String, Object> p : predictions) {
+                String horseName = (String) p.get("horse_name");
+                int predRank     = ((Number) p.get("rank_position")).intValue();
+                Double score     = p.get("score") != null ? ((Number) p.get("score")).doubleValue() : null;
+                String dataSrc   = (String) p.get("data_source");
+
+                Integer actualRank = null;
+                if (horseName.equals(first_))                          actualRank = 1;
+                else if (!second_.isEmpty() && horseName.equals(second_)) actualRank = 2;
+                else if (!third_.isEmpty()  && horseName.equals(third_))  actualRank = 3;
+
+                jdbc.update(
+                    "INSERT INTO race_specific_accuracy" +
+                    " (race_name, horse_name, predicted_rank, actual_rank, hit, top5_hit, score, data_source, recorded_at)" +
+                    " VALUES (?,?,?,?,?,?,?,?,NOW())",
+                    raceName, horseName, predRank, actualRank,
+                    hit1st && predRank == 1, top5Hit, score, dataSrc);
+            }
+
+            String msg = raceName + " 記録完了 — 1位的中: " + (hit1st ? "✅ HIT" : "✗ MISS")
+                       + "  TOP5的中: " + (top5Hit ? "✅ HIT" : "✗ MISS");
+            ra.addFlashAttribute("success", msg);
+
+        } catch (Exception e) {
+            ra.addFlashAttribute("error", "記録エラー: " + e.getMessage());
+        }
         return "redirect:/accuracy";
     }
 }

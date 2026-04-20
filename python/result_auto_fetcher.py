@@ -165,15 +165,17 @@ def scrape_actual_results(race_id):
     return results
 
 def search_race_id_by_name(conn, race_name, race_date=None):
-    """race_nameからrace_idを検索（近い日付優先）。DBになければnetkeibaを直接検索。"""
+    """race_nameからrace_idを検索。±180日以内のDBデータのみ使用し、なければnetkeibaを直接検索。"""
     cur = conn.cursor()
     if race_date:
+        # 年違いデータを使わないよう ±180日以内に限定
         cur.execute("""
             SELECT race_id FROM grade_race_result
             WHERE race_name ILIKE %s
+            AND ABS(race_date - %s::date) <= 180
             ORDER BY ABS(race_date - %s::date)
             LIMIT 1
-        """, (f"%{race_name}%", str(race_date)))
+        """, (f"%{race_name}%", str(race_date), str(race_date)))
     else:
         cur.execute("""
             SELECT race_id FROM grade_race_result

@@ -102,20 +102,25 @@ def find_unrecorded_new(conn):
         )
     """)
     conn.commit()
+    # grade_race_result に JOIN できなくても race_specific_result 単体で取得
+    # created_at が2日以上前 = レース当日以降に記録されたと仮定
+    # 日付の近い race_id のみ使用（±14日）して年違いを防ぐ
     cur.execute("""
         SELECT DISTINCT
             rsr.race_name,
-            gr.race_date,
+            COALESCE(gr.race_date, (rsr.created_at::date + INTERVAL '1 day')::date) AS race_date,
             gr.race_id
         FROM race_specific_result rsr
         LEFT JOIN grade_race_result gr
             ON gr.race_name ILIKE '%%' || rsr.race_name || '%%'
+            AND gr.race_date BETWEEN (rsr.created_at::date - INTERVAL '7 days')
+                                 AND (rsr.created_at::date + INTERVAL '14 days')
         WHERE NOT EXISTS (
             SELECT 1 FROM race_specific_accuracy rsa
             WHERE rsa.race_name = rsr.race_name
         )
-        AND gr.race_date < CURRENT_DATE
-        ORDER BY gr.race_date DESC NULLS LAST
+        AND rsr.created_at < NOW() - INTERVAL '1 day'
+        ORDER BY race_date DESC NULLS LAST
         LIMIT 30
     """)
     rows = cur.fetchall()
@@ -160,7 +165,7 @@ def scrape_actual_results(race_id):
     return results
 
 def search_race_id_by_name(conn, race_name, race_date=None):
-    """race_nameからrace_idを検索（近い日付優先）"""
+    """race_nameからrace_idを検索（近い日付優先）。DBになければnetkeibaを直接検索。"""
     cur = conn.cursor()
     if race_date:
         cur.execute("""
@@ -178,7 +183,75 @@ def search_race_id_by_name(conn, race_name, race_date=None):
         """, (f"%{race_name}%",))
     row = cur.fetchone()
     cur.close()
-    return row[0] if row else None
+    if row:
+        return row[0]
+
+    # DBに見つからない場合はnetkeibaを直接検索
+    return search_race_id_from_netkeiba(race_name, race_date)
+
+
+def search_race_id_from_netkeiba(race_name, race_date=None):
+    """netkeibaのレース検索でrace_idを取得（DBにない場合のフォールバック）"""
+    from datetime import datetime, timedelta
+    try:
+        # 検索対象の年月を決定
+        if race_date:
+            if isinstance(race_date, str):
+                dt = datetime.strptime(str(race_date)[:10], '%Y-%m-%d')
+            elif hasattr(race_date, 'year'):
+                dt = datetime(race_date.year, race_date.month, race_date.day)
+            else:
+                dt = datetime.today()
+        else:
+            dt = datetime.today()
+
+        # 検索キーワードを生成（S→ステークス などの略称も正規化）
+        kw_variants = [race_name]
+        # 略称展開
+        if race_name.endswith('S') or race_name.endswith('Ｓ'):
+            base = race_name[:-1]
+            kw_variants.append(base + 'ステークス')
+            kw_variants.append(base)
+        # 不要な記号除去
+        kw_variants.append(re.sub(r'[Ｓ\s　]', '', race_name))
+
+        # 当月と前後月を検索（最大3ヶ月）
+        months_to_check = []
+        for delta in [0, -1, 1]:
+            m_dt = dt + timedelta(days=delta*30)
+            months_to_check.append((m_dt.year, m_dt.month))
+
+        for year, mon in months_to_check:
+            url = (
+                "https://db.netkeiba.com/?pid=race_search_detail"
+                f"&start_year={year}&start_mon={mon}"
+                f"&end_year={year}&end_mon={mon}"
+                "&grade[]=1&grade[]=2&grade[]=3&grade[]=4&grade[]=5&grade[]=6"
+                "&track[]=1&track[]=2&sort=date&list=500"
+            )
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            resp.encoding = 'EUC-JP'
+            soup = BeautifulSoup(resp.text, 'lxml')
+
+            for a in soup.select('a[href*="/race/"]'):
+                link_text = a.text.strip()
+                href = a.get('href', '')
+                m = re.search(r'/race/(\d{12})/?', href)
+                if not m:
+                    continue
+                # いずれかのキーワードで部分一致
+                if any(kw and kw in link_text for kw in kw_variants):
+                    race_id = m.group(1)
+                    print(f"    [netkeiba検索] {link_text} → race_id={race_id}")
+                    return race_id
+
+            time.sleep(1)
+
+        print(f"    [netkeiba検索] '{race_name}' が見つかりませんでした")
+        return None
+    except Exception as e:
+        print(f"    [netkeiba検索エラー] {e}")
+        return None
 
 # ------------------------------------------------------------------
 # ③ 的中記録を保存

@@ -130,6 +130,7 @@
                 <a href="/calendar"     style="background:rgba(255,255,255,0.05);">📅 カレンダー</a>
                 <a href="/entry"        style="background:rgba(255,255,255,0.05);">🐴 出走馬</a>
                 <a href="/accuracy"     style="background:rgba(255,255,255,0.05);">📈 的中率</a>
+                <a th:href="@{/high-dividend}" th:classappend="${currentPage == 'high-dividend'} ? 'active'" style="background:rgba(201,168,76,0.12);">💰 万馬券</a>
                 <a href="/health"       style="background:rgba(255,255,255,0.03);">🩺 ヘルス</a>
             </div>
             <button class="nav-hamburger" onclick="toggleNav()" aria-label="メニュー">
@@ -147,6 +148,7 @@
         <a href="/calendar">📅 カレンダー</a>
         <a href="/entry">🐴 出走馬</a>
         <a href="/accuracy">📈 的中率</a>
+        <a href="/high-dividend">💰 万馬券</a>
         <a href="/script">🖥️ スクリプト</a>
         <a href="/health">🩺 ヘルス</a>
     </div>

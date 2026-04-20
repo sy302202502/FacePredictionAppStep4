@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>万馬券チャレンジ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon:#7dff4f; --neon-dim:#3a7d22; --neon-glow:rgba(125,255,79,0.32);
+            --orange:#ff8000; --orange-glow:rgba(255,128,0,0.38);
+            --gold:#c9a84c; --gold-light:#f5d878;
+            --crimson:#ff2244; --crimson-dim:#7a0818;
+            --purple:#8b5cf6; --purple-glow:rgba(139,92,246,0.35);
+            --deep:#050708; --surface:#0b0e0b; --surface2:#111811; --surface3:#182018;
+            --panel:rgba(10,14,10,0.93); --text:#d4e8cc; --text-muted:#607860;
+        }
+        body { font-family:'Noto Sans JP',sans-serif; background:var(--deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(125,255,79,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(125,255,79,0.02) 1px,transparent 1px); background-size:44px 44px; pointer-events:none; z-index:0; }
+        body::after { content:''; position:fixed; inset:0; background:radial-gradient(ellipse at 10% 15%,rgba(139,92,246,0.12) 0%,transparent 50%),radial-gradient(ellipse at 90% 85%,rgba(255,128,0,0.08) 0%,transparent 50%); pointer-events:none; z-index:0; }
+        .scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,rgba(0,0,0,0.1) 0px,rgba(0,0,0,0.1) 1px,transparent 1px,transparent 3px); pointer-events:none; z-index:1; }
+        .page-body { position:relative; z-index:2; max-width:900px; margin:0 auto; padding:0 16px 100px; }
+        .glass-card { background:var(--panel); border:1px solid rgba(125,255,79,0.13); border-radius:5px; backdrop-filter:blur(10px); box-shadow:0 4px 24px rgba(0,0,0,0.7); margin-bottom:16px; overflow:hidden; position:relative; }
+        .glass-card::before { content:''; position:absolute; top:4px; left:4px; width:12px; height:12px; border-top:1px solid var(--neon-dim); border-left:1px solid var(--neon-dim); opacity:0.5; pointer-events:none; }
+        .glass-card::after { content:''; position:absolute; bottom:4px; right:4px; width:12px; height:12px; border-bottom:1px solid rgba(139,92,246,0.5); border-right:1px solid rgba(139,92,246,0.5); opacity:0.5; pointer-events:none; }
+        .glass-card-inner { padding:22px 26px; }
+        .section-heading { display:flex; align-items:center; gap:10px; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:4px; color:var(--neon); margin:34px 0 14px; text-shadow:0 0 10px var(--neon-glow); }
+        .section-heading::before { content:'▶'; color:var(--purple); font-size:11px; }
+        .section-heading::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--neon-dim),rgba(139,92,246,0.3),transparent); opacity:0.7; }
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--deep)} ::-webkit-scrollbar-thumb{background:var(--neon-dim);border-radius:2px} ::-webkit-scrollbar-thumb:hover{background:var(--neon)}
+
+        /* ─── Page header ─── */
+        .page-header {
+            padding:32px 0 20px;
+            border-bottom:1px solid rgba(201,168,76,0.2);
+            margin-bottom:28px;
+            position:relative;
+        }
+        .page-header::before {
+            content:'';
+            position:absolute; top:0; left:0; right:0; height:3px;
+            background:linear-gradient(90deg,transparent,var(--gold),var(--orange),var(--neon),var(--orange),var(--gold),transparent);
+            background-size:300%;
+            animation:stripe-slide 4s linear infinite;
+        }
+        @keyframes stripe-slide { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .page-title {
+            font-family:'Bebas Neue',sans-serif;
+            font-size:36px;
+            letter-spacing:6px;
+            color:var(--gold-light);
+            text-shadow:0 0 20px rgba(201,168,76,0.6), 0 0 40px rgba(201,168,76,0.3);
+        }
+        .page-subtitle {
+            font-size:12px;
+            color:var(--text-muted);
+            letter-spacing:3px;
+            margin-top:4px;
+        }
+        .hd-badge {
+            display:inline-block;
+            font-family:'Bebas Neue',sans-serif;
+            font-size:13px;
+            letter-spacing:3px;
+            padding:4px 14px;
+            margin-top:10px;
+            background:rgba(201,168,76,0.12);
+            border:1px solid var(--gold);
+            border-radius:3px;
+            color:var(--gold-light);
+            animation:pulseBadge 2s ease-in-out infinite;
+        }
+        @keyframes pulseBadge {
+            0%, 100% { box-shadow: 0 0 10px var(--gold); }
+            50% { box-shadow: 0 0 30px var(--gold), 0 0 60px var(--orange); }
+        }
+
+        /* ─── Run button ─── */
+        .btn-run {
+            background: linear-gradient(135deg, rgba(255,128,0,0.18), rgba(201,168,76,0.1));
+            color: var(--orange);
+            border: 1px solid rgba(255,128,0,0.5);
+            border-radius: 4px;
+            padding: 14px 36px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 18px;
+            letter-spacing: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: block;
+            width: 100%;
+            text-align: center;
+        }
+        .btn-run:hover:not(:disabled) {
+            border-color: var(--orange);
+            box-shadow: 0 0 30px var(--orange-glow), 0 0 60px rgba(255,128,0,0.15);
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        .btn-run:disabled { opacity: 0.35; cursor: default; }
+
+        /* ─── Spinner ─── */
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,128,0,0.2);
+            border-top-color: var(--orange);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── Log panel ─── */
+        #log-panel {
+            display: none;
+            background: #020402;
+            color: var(--neon);
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 12px 16px;
+            max-height: 260px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            border-radius: 3px;
+            border: 1px solid rgba(125,255,79,0.12);
+            line-height: 1.8;
+            margin-top: 14px;
+        }
+        .log-step1 { color: #88aaff; }
+        .log-step2 { color: var(--purple); }
+        .log-step3 { color: var(--orange); }
+        .log-step4 { color: var(--gold); }
+        .log-step5 { color: var(--neon); }
+        .log-done  { color: var(--neon); font-weight: bold; }
+        .log-err   { color: var(--crimson); }
+        .log-selected { color: var(--gold-light); font-weight: bold; }
+
+        /* ─── Result card ─── */
+        #result-card {
+            display: none;
+        }
+        #result-card.revealed {
+            display: block;
+            animation: revealRace 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        @keyframes revealRace {
+            0% { transform: scale(0.8); opacity: 0; }
+            60% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .result-inner {
+            padding: 28px 32px;
+        }
+        .result-label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 14px;
+            letter-spacing: 4px;
+            color: var(--gold);
+            text-shadow: 0 0 10px rgba(201,168,76,0.5);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .result-label::before { content: '▶'; color: var(--orange); font-size: 11px; }
+
+        .result-race-name {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 42px;
+            letter-spacing: 5px;
+            color: var(--neon);
+            text-shadow: 0 0 20px var(--neon-glow), 0 0 40px rgba(125,255,79,0.2);
+            line-height: 1;
+            margin-bottom: 18px;
+        }
+
+        .result-stats {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .stat-label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+        }
+        .stat-value {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 22px;
+            letter-spacing: 2px;
+            color: var(--text);
+        }
+        .stat-value.highlight { color: var(--orange); text-shadow: 0 0 8px var(--orange-glow); }
+
+        /* 混戦度スコアバー */
+        .chaos-wrap { margin-bottom: 20px; }
+        .chaos-label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .chaos-label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 12px;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+        }
+        .chaos-score-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 18px;
+            color: var(--orange);
+            text-shadow: 0 0 8px var(--orange-glow);
+        }
+        .chaos-bar-wrap {
+            background: rgba(255,128,0,0.1);
+            border-radius: 999px;
+            height: 8px;
+            border: 1px solid rgba(255,128,0,0.2);
+        }
+        .chaos-bar {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255,128,0,0.6), var(--orange));
+            box-shadow: 0 0 10px var(--orange-glow);
+            transition: width 1s ease;
+        }
+
+        /* 厳選理由 */
+        .selection-reason {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.75;
+            border-left: 2px solid rgba(201,168,76,0.4);
+            padding: 10px 14px;
+            background: rgba(201,168,76,0.04);
+            border-radius: 0 4px 4px 0;
+            margin-bottom: 22px;
+        }
+
+        /* リンクボタン */
+        .btn-predict {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(125,255,79,0.12), rgba(139,92,246,0.1));
+            color: var(--neon);
+            border: 1px solid rgba(125,255,79,0.4);
+            border-radius: 4px;
+            padding: 11px 28px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 16px;
+            letter-spacing: 3px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .btn-predict:hover {
+            border-color: var(--neon);
+            box-shadow: 0 0 20px var(--neon-glow);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        /* result card gold border */
+        #result-card .glass-card {
+            border-color: rgba(201,168,76,0.35);
+            box-shadow: 0 4px 40px rgba(201,168,76,0.15), 0 0 80px rgba(255,128,0,0.05);
+        }
+
+        @media (max-width:640px) {
+            .page-title { font-size:26px; }
+            .result-race-name { font-size:28px; }
+            .result-stats { gap:14px; }
+            .btn-run { font-size:15px; padding:12px; }
+        }
+    </style>
+</head>
+<body>
+<div class="scanlines"></div>
+<div th:replace="fragments/navbar :: navbar"></div>
+
+<div class="page-body">
+
+    <!-- ページヘッダー -->
+    <div class="page-header">
+        <div class="page-title">💰 万馬券チャレンジ</div>
+        <div class="page-subtitle">週末最高配当レース 自動厳選</div>
+        <div class="hd-badge">🎯 HIGH DIVIDEND</div>
+    </div>
+
+    <!-- 厳選ボタンエリア -->
+    <div class="section-heading">RACE SELECTION</div>
+    <div class="glass-card">
+        <div class="glass-card-inner">
+            <button class="btn-run" id="run-btn" onclick="startStream()">
+                今週末のレースを厳選する
+            </button>
+            <div id="log-panel"></div>
+        </div>
+    </div>
+
+    <!-- 厳選結果エリア -->
+    <div id="result-card">
+        <div class="section-heading">SELECTED RACE</div>
+        <div class="glass-card">
+            <div class="result-inner">
+                <div class="result-label">🎯 今週の万馬券ターゲット</div>
+                <div class="result-race-name" id="result-race-name">—</div>
+
+                <div class="result-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">頭数</span>
+                        <span class="stat-value highlight" id="result-horse-count">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">1番人気オッズ</span>
+                        <span class="stat-value highlight" id="result-fav-odds">—</span>
+                    </div>
+                </div>
+
+                <div class="chaos-wrap">
+                    <div class="chaos-label-row">
+                        <span class="chaos-label">混戦度スコア</span>
+                        <span class="chaos-score-num" id="result-chaos-num">0</span>
+                    </div>
+                    <div class="chaos-bar-wrap">
+                        <div class="chaos-bar" id="result-chaos-bar" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <div class="selection-reason" id="result-reason">—</div>
+
+                <a id="btn-predict" class="btn-predict" href="#">→ 顔面予想を見る</a>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /page-body -->
+
+<script>
+let _es = null;
+
+function startStream() {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 厳選中...';
+
+    const logPanel = document.getElementById('log-panel');
+    logPanel.style.display = 'block';
+    logPanel.innerHTML = '';
+
+    if (_es) { _es.close(); _es = null; }
+
+    _es = new EventSource('/high-dividend/run-stream');
+
+    _es.onmessage = function(e) {
+        const line = e.data;
+
+        if (line === '__DONE__') {
+            _es.close(); _es = null;
+            resetBtn();
+            return;
+        }
+
+        // 厳選完了ライン検出
+        if (line.includes('SELECTED_RACE:')) {
+            const raceName = line.split('SELECTED_RACE:')[1].trim();
+            addLog(line, 'log-selected');
+            fetchResult(raceName);
+            return;
+        }
+
+        // ステップ別色分け
+        let cls = '';
+        if (line.includes('Step1') || line.includes('[1/')) cls = 'log-step1';
+        else if (line.includes('Step2') || line.includes('[2/')) cls = 'log-step2';
+        else if (line.includes('Step3') || line.includes('[3/')) cls = 'log-step3';
+        else if (line.includes('Step4') || line.includes('[4/')) cls = 'log-step4';
+        else if (line.includes('Step5') || line.includes('[5/')) cls = 'log-step5';
+        else if (line.includes('✅') || line.includes('完了') || line.includes('完成')) cls = 'log-done';
+        else if (line.includes('❌') || line.includes('失敗') || line.includes('エラー') || line.includes('ERROR')) cls = 'log-err';
+
+        addLog(line, cls);
+    };
+
+    _es.onerror = function() {
+        _es.close(); _es = null;
+        resetBtn();
+    };
+}
+
+function addLog(text, cls) {
+    const p = document.getElementById('log-panel');
+    const d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = text;
+    p.appendChild(d);
+    p.scrollTop = p.scrollHeight;
+}
+
+function resetBtn() {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = false;
+    btn.innerHTML = '今週末のレースを厳選する';
+}
+
+function fetchResult(raceNameHint) {
+    fetch('/high-dividend/result')
+        .then(r => r.json())
+        .then(data => {
+            if (!data || Object.keys(data).length === 0) return;
+
+            const raceName = data.raceName || raceNameHint || '—';
+            document.getElementById('result-race-name').textContent = raceName;
+            document.getElementById('result-horse-count').textContent =
+                data.horseCount != null ? data.horseCount + '頭' : '—';
+            document.getElementById('result-fav-odds').textContent =
+                data.favoriteOdds != null ? data.favoriteOdds + '倍' : '—';
+            document.getElementById('result-reason').textContent =
+                data.selectionReason || '—';
+
+            // 混戦度スコアバー
+            const score = parseFloat(data.chaosScore) || 0;
+            const pct = Math.min(Math.max(score, 0), 100);
+            document.getElementById('result-chaos-num').textContent = score.toFixed(1);
+            document.getElementById('result-chaos-bar').style.width = pct + '%';
+
+            // 予想ページへのリンク
+            const link = '/predict-v2?raceName=' + encodeURIComponent(raceName);
+            document.getElementById('btn-predict').href = link;
+
+            // カードをアニメーション付きで表示
+            const card = document.getElementById('result-card');
+            card.style.display = 'block';
+            // forceReflow
+            void card.offsetWidth;
+            card.classList.add('revealed');
+        })
+        .catch(function() { /* 取得失敗時は無視 */ });
+}
+</script>
+</body>
+</html>

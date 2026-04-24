@@ -34,8 +34,17 @@ W_MID_ODDS      = 1.0    # 3〜5番人気の平均オッズ
 # 重賞ペナルティ
 GRADE_PENALTY = {'G1': -20, 'G2': -10, 'G3': -5}
 
+# 汎用クラス名（顔面分析が機能しない）には大きなペナルティ
+GENERIC_RACE_RE = re.compile(
+    r'(\d歳(?:以上)?(?:未勝利|\d勝クラス|障害(?:未勝利|オープン|OP))|新馬|未出走)'
+)
+GENERIC_PENALTY = -200
+
 # 5頭未満のレースは除外
 MIN_HORSE_COUNT = 5
+
+# 1番人気オッズがこの値未満のレースは万馬券候補から除外（本命が強すぎるレース）
+MIN_FAVORITE_ODDS = 2.5
 
 # 一般戦は頭数が多い上位N件のみ対象
 MAX_NON_GRADE_RACES = 20
@@ -193,82 +202,87 @@ def fetch_all_races_for_date(target_date):
 
 def fetch_odds_info(race_id):
     """
-    単勝オッズページを取得し、人気順にソートされたオッズリストを返す。
+    netkeiba オッズJSON APIから単勝オッズを取得し、人気順にソートされたオッズリストを返す。
+    ※ネケイバのオッズ表示はJavaScriptで動的ロードされるため、HTMLスクレイピングではなく
+      内部APIを直接呼び出す方式に変更。
+
     戻り値: list of {'horse_name': str, 'odds': float, 'popularity': int}
             取得失敗時は None
     """
-    url = f"https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1"
+    api_headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Referer': f'https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1',
+    }
+
+    # --- Step A: 馬番→馬名 マッピングを取得 ---
+    # 枠確定済みレース: オッズHTMLから col1=馬番(01,02,..) → col4=馬名
+    # 枠未確定レース: shutubaのtr_IDが内部エントリIDとなりAPIキーと一致する
+    horse_map = {}  # API key → 馬名
+
+    html_url = f"https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1"
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(html_url, headers=api_headers, timeout=15)
         resp.encoding = 'EUC-JP'
         soup = BeautifulSoup(resp.text, 'lxml')
-    except Exception as e:
+        table = soup.find('table', class_='RaceOdds_HorseList_Table')
+        if table:
+            for row in table.find_all('tr')[1:]:
+                cols = row.find_all('td')
+                if len(cols) < 5:
+                    continue
+                num_txt = cols[1].text.strip()  # col1 = 馬番
+                name_txt = cols[4].text.strip()  # col4 = 馬名
+                if num_txt.isdigit() and name_txt:
+                    horse_map[num_txt.zfill(2)] = name_txt  # '01' → name
+    except Exception:
+        pass
+
+    # 枠確定前（horse_mapが空）の場合: 出馬表のtr_IDで紐付け
+    # （枠未確定時、APIキーはゼロパディングなしの内部エントリIDと一致）
+    if not horse_map:
+        shutuba_url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
+        try:
+            resp2 = requests.get(shutuba_url, headers=api_headers, timeout=15)
+            resp2.encoding = 'EUC-JP'
+            soup2 = BeautifulSoup(resp2.text, 'lxml')
+            shutuba_table = soup2.find('table', class_='Shutuba_Table')
+            if shutuba_table:
+                for row in shutuba_table.find_all('tr', class_=re.compile(r'HorseList')):
+                    tr_id = row.get('id', '')  # 'tr_21', 'tr_1', ...
+                    horse_link = row.find('a', href=re.compile(r'/horse/'))
+                    if tr_id.startswith('tr_') and horse_link:
+                        entry_id = tr_id[3:]  # '21', '1', ...
+                        horse_map[entry_id] = horse_link.text.strip()
+        except Exception:
+            pass
+
+    # --- Step B: JSON APIから単勝オッズを取得 ---
+    api_url = (
+        f"https://race.netkeiba.com/api/api_get_jra_odds.html"
+        f"?race_id={race_id}&type=1&action=init"
+    )
+    try:
+        api_resp = requests.get(api_url, headers=api_headers, timeout=15)
+        api_data = api_resp.json()
+        odds_raw = api_data['data']['odds']['1']  # '1' = 単勝
+    except Exception:
         return None
 
     results = []
-
-    # 新形式: RaceOdds_HorseList_Table / 旧形式: odds_tan_block
-    table = (soup.find('table', class_='RaceOdds_HorseList_Table')
-             or soup.find('table', id='odds_tan_block')
-             or soup.find('table', class_=re.compile(r'Odds')))
-
-    if table:
-        for row in table.find_all('tr')[1:]:
-            cols = row.find_all('td')
-            if len(cols) < 4:
+    for horse_num_str, vals in odds_raw.items():
+        try:
+            odds_val = float(vals[0])
+            popularity = int(vals[2]) if len(vals) > 2 and str(vals[2]) not in ('0', '') else 0
+            if odds_val <= 1.0:
                 continue
-            try:
-                # 馬名: リンク or テキスト（4〜5列目あたり）
-                horse_link = row.find('a', href=re.compile(r'/horse/'))
-                if not horse_link:
-                    # リンクなしの場合は4列目のテキストを馬名とする
-                    horse_name = cols[4].text.strip() if len(cols) > 4 else cols[3].text.strip()
-                else:
-                    horse_name = horse_link.text.strip()
-                if not horse_name:
-                    continue
-
-                # 馬番（1列目または2列目の数字）
-                pop = 0
-                for ci in range(min(2, len(cols))):
-                    txt = cols[ci].text.strip()
-                    if txt.isdigit():
-                        pop = int(txt)
-                        break
-
-                # オッズ: 最後の列から `数字.数字` 形式を探す
-                odds_val = None
-                for col in reversed(cols):
-                    txt = col.text.strip().replace(',', '')
-                    if re.match(r'^\d+\.\d+$', txt):
-                        odds_val = float(txt)
-                        break
-                    # "---.-" や空は未発表オッズ → スキップ
-                    if txt in ('---.-', '---', '', '-'):
-                        continue
-
-                if odds_val and odds_val > 1.0:
-                    results.append({'horse_name': horse_name, 'odds': odds_val, 'popularity': pop})
-            except Exception:
-                continue
-    else:
-        # フォールバック: HorseList行から取得
-        for row in soup.find_all('tr', class_=re.compile(r'HorseList')):
-            cols = row.find_all('td')
-            if len(cols) < 5:
-                continue
-            horse_link = row.find('a', href=re.compile(r'/horse/'))
-            if not horse_link:
-                continue
-            horse_name = horse_link.text.strip()
-            for col in cols:
-                txt = col.text.strip()
-                if re.match(r'^\d+\.\d+$', txt):
-                    try:
-                        results.append({'horse_name': horse_name, 'odds': float(txt), 'popularity': 0})
-                    except Exception:
-                        pass
-                    break
+            # 枠確定レース: APIキー '01' → horse_map['01']
+            # 枠未確定レース: APIキー '19' → horse_map['19'] (shutuba tr_id)
+            horse_name = (horse_map.get(horse_num_str)
+                          or horse_map.get(horse_num_str.lstrip('0') or '0')
+                          or f'馬番{int(horse_num_str)}')
+            results.append({'horse_name': horse_name, 'odds': odds_val, 'popularity': popularity})
+        except (ValueError, IndexError, TypeError):
+            continue
 
     if not results:
         return None
@@ -288,6 +302,10 @@ def calc_chaos_score(odds_list, grade):
     grade: 'G1' / 'G2' / 'G3' / 'OP' / 'L' / ''
     """
     if not odds_list or len(odds_list) < MIN_HORSE_COUNT:
+        return None, {}
+
+    # 1番人気オッズが低すぎるレースは万馬券候補から除外
+    if odds_list[0]['odds'] < MIN_FAVORITE_ODDS:
         return None, {}
 
     odds_values = [h['odds'] for h in odds_list]
@@ -327,6 +345,13 @@ def calc_chaos_score(odds_list, grade):
     }
 
     return score, detail
+
+
+def apply_generic_penalty(race_name, score):
+    """汎用クラス名（3歳未勝利等）には顔面分析が機能しないためペナルティを付加。"""
+    if GENERIC_RACE_RE.search(race_name):
+        return score + GENERIC_PENALTY
+    return score
 
 
 # ------------------------------------------------------------------
@@ -568,12 +593,16 @@ def main():
             time.sleep(0.5)
             continue
 
+        # 汎用クラス名には顔面分析不可ペナルティを付加
+        adjusted_score = apply_generic_penalty(race_info['race_name'], score)
+
         race_info['odds_list'] = odds_list
         race_info['detail'] = detail
-        race_info['chaos_score'] = score
+        race_info['chaos_score'] = adjusted_score
 
+        generic_note = ' [汎用レース-ペナルティ]' if adjusted_score != score else ''
         print(f"  → {race_info['race_name']}: 1番人気={detail['favorite_odds']}倍, "
-              f"{detail['horse_count']}頭, 混戦度={score:.1f}")
+              f"{detail['horse_count']}頭, 混戦度={adjusted_score:.1f}{generic_note}")
 
         scored_races.append(race_info)
         time.sleep(0.5)
@@ -591,22 +620,9 @@ def main():
 
     print(f"  🎯 厳選完了: {best['race_name']} (混戦度スコア: {best['chaos_score']:.1f})")
 
-    # 選定理由
-    reason = build_selection_reason(best['race_name'], detail, odds_list, best['grade'])
-    print(f"  理由: {reason}")
-
-    top5_json_str = json.dumps(
-        [{'horse_name': h['horse_name'], 'odds': h['odds'], 'popularity': h['popularity']}
-         for h in odds_list[:5]],
-        ensure_ascii=False
-    )
-
-    # DB接続
+    # DB接続（Step4で馬名補完後にreasonを生成するため、先に接続だけ確立）
     conn = get_conn()
     ensure_table(conn)
-
-    # DB保存 (Step6)
-    save_selection(conn, best, detail, reason, top5_json_str)
 
     # ---- Step4 ----
     print("[Step4] 出走馬をrace_entryに登録中...")
@@ -621,10 +637,36 @@ def main():
         # venue が shutuba から取れた場合は更新
         if scraped_name:
             final_race_name = scraped_name  # shutubaからの正式名称を優先
+
+        # shutuba エントリから 馬番→馬名 マッピングを作り、odds_list の馬名を補完
+        entry_num_to_name = {
+            e['horse_number']: e['horse_name']
+            for e in entries if e.get('horse_number') and e.get('horse_name')
+        }
+        for h in odds_list:
+            if h['horse_name'].startswith('馬番'):
+                try:
+                    num = int(h['horse_name'].replace('馬番', ''))
+                    if num in entry_num_to_name:
+                        h['horse_name'] = entry_num_to_name[num]
+                except ValueError:
+                    pass
+
         save_entries_to_db(conn, best['race_id'], final_race_name, best['race_date'],
                            best['grade'], venue or '', distance, surface, category, entries)
         print(f"  → {len(entries)}頭を登録完了")
 
+    # 馬名が補完されたので選定理由を生成
+    reason = build_selection_reason(final_race_name, detail, odds_list, best['grade'])
+    print(f"  理由: {reason}")
+    top5_json_str = json.dumps(
+        [{'horse_name': h['horse_name'], 'odds': h['odds'], 'popularity': h['popularity']}
+         for h in odds_list[:5]],
+        ensure_ascii=False
+    )
+
+    # DB保存 (Step6)
+    save_selection(conn, best, detail, reason, top5_json_str)
     conn.close()
 
     # ---- Step5 ----

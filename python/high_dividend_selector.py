@@ -207,28 +207,47 @@ def fetch_odds_info(race_id):
 
     results = []
 
-    # odds_tan_block テーブルを優先
-    table = soup.find('table', id='odds_tan_block') or soup.find('table', class_=re.compile(r'Odds'))
+    # 新形式: RaceOdds_HorseList_Table / 旧形式: odds_tan_block
+    table = (soup.find('table', class_='RaceOdds_HorseList_Table')
+             or soup.find('table', id='odds_tan_block')
+             or soup.find('table', class_=re.compile(r'Odds')))
 
     if table:
         for row in table.find_all('tr')[1:]:
             cols = row.find_all('td')
-            if len(cols) < 3:
+            if len(cols) < 4:
                 continue
             try:
+                # 馬名: リンク or テキスト（4〜5列目あたり）
                 horse_link = row.find('a', href=re.compile(r'/horse/'))
                 if not horse_link:
+                    # リンクなしの場合は4列目のテキストを馬名とする
+                    horse_name = cols[4].text.strip() if len(cols) > 4 else cols[3].text.strip()
+                else:
+                    horse_name = horse_link.text.strip()
+                if not horse_name:
                     continue
-                horse_name = horse_link.text.strip()
-                pop_text = cols[0].text.strip()
-                pop = int(pop_text) if pop_text.isdigit() else 0
+
+                # 馬番（1列目または2列目の数字）
+                pop = 0
+                for ci in range(min(2, len(cols))):
+                    txt = cols[ci].text.strip()
+                    if txt.isdigit():
+                        pop = int(txt)
+                        break
+
+                # オッズ: 最後の列から `数字.数字` 形式を探す
                 odds_val = None
-                for col in cols:
+                for col in reversed(cols):
                     txt = col.text.strip().replace(',', '')
                     if re.match(r'^\d+\.\d+$', txt):
                         odds_val = float(txt)
                         break
-                if odds_val:
+                    # "---.-" や空は未発表オッズ → スキップ
+                    if txt in ('---.-', '---', '', '-'):
+                        continue
+
+                if odds_val and odds_val > 1.0:
                     results.append({'horse_name': horse_name, 'odds': odds_val, 'popularity': pop})
             except Exception:
                 continue

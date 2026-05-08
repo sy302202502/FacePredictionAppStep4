@@ -318,7 +318,7 @@ def download_horse_image(horse_id, horse_name, save_dir=None):
         url = f"https://db.netkeiba.com/show_photo.php?horse_id={horse_id}&no={photo_no}&tn=no&tmp=no"
         try:
             r = requests.get(url, headers=HEADERS, timeout=15)
-            if r.status_code == 200 and len(r.content) > 5000:
+            if r.status_code == 200 and len(r.content) > 5000 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
                 rel = save_path.replace(os.path.dirname(__file__) + '/../', '/')
@@ -326,14 +326,17 @@ def download_horse_image(horse_id, horse_name, save_dir=None):
         except Exception:
             pass
 
-    # CDN fallback
+    # CDN fallback（db.netkeiba.comが正しいURL、cdn.は404になるため順序修正）
     for cdn in [
+        f"https://db.netkeiba.com/horse/pic/{horse_id}_l.jpg",
+        f"https://db.netkeiba.com/horse/pic/{horse_id}.jpg",
         f"https://cdn.netkeiba.com/horse/pic/{horse_id}_l.jpg",
         f"https://cdn.netkeiba.com/horse/pic/{horse_id}.jpg",
     ]:
         try:
             r = requests.get(cdn, headers=HEADERS, timeout=10)
-            if r.status_code == 200 and len(r.content) > 5000:
+            # JPEGマジックバイト(FF D8)で正規画像のみ保存
+            if r.status_code == 200 and len(r.content) > 5000 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
                 rel = save_path.replace(os.path.dirname(__file__) + '/../', '/')
@@ -446,28 +449,50 @@ confidence: float 0.0-1.0
 Observe the actual horse in the image and choose the values that best match what you see.
 """
 
-def analyze_face_with_claude(client, abs_path):
+SKIP_LLAVA = os.environ.get('SKIP_LLAVA', '0') == '1'          # 歴史馬スキップ用
+SKIP_LLAVA_ENTRY = os.environ.get('SKIP_LLAVA_ENTRY', '0') == '1'  # 出走馬もスキップ（緊急用）
+
+def analyze_face_with_claude(client, abs_path, force=False):
     """
     llava:7b（ローカル）で顔特徴を分析して返す。
+    force=True: 出走馬分析（SKIP_LLAVAより優先）
     引数 client は互換性のために残しているが使用しない。
+    force=True のとき SKIP_LLAVA フラグを無視して実行する（出走馬分析用）。
     戻り値: features dict or None
     """
+    if SKIP_LLAVA_ENTRY:
+        return None  # 出走馬も含む完全スキップ
+    if SKIP_LLAVA and not force:
+        return None  # llavaスキップ：統計ベース分析のみ（過去馬）
+    # force=True（出走馬）はSKIP_LLAVAを無視して実行
     try:
         if not os.path.exists(abs_path):
             return None
         with open(abs_path, 'rb') as f:
             img_b64 = base64.b64encode(f.read()).decode()
 
+        # ストリームモードで取得（チャンク間タイムアウト300秒）
+        # stream=True + timeout=(connect, read_per_chunk) でモデルロード中でも切れない
         resp = requests.post(OLLAMA_URL, json={
             'model': OLLAMA_MODEL,
             'prompt': LLAVA_PROMPT,
             'images': [img_b64],
-            'stream': False,
-            'keep_alive': 300,  # 5分間モデル常駐（毎回ロードを避けて高速化）
+            'stream': True,
+            'keep_alive': 600,  # 10分間モデル常駐（連続分析中にアンロード防止）
             'options': {'temperature': 0.5}
-        }, timeout=180)
+        }, stream=True, timeout=(10, 300))  # (接続10秒, チャンク間300秒)
         resp.raise_for_status()
-        raw = resp.json().get('response', '')
+        # ストリームを結合してレスポンスを得る
+        raw = ''
+        for line in resp.iter_lines():
+            if line:
+                try:
+                    chunk = json.loads(line.decode())
+                    raw += chunk.get('response', '')
+                    if chunk.get('done', False):
+                        break
+                except json.JSONDecodeError:
+                    pass
 
         # JSONブロックを抽出
         j_start = raw.find('{')
@@ -502,7 +527,7 @@ def analyze_face_with_claude(client, abs_path):
         print(f"    [エラー] Ollamaに接続できません。ollama serve が起動しているか確認してください")
         return None
     except requests.exceptions.Timeout:
-        print(f"    [エラー] llava応答タイムアウト（180秒）。メモリ不足の可能性があります")
+        print(f"    [エラー] llava応答タイムアウト（300秒）。メモリ不足の可能性があります")
         # タイムアウト後にモデルを解放してリトライ
         try:
             requests.post(OLLAMA_URL, json={'model': OLLAMA_MODEL, 'keep_alive': 0}, timeout=10)
@@ -1480,12 +1505,12 @@ def main():
                 data_src = 'image'
                 print(f"    → 既存分析データを使用")
 
-        # ②画像があれば新規分析
+        # ②画像があれば新規分析（出走馬なのでforce=Trueでllava強制実行）
         if features is None and img_path:
             abs_p = os.path.join(os.path.dirname(__file__), '..', img_path.lstrip('/'))
             if os.path.exists(abs_p):
                 print(f"    → llava:7bで分析中...")
-                features = analyze_face_with_claude(client, abs_p)
+                features = analyze_face_with_claude(client, abs_p, force=True)
                 if features:
                     data_src = 'image'
                     print(f"    → 分析完了")
@@ -1500,7 +1525,7 @@ def main():
                 candidate_img = os.path.join(UPLOAD_DIR_CANDIDATES, f"{horse_id}.jpg")
             if os.path.exists(candidate_img):
                 print(f"    → 候補画像でllava分析中...")
-                features = analyze_face_with_claude(client, candidate_img)
+                features = analyze_face_with_claude(client, candidate_img, force=True)
                 if features:
                     data_src = 'image'
                     img_path = f"/uploads/candidates/{horse_id}.jpg"
@@ -1609,7 +1634,7 @@ def main():
             'confidence_level': conf_lv,
             'comment':         comment,
         })
-        print(f"    → 顔:{face_sc:.1f} 統計:{stats_sc:.1f} 体重:{w_sc:.1f} 父馬:{s_sc:.1f} → 合計:{sc:.1f}点  [{data_src}]")
+        print(f"    → 合計:{sc:.1f}点")
 
     # ----------------------------------------------------------------
     # Step8: ランキング → DB保存
@@ -1639,10 +1664,8 @@ def main():
     print(f"{'='*60}")
     for r in prediction_results[:5]:
         mark = {1:'◎', 2:'○', 3:'▲', 4:'△', 5:'×'}.get(r['rank_position'], ' ')
-        src_label = {'image':'画像', 'pedigree':'血統推定', 'no_data':'データなし'}.get(r['data_source'], r['data_source'])
-        print(f"  {mark} {r['rank_position']}位: {r['horse_name']:<12} {r['score']:.1f}点  [{src_label}]")
+        print(f"  {mark} {r['rank_position']}位: {r['horse_name']:<12} {r['score']:.1f}点")
         print(f"       {r['comment'][:60]}")
-    print(f"\n  信頼度: {'★' * confidence}{'☆' * (5-confidence)}  分析馬数:{len(analyzed)}頭")
     print(f"\n予想結果は http://localhost:8081/predict-v2?raceName={requests.utils.quote(race_name)} で確認できます")
 
     # llava:7b をRAMから解放（全頭完了後に1回だけ）

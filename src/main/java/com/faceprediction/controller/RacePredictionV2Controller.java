@@ -36,7 +36,7 @@ public class RacePredictionV2Controller {
         model.addAttribute("selectedRace", selected);
 
         if (selected != null) {
-            Optional<RaceSpecificPrediction> patternOpt = patternRepo.findByRaceName(selected);
+            Optional<RaceSpecificPrediction> patternOpt = patternRepo.findFirstByRaceNameOrderByAnalyzedAtDesc(selected);
             patternOpt.ifPresent(p -> {
                 model.addAttribute("pattern", p);
                 // 信頼度を星文字列に変換

@@ -131,18 +131,55 @@ def fetch_shutuba_entries(race_id):
 
     return entries, distance, surface, race_name, venue
 
+def get_horse_photo_no(horse_id):
+    """馬詳細ページからshow_photo.phpのno番号を取得"""
+    from bs4 import BeautifulSoup
+    try:
+        r = requests.get(f"https://db.netkeiba.com/horse/{horse_id}/", headers=HEADERS, timeout=15)
+        r.encoding = 'EUC-JP'
+        soup = BeautifulSoup(r.text, 'lxml')
+        for img in soup.find_all('img'):
+            m = re.search(r'show_photo\.php\?horse_id=\d+&no=(\d+)', img.get('src', ''))
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return None
+
 def download_image(horse_id, horse_name):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     save_path = os.path.join(UPLOAD_DIR, f"{horse_id}.jpg")
     if os.path.exists(save_path):
-        return f"/uploads/candidates/{horse_id}.jpg"
+        # 既存ファイルが偽JPEG（HTMLページ）なら削除して再取得
+        with open(save_path, 'rb') as f:
+            if f.read(2) != b'\xff\xd8':
+                os.remove(save_path)
+            else:
+                return f"/uploads/candidates/{horse_id}.jpg"
+
+    # ① show_photo.php 経由（新しい馬に対応）
+    photo_no = get_horse_photo_no(horse_id)
+    if photo_no:
+        url = f"https://db.netkeiba.com/show_photo.php?horse_id={horse_id}&no={photo_no}&tn=no&tmp=no"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            if r.status_code == 200 and r.content[:2] == b'\xff\xd8':
+                with open(save_path, 'wb') as f:
+                    f.write(r.content)
+                return f"/uploads/candidates/{horse_id}.jpg"
+        except Exception:
+            pass
+
+    # ② CDN fallback（JPEGマジックバイト検証付き）
     for url_t in [
+        f"https://db.netkeiba.com/horse/pic/{horse_id}_l.jpg",
+        f"https://db.netkeiba.com/horse/pic/{horse_id}.jpg",
         f"https://cdn.netkeiba.com/horse/pic/{horse_id}_l.jpg",
         f"https://cdn.netkeiba.com/horse/pic/{horse_id}.jpg",
     ]:
         try:
             r = requests.get(url_t, headers=HEADERS, timeout=10)
-            if r.status_code == 200 and len(r.content) > 5000:
+            if r.status_code == 200 and len(r.content) > 5000 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
                 return f"/uploads/candidates/{horse_id}.jpg"
@@ -173,6 +210,104 @@ def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, su
     finally:
         cur.close()
 
+def sync_with_latest_shutuba():
+    """
+    DBのrace_entryを出馬表と同期し、除外・取消馬を自動削除 + race_specific_resultを再ランク付け
+
+    実行タイミング：レース当日朝（出馬表確定後）に実行することを推奨
+      python entry_fetcher.py --sync
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        today = datetime.now().date()
+        # 今日以降で未来2日以内のレースを対象（当日・翌日まで）
+        cur.execute("""
+            SELECT DISTINCT race_id, race_name, race_date
+            FROM race_entry
+            WHERE race_date >= %s AND race_date <= %s
+            ORDER BY race_date, race_name
+        """, (today, today + timedelta(days=1)))
+        races = cur.fetchall()
+
+        if not races:
+            print("同期対象のレースがありません（本日〜翌日）。")
+            return
+
+        print(f"{len(races)}件のレースを確認します\n")
+
+        for race_id, race_name, race_date in races:
+            print(f"【{race_name}】{race_date} race_id={race_id}")
+
+            # 最新の出馬表を取得
+            entries, distance, surface, scraped_name, venue = fetch_shutuba_entries(race_id)
+            if not entries:
+                print(f"  出馬表未確定のためスキップ")
+                time.sleep(0.5)
+                continue
+
+            shutuba_names = {e['horse_name'] for e in entries}
+
+            # DB内の現在の馬名
+            cur.execute("SELECT horse_name FROM race_entry WHERE race_id = %s", (race_id,))
+            db_names = {row[0] for row in cur.fetchall()}
+
+            removed = db_names - shutuba_names  # 除外・取消馬
+            added   = shutuba_names - db_names  # 直前追加馬（まれ）
+
+            if not removed and not added:
+                print(f"  変更なし（{len(db_names)}頭）✓")
+                time.sleep(0.5)
+                continue
+
+            if removed:
+                print(f"  除外・取消: {', '.join(sorted(removed))}")
+            if added:
+                print(f"  直前追加:   {', '.join(sorted(added))}")
+
+            # race_entry を出馬表の内容で丸ごと更新
+            category = classify_race(distance, surface)
+            save_entries(conn, race_id, scraped_name or race_name,
+                         race_date, '', venue, distance, surface, category, entries)
+
+            # race_specific_result から除外馬を削除 → 残馬を再ランク付け
+            if removed:
+                cur.execute("""
+                    DELETE FROM race_specific_result
+                    WHERE race_name = %s AND horse_name = ANY(%s)
+                """, (race_name, list(removed)))
+                deleted = cur.rowcount
+                if deleted > 0:
+                    print(f"  予想結果から {deleted} 頭削除 → 再ランク付け")
+                    cur.execute("""
+                        UPDATE race_specific_result r
+                        SET rank_position = sub.new_rank
+                        FROM (
+                            SELECT id,
+                                   ROW_NUMBER() OVER (ORDER BY score DESC) AS new_rank
+                            FROM race_specific_result
+                            WHERE race_name = %s
+                        ) sub
+                        WHERE r.id = sub.id AND r.race_name = %s
+                    """, (race_name, race_name))
+                    conn.commit()
+                    print(f"  再ランク付け完了")
+                else:
+                    print(f"  予想結果に該当馬なし（分析前の可能性）")
+
+            time.sleep(1.0)
+
+        print("\n=== 同期完了 ===")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"[エラー] {e}")
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
 def fetch_single_race(race_id, race_name, race_date):
     """race_idが分かっている場合に直接1レースを取得してDBに保存する"""
     conn = get_conn()
@@ -196,6 +331,12 @@ def fetch_single_race(race_id, race_name, race_date):
         conn.close()
 
 def main():
+    # --sync: 出馬表との差異チェック・除外馬削除・再ランク付け
+    if '--sync' in sys.argv:
+        print("=== 出走馬同期開始（出馬表との差異チェック） ===")
+        sync_with_latest_shutuba()
+        return
+
     # --race-id オプション対応: race_id, race_name, race_date を直接指定
     if '--race-id' in sys.argv:
         idx = sys.argv.index('--race-id')

@@ -10,7 +10,7 @@ import com.faceprediction.entity.RaceSpecificPrediction;
 
 public interface RaceSpecificPredictionRepository extends JpaRepository<RaceSpecificPrediction, Long> {
 
-    Optional<RaceSpecificPrediction> findByRaceName(String raceName);
+    Optional<RaceSpecificPrediction> findFirstByRaceNameOrderByAnalyzedAtDesc(String raceName);
 
     @Query("SELECT p.raceName FROM RaceSpecificPrediction p ORDER BY p.analyzedAt DESC")
     List<String> findAllRaceNames();

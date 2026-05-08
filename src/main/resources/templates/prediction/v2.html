@@ -691,61 +691,96 @@
         }
 
         /* ========== 順位バッジ ========== */
+        /* ============================================================
+           競馬新聞印バッジ  ◎〇▲△注☆×
+        ============================================================ */
         .rank-badge {
-            width: 46px;
-            height: 46px;
-            border-radius: 3px;
+            width: 58px;
+            min-height: 70px;
+            border-radius: 4px;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 22px;
-            letter-spacing: 1px;
             flex-shrink: 0;
             position: relative;
             border: 1px solid;
+            gap: 1px;
         }
 
-        /* 1位：金ラジアル（C） */
-        .rank-badge-1 {
-            background: radial-gradient(circle at 35% 35%, #f5d878, #c9a84c, #8a6a1a);
-            color: #1a1000;
-            border-color: var(--gold);
-            box-shadow: 0 0 22px rgba(201,168,76,0.7), 0 0 44px rgba(201,168,76,0.25);
-        }
-
-        /* 2位：ネオン（B） */
-        .rank-badge-2 {
-            background: linear-gradient(135deg, rgba(125,255,79,0.22), rgba(125,255,79,0.06));
-            color: var(--neon);
-            border-color: var(--neon-dim);
-            box-shadow: 0 0 14px var(--neon-glow);
-            text-shadow: 0 0 8px var(--neon-glow);
-        }
-
-        /* 3位：パープル（VTuber） */
-        .rank-badge-3 {
-            background: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(139,92,246,0.06));
-            color: var(--purple);
-            border-color: rgba(139,92,246,0.5);
-            box-shadow: 0 0 12px var(--purple-glow);
-            text-shadow: 0 0 8px var(--purple-glow);
-        }
-
-        .rank-badge-other {
-            background: rgba(16,24,16,0.9);
-            color: var(--text-muted);
-            border-color: rgba(125,255,79,0.1);
-            font-size: 17px;
-        }
-
+        /* 印の本体文字 */
         .rank-mark {
-            position: absolute;
-            top: -8px; right: -8px;
-            font-size: 14px;
+            font-size: 38px;
             font-weight: 900;
             font-family: 'Noto Serif JP', serif;
-            filter: drop-shadow(0 0 4px rgba(201,168,76,0.6));
+            line-height: 1;
+        }
+
+        /* 印の下に小さく順位番号 */
+        .rank-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 11px;
+            letter-spacing: 1px;
+            line-height: 1;
+            opacity: 0.45;
+        }
+
+        /* ◎ 1位：金ラジアル（C） */
+        .rank-badge-1 {
+            background: radial-gradient(circle at 35% 30%, rgba(245,216,120,0.25), rgba(138,106,26,0.15));
+            color: var(--gold-light);
+            border-color: var(--gold);
+            box-shadow: 0 0 24px rgba(201,168,76,0.65), 0 0 48px rgba(201,168,76,0.2);
+            text-shadow: 0 0 12px rgba(201,168,76,0.8);
+        }
+
+        /* ○ 2位：ネオン（B） */
+        .rank-badge-2 {
+            background: linear-gradient(135deg, rgba(125,255,79,0.14), rgba(125,255,79,0.04));
+            color: var(--neon);
+            border-color: var(--neon-dim);
+            box-shadow: 0 0 16px var(--neon-glow);
+            text-shadow: 0 0 10px var(--neon-glow);
+        }
+
+        /* ▲ 3位：パープル（VTuber） */
+        .rank-badge-3 {
+            background: linear-gradient(135deg, rgba(139,92,246,0.16), rgba(139,92,246,0.04));
+            color: var(--purple);
+            border-color: rgba(139,92,246,0.5);
+            box-shadow: 0 0 14px var(--purple-glow);
+            text-shadow: 0 0 10px var(--purple-glow);
+        }
+
+        /* △ 4位：オレンジ */
+        .rank-badge-4 {
+            background: linear-gradient(135deg, rgba(255,128,0,0.14), rgba(255,128,0,0.03));
+            color: var(--orange);
+            border-color: rgba(255,128,0,0.4);
+            text-shadow: 0 0 8px var(--orange-glow);
+        }
+
+        /* 注 5位：シアン */
+        .rank-badge-5 {
+            background: linear-gradient(135deg, rgba(0,200,220,0.12), rgba(0,200,220,0.03));
+            color: #4dd0e1;
+            border-color: rgba(0,200,220,0.35);
+            text-shadow: 0 0 8px rgba(0,200,220,0.5);
+        }
+
+        /* ☆ 6位：ピンク */
+        .rank-badge-6 {
+            background: linear-gradient(135deg, rgba(240,98,146,0.12), rgba(240,98,146,0.03));
+            color: #f06292;
+            border-color: rgba(240,98,146,0.35);
+            text-shadow: 0 0 8px rgba(240,98,146,0.4);
+        }
+
+        /* × 7位以降：グレー */
+        .rank-badge-other {
+            background: rgba(12,18,12,0.9);
+            color: #4a5a4a;
+            border-color: rgba(125,255,79,0.07);
         }
 
         /* 馬画像 */
@@ -831,6 +866,27 @@
             letter-spacing: 1px;
             text-shadow: 0 0 6px var(--neon-glow);
         }
+
+        /* コメント1行目（太字評価文）— 馬名直下 */
+        .comment-headline-row {
+            margin: 3px 0 7px;
+        }
+
+        .comment-headline {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 12px;
+            font-weight: 700;
+            color: #c8e8b0;
+            line-height: 1.5;
+            letter-spacing: 0.03em;
+        }
+
+        /* 1位：ゴールド */
+        .horse-card.rank-top1 .comment-headline { color: var(--gold-light); text-shadow: 0 0 8px rgba(201,168,76,0.4); }
+        /* 2位：ネオン */
+        .horse-card.rank-top2 .comment-headline { color: var(--neon); text-shadow: 0 0 6px var(--neon-glow); }
+        /* 3位：パープル */
+        .horse-card.rank-top3 .comment-headline { color: #b39ddb; text-shadow: 0 0 6px var(--purple-glow); }
 
         /* スコア */
         .score-row {
@@ -1182,11 +1238,21 @@
                  class="horse-card">
 
                 <div class="rank-badge"
-                     th:classappend="${r.rankPosition == 1 ? 'rank-badge-1' : (r.rankPosition == 2 ? 'rank-badge-2' : (r.rankPosition == 3 ? 'rank-badge-3' : 'rank-badge-other'))}">
-                    <span th:text="${r.rankPosition}">1</span>
+                     th:classappend="${r.rankPosition == 1 ? 'rank-badge-1' :
+                                      r.rankPosition == 2 ? 'rank-badge-2' :
+                                      r.rankPosition == 3 ? 'rank-badge-3' :
+                                      r.rankPosition == 4 ? 'rank-badge-4' :
+                                      r.rankPosition == 5 ? 'rank-badge-5' :
+                                      r.rankPosition == 6 ? 'rank-badge-6' : 'rank-badge-other'}">
                     <span class="rank-mark"
-                          th:text="${r.rankPosition == 1 ? '◎' : (r.rankPosition == 2 ? '○' : (r.rankPosition == 3 ? '▲' : (r.rankPosition == 4 ? '△' : '')))}">
+                          th:text="${r.rankPosition == 1 ? '◎' :
+                                    r.rankPosition == 2 ? '○' :
+                                    r.rankPosition == 3 ? '▲' :
+                                    r.rankPosition == 4 ? '△' :
+                                    r.rankPosition == 5 ? '注' :
+                                    r.rankPosition == 6 ? '☆' : '×'}">
                     </span>
+                    <span class="rank-num" th:text="${r.rankPosition}">1</span>
                 </div>
 
                 <div th:if="${r.imagePath != null}">
@@ -1197,13 +1263,11 @@
                 <div class="horse-info">
                     <div class="horse-name-row">
                         <span class="horse-name" th:text="${r.horseName}">馬名</span>
-                        <span class="src-badge"
-                              th:classappend="${r.dataSource == 'image' ? 'src-image' : (r.dataSource == 'pedigree' ? 'src-pedigree' : 'src-no_data')}"
-                              th:text="${r.dataSource == 'image' ? '画像分析' : (r.dataSource == 'pedigree' ? '血統推定' : 'NO DATA')}">
-                        </span>
-                        <span class="confidence-stars"
-                              th:text="${'★'.repeat(r.confidenceLevel != null ? r.confidenceLevel : 3) + '☆'.repeat(5 - (r.confidenceLevel != null ? r.confidenceLevel : 3))}">
-                        </span>
+                    </div>
+                    <!-- コメント1行目（太字評価文）を馬名直下に配置 -->
+                    <div class="comment-headline-row" th:if="${r.comment != null}">
+                        <span class="comment-headline"
+                              th:text="${#strings.arraySplit(r.comment, '　')[0]}"></span>
                     </div>
 
                     <div class="score-row">
@@ -1220,7 +1284,8 @@
 
                     <div class="horse-comment" th:if="${r.comment != null}">
                         <span th:each="part,stat : ${#strings.arraySplit(r.comment, '　')}"
-                              th:classappend="${stat.index == 0 ? 'comment-main' : 'comment-sub'}"
+                              th:if="${stat.index > 0}"
+                              class="comment-sub"
                               th:text="${part}">
                         </span>
                     </div>

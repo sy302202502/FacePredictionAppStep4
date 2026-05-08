@@ -350,24 +350,17 @@ def download_horse_image(horse_id, horse_name, save_dir=None):
 # Step3: 血統ベース推定（画像なし時のフォールバック）
 # ------------------------------------------------------------------
 def get_sire_name(horse_id):
-    """netkeibaの馬詳細ページから父馬名を取得"""
-    url = f"https://db.netkeiba.com/horse/{horse_id}/"
+    """netkeibaの血統ページから父馬名を取得（/horse/ped/ID/）"""
+    url = f"https://db.netkeiba.com/horse/ped/{horse_id}/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
         resp.encoding = 'EUC-JP'
         soup = BeautifulSoup(resp.text, 'lxml')
-        # 血統表テーブルから父馬を取得
         table = soup.find('table', class_='blood_table')
         if table:
             first_link = table.find('a')
             if first_link:
-                return first_link.text.strip()
-        # フォールバック: ped_info
-        ped = soup.find('div', id='ped_info')
-        if ped:
-            links = ped.find_all('a')
-            if links:
-                return links[0].text.strip()
+                return ' '.join(first_link.text.split())
     except Exception:
         pass
     return None

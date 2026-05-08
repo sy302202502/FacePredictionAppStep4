@@ -1315,9 +1315,14 @@
 
                     <div class="horse-comment" th:if="${r.comment != null}">
                         <span th:each="part,stat : ${#strings.arraySplit(r.comment, '　')}"
-                              th:if="${stat.index > 0}"
+                              th:if="${stat.index > 0 and !#strings.isEmpty(part)}"
                               class="comment-sub"
                               th:text="${part}">
+                        </span>
+                        <!-- コメントが1パーツのみの場合は comment-headline の下に再掲 -->
+                        <span th:if="${#strings.countMatches(r.comment, '　') == 0}"
+                              class="comment-sub"
+                              th:text="${r.comment}">
                         </span>
                     </div>
                 </div>

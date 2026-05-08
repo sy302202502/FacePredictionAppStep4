@@ -867,6 +867,28 @@
             text-shadow: 0 0 6px var(--neon-glow);
         }
 
+        /* オッズバッジ */
+        .odds-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-family: 'Bebas Neue', sans-serif;
+            letter-spacing: 0.5px;
+            padding: 2px 7px;
+            border-radius: 3px;
+            margin-bottom: 5px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #aaa;
+        }
+        .odds-badge .odds-pop { color: var(--orange); font-weight: 700; }
+        .odds-badge .odds-val { color: #e0e0e0; }
+        /* 1〜3番人気は目立たせる */
+        .odds-pop-1 { border-color: rgba(201,168,76,0.5); color: var(--gold-light) !important; }
+        .odds-pop-2 { border-color: rgba(125,255,79,0.3); color: var(--neon) !important; }
+        .odds-pop-3 { border-color: rgba(139,92,246,0.35); color: #b39ddb !important; }
+
         /* コメント1行目（太字評価文）— 馬名直下 */
         .comment-headline-row {
             margin: 3px 0 7px;
@@ -1263,6 +1285,15 @@
                 <div class="horse-info">
                     <div class="horse-name-row">
                         <span class="horse-name" th:text="${r.horseName}">馬名</span>
+                    </div>
+                    <!-- オッズバッジ（レース当日のみ表示） -->
+                    <div th:if="${oddsMap != null and oddsMap.containsKey(r.horseName)}"
+                         th:with="od=${oddsMap[r.horseName]}">
+                        <span class="odds-badge"
+                              th:classappend="${od.popularity == 1 ? 'odds-pop-1' : od.popularity == 2 ? 'odds-pop-2' : od.popularity == 3 ? 'odds-pop-3' : ''}">
+                            <span class="odds-pop" th:text="${od.popularity + '番人気'}">1番人気</span>
+                            <span class="odds-val" th:text="${od.winOdds + '倍'}">3.5倍</span>
+                        </span>
                     </div>
                     <!-- コメント1行目（太字評価文）を馬名直下に配置 -->
                     <div class="comment-headline-row" th:if="${r.comment != null}">

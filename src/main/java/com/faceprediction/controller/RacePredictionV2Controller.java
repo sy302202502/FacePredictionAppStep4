@@ -1,7 +1,9 @@
 package com.faceprediction.controller;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -10,8 +12,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import com.faceprediction.entity.RaceOdds;
 import com.faceprediction.entity.RaceSpecificPrediction;
 import com.faceprediction.entity.RaceSpecificResult;
+import com.faceprediction.repository.RaceOddsRepository;
 import com.faceprediction.repository.RaceSpecificPredictionRepository;
 import com.faceprediction.repository.RaceSpecificResultRepository;
 
@@ -21,6 +25,7 @@ public class RacePredictionV2Controller {
 
     @Autowired private RaceSpecificPredictionRepository patternRepo;
     @Autowired private RaceSpecificResultRepository     resultRepo;
+    @Autowired private RaceOddsRepository               oddsRepo;
 
     @GetMapping
     public String show(@RequestParam(required = false) String raceName, Model model) {
@@ -46,8 +51,15 @@ public class RacePredictionV2Controller {
 
             List<RaceSpecificResult> results = resultRepo.findByRaceNameOrderByRankPosition(selected);
             model.addAttribute("results", results);
+
+            // オッズデータ（馬名→RaceOdds）。レース当日以外は空マップになる
+            List<RaceOdds> oddsList = oddsRepo.findByRaceNameOrderByPopularityAsc(selected);
+            Map<String, RaceOdds> oddsMap = oddsList.stream()
+                .collect(Collectors.toMap(RaceOdds::getHorseName, o -> o, (a, b) -> a));
+            model.addAttribute("oddsMap", oddsMap);
         } else {
             model.addAttribute("results", List.of());
+            model.addAttribute("oddsMap", Map.of());
         }
 
         return "prediction/v2";

@@ -541,71 +541,104 @@ def analyze_face_with_claude(client, abs_path, force=False):
 # ------------------------------------------------------------------
 # Step5: パターン集計
 # ------------------------------------------------------------------
+def recency_weight(race_year):
+    """直近年ほど高い重みを返す（指数減衰: 0年前=2.0, 1年前=1.6, 2年前=1.3, 3年前=1.0, 4年以上=0.8）"""
+    if not race_year:
+        return 1.0
+    current_year = datetime.now().year
+    years_ago = max(0, current_year - race_year)
+    weights = {0: 2.0, 1: 1.6, 2: 1.3, 3: 1.0}
+    return weights.get(years_ago, 0.8)
+
+
 def compute_patterns(analyzed_horses, supplemental=None):
     """
-    分析済み馬リストからTOP5 vs 6着以下のパターンを集計
-    analyzed_horses: [{'is_top5': bool, 'features': dict, 'data_source': str}, ...]
-    supplemental: 補完データ（同条件レース）、is_top5に応じて重み0.5
+    分析済み馬リストからTOP5 vs 6着以下のパターンを集計（直近年重み付き）
+    analyzed_horses: [{'is_top5': bool, 'features': dict, 'race_year': int, ...}, ...]
+    supplemental: 補完データ（同条件レース）、重み0.5
     戻り値: (top5_patterns, bottom_patterns, stats)
     """
     top5_list   = [h for h in analyzed_horses if h['is_top5'] and h['features']]
     bottom_list = [h for h in analyzed_horses if not h['is_top5'] and h['features']]
 
-    # 補完データを重み0.5で追加（重複カウントとして扱う）
+    # 補完データは重み0.5（＝各馬のrecency_weight × 0.5）
+    supplemental_top5   = []
+    supplemental_bottom = []
     if supplemental:
         for h in supplemental:
             if h['is_top5']:
-                # 0.5倍扱い: 2頭に1頭だけ追加
-                top5_list.append(h)
+                supplemental_top5.append(h)
             else:
-                bottom_list.append(h)
+                supplemental_bottom.append(h)
 
-    def count_features(horse_list):
+    def count_features(horse_list, weight_scale=1.0):
         label_counts = {k: Counter() for k in LABEL_KEYS}
         numeric_sums = {k: [] for k in NUMERIC_KEYS}
+        weight_total = 0.0
         for h in horse_list:
+            w = recency_weight(h.get('race_year')) * weight_scale
             f = h['features']
             for k in LABEL_KEYS:
                 if f.get(k):
-                    label_counts[k][f[k]] += 1
+                    label_counts[k][f[k]] += w
             for k in NUMERIC_KEYS:
                 v = f.get(k)
                 if v is not None:
                     try:
-                        numeric_sums[k].append(float(v))
+                        numeric_sums[k].append((float(v), w))
                     except (TypeError, ValueError):
                         pass
-        return label_counts, numeric_sums
+            weight_total += w
+        return label_counts, numeric_sums, weight_total
 
-    t5_labels, t5_nums  = count_features(top5_list)
-    bt_labels, bt_nums  = count_features(bottom_list)
+    t5_labels, t5_nums, t5_w   = count_features(top5_list)
+    bt_labels, bt_nums, bt_w   = count_features(bottom_list)
 
-    t5_n  = max(len(top5_list), 1)
-    bt_n  = max(len(bottom_list), 1)
+    # 補完データを重み0.5で合算
+    s5_labels, s5_nums, s5_w   = count_features(supplemental_top5, 0.5)
+    sb_labels, sb_nums, sb_w   = count_features(supplemental_bottom, 0.5)
+    for k in LABEL_KEYS:
+        t5_labels[k] += s5_labels[k]
+        bt_labels[k] += sb_labels[k]
+    for k in NUMERIC_KEYS:
+        t5_nums[k] += s5_nums[k]
+        bt_nums[k] += sb_nums[k]
+    t5_w += s5_w
+    bt_w += sb_w
 
-    # ラベル特徴: 頻度(%)を計算
-    def label_freq(counts, total):
+    t5_w  = max(t5_w, 0.001)
+    bt_w  = max(bt_w, 0.001)
+
+    # ラベル特徴: 重み付き頻度(%)
+    def label_freq(counts, total_weight):
         result = {}
         for k, counter in counts.items():
             result[k] = {
-                val: round(cnt * 100.0 / total, 1)
+                val: round(cnt * 100.0 / total_weight, 1)
                 for val, cnt in counter.items()
             }
         return result
 
-    top5_patterns   = label_freq(t5_labels, t5_n)
-    bottom_patterns = label_freq(bt_labels, bt_n)
+    top5_patterns   = label_freq(t5_labels, t5_w)
+    bottom_patterns = label_freq(bt_labels, bt_w)
 
-    # 数値特徴: 平均
-    def numeric_mean(sums):
-        return {k: round(sum(v) / len(v), 4) if v else None for k, v in sums.items()}
+    # 数値特徴: 重み付き平均
+    def numeric_wmean(sums):
+        result = {}
+        for k, vals in sums.items():
+            if not vals:
+                result[k] = None
+            else:
+                total_w = sum(w for _, w in vals)
+                result[k] = round(sum(v * w for v, w in vals) / total_w, 4) if total_w > 0 else None
+        return result
 
-    top5_numeric   = numeric_mean(t5_nums)
-    bottom_numeric = numeric_mean(bt_nums)
+    top5_numeric   = numeric_wmean(t5_nums)
+    bottom_numeric = numeric_wmean(bt_nums)
 
     stats = {
-        'top5_n': len(top5_list),
-        'bottom_n': len(bottom_list),
+        'top5_n':       len(top5_list),
+        'bottom_n':     len(bottom_list),
         'top5_numeric': top5_numeric,
         'bottom_numeric': bottom_numeric,
     }
@@ -1342,6 +1375,7 @@ def main():
                 'image_path':  horse['image_path'],
                 'data_source': 'image',
                 'weight':      horse.get('weight'),
+                'race_year':   horse.get('race_year'),
             })
             print(f"    → 分析完了 (目:{features.get('eye_shape')} 鼻:{features.get('nostril_size')} 印象:{features.get('overall_impression')})")
         else:
@@ -1364,6 +1398,7 @@ def main():
                 'image_path':  None,
                 'data_source': 'pedigree',
                 'weight':      horse.get('weight'),
+                'race_year':   horse.get('race_year'),
             })
             print(f"    → 推定完了 (父:{sire})")
         time.sleep(0.3)

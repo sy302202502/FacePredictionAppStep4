@@ -464,16 +464,16 @@ def analyze_face_with_claude(client, abs_path, force=False):
         with open(abs_path, 'rb') as f:
             img_b64 = base64.b64encode(f.read()).decode()
 
-        # ストリームモードで取得（チャンク間タイムアウト300秒）
-        # stream=True + timeout=(connect, read_per_chunk) でモデルロード中でも切れない
+        # ストリームモードで取得（チャンク間タイムアウト600秒）
+        # 初回はモデルロード込みで時間がかかるため余裕を持たせる
         resp = requests.post(OLLAMA_URL, json={
             'model': OLLAMA_MODEL,
             'prompt': LLAVA_PROMPT,
             'images': [img_b64],
             'stream': True,
-            'keep_alive': 600,  # 10分間モデル常駐（連続分析中にアンロード防止）
+            'keep_alive': 1800,  # 30分間モデル常駐（80頭連続分析でもアンロードしない）
             'options': {'temperature': 0.5}
-        }, stream=True, timeout=(10, 300))  # (接続10秒, チャンク間300秒)
+        }, stream=True, timeout=(15, 600))  # (接続15秒, チャンク間600秒)
         resp.raise_for_status()
         # ストリームを結合してレスポンスを得る
         raw = ''
@@ -520,12 +520,8 @@ def analyze_face_with_claude(client, abs_path, force=False):
         print(f"    [エラー] Ollamaに接続できません。ollama serve が起動しているか確認してください")
         return None
     except requests.exceptions.Timeout:
-        print(f"    [エラー] llava応答タイムアウト（300秒）。メモリ不足の可能性があります")
-        # タイムアウト後にモデルを解放してリトライ
-        try:
-            requests.post(OLLAMA_URL, json={'model': OLLAMA_MODEL, 'keep_alive': 0}, timeout=10)
-        except Exception:
-            pass
+        print(f"    [エラー] llava応答タイムアウト（600秒）。スキップして次の馬へ")
+        # モデルはアンロードしない（次の馬の分析でそのまま使えるよう維持）
         return None
     except Exception as e:
         print(f"    [llava エラー] {e}")

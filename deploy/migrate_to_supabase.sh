@@ -59,7 +59,7 @@ for TABLE in "${TABLES[@]}"; do
       --disable-triggers \
       --table="$TABLE" \
       2>/dev/null \
-    | grep -v "^\\\\" \
+    | grep -v "^\\\\[a-zA-Z]" \
     | psql "$REMOTE_URL" -q
     echo " OK"
   else

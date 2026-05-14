@@ -1,4 +1,4 @@
-name: Deploy to OCI
+name: Build & Deploy
 
 on:
   push:
@@ -9,16 +9,17 @@ on:
       - 'deploy/backup.sh'
 
 jobs:
-  build-and-deploy:
-    name: Build & Deploy
+  # ── ジョブ1: ビルド & イメージPush（常に実行） ──────────────
+  build:
+    name: Build Docker Images
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. チェックアウト ──────────────────────────────────
+      # 1. チェックアウト
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Java ビルド ────────────────────────────────────
+      # 2. Java ビルド
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -29,7 +30,7 @@ jobs:
       - name: Build JAR
         run: mvn package -DskipTests -q
 
-      # ── 3. Docker イメージビルド & プッシュ ───────────────
+      # 3. Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -51,7 +52,7 @@ jobs:
             ghcr.io/${{ github.repository }}/app:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/arm64  # OCI Ampere A1 (ARM)
+          platforms: linux/arm64
 
       - name: Build and push Python image
         uses: docker/build-push-action@v5
@@ -66,7 +67,15 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/arm64
 
-      # ── 4. OCI VM へデプロイ ──────────────────────────────
+  # ── ジョブ2: OCI VMへデプロイ（OCI_HOSTが設定済みの場合のみ） ──
+  deploy:
+    name: Deploy to OCI VM
+    needs: build
+    runs-on: ubuntu-latest
+    # OCI_HOSTシークレットが未設定の場合はスキップ
+    if: ${{ secrets.OCI_HOST != '' }}
+
+    steps:
       - name: Deploy to OCI VM
         uses: appleboy/ssh-action@v1
         with:
@@ -84,11 +93,11 @@ jobs:
             docker pull ghcr.io/${{ github.repository }}/app:latest
             docker pull ghcr.io/${{ github.repository }}/python:latest
 
-            # docker-compose.yml を更新
+            # 最新コードを取得
             git pull origin ${{ github.ref_name }}
 
             # ゼロダウンタイム再起動
-            docker compose up -d --no-deps app
+            docker compose up -d --no-deps app python
 
             # ヘルスチェック（最大60秒待機）
             for i in $(seq 1 12); do

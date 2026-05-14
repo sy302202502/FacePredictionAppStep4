@@ -25,10 +25,7 @@ echo "======================================================"
 # ── Step1: スキーマを Supabase に適用 ─────────────────────────
 echo ""
 echo "[Step1] スキーマを適用中..."
-psql "$REMOTE_URL" -f "$SCRIPT_DIR/schema.sql" \
-  --single-transaction \
-  --on-error-stop \
-  -q
+psql "$REMOTE_URL" -f "$SCRIPT_DIR/schema.sql" -q
 echo "  → スキーマ適用 完了"
 
 # ── Step2: データをダンプ → リストア ─────────────────────────
@@ -63,7 +60,7 @@ for TABLE in "${TABLES[@]}"; do
       --table="$TABLE" \
       2>/dev/null \
     | grep -v "^\\\\" \
-    | psql "$REMOTE_URL" -q --single-transaction
+    | psql "$REMOTE_URL" -q
     echo " OK"
   else
     printf "  %-35s %6s 件  (スキップ)\n" "$TABLE" "0"

@@ -119,12 +119,20 @@ def fetch_shutuba_entries(race_id):
             horse_id   = horse_id_m.group(1) if horse_id_m else None
             jockey_link = row.find('a', href=re.compile(r'/jockey/'))
             jockey = jockey_link.text.strip() if jockey_link else ''
+            # 性齢セル（"牝4"/"牡5"/"セ4"）から性別抽出
+            sex = None
+            for c in cols:
+                m = re.match(r'^\s*([牝牡セ])\s*\d+\s*$', c.text)
+                if m:
+                    sex = m.group(1)
+                    break
             entries.append({
                 'post_position': int(post_pos) if post_pos.isdigit() else None,
                 'horse_number':  int(horse_num) if horse_num.isdigit() else None,
                 'horse_name': horse_name,
                 'horse_id':   horse_id,
                 'jockey_name': jockey,
+                'sex': sex,
             })
         except Exception:
             continue
@@ -192,17 +200,22 @@ def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, su
     try:
         # 既存のエントリを削除して入れ直す（同一トランザクション内）
         cur.execute("DELETE FROM race_entry WHERE race_id = %s", (race_id,))
+        # sex カラムが無ければ追加（後方互換）
+        cur.execute("""
+            ALTER TABLE race_entry ADD COLUMN IF NOT EXISTS sex VARCHAR(2)
+        """)
         for e in entries:
             img = download_image(e['horse_id'], e['horse_name']) if e['horse_id'] else None
             cur.execute("""
                 INSERT INTO race_entry
                     (race_id, race_name, race_date, race_category, grade, venue,
                      distance, surface, horse_name, horse_id,
-                     post_position, horse_number, jockey_name, image_path)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     post_position, horse_number, jockey_name, image_path, sex)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (race_id, race_name, race_date, category, grade, venue,
                   distance, surface, e['horse_name'], e['horse_id'],
-                  e['post_position'], e['horse_number'], e['jockey_name'], img))
+                  e['post_position'], e['horse_number'], e['jockey_name'], img,
+                  e.get('sex')))
         conn.commit()
     except Exception:
         conn.rollback()

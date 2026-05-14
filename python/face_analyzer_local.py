@@ -15,9 +15,10 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=True)
 
-OLLAMA_URL  = 'http://localhost:11434/api/generate'
-OLLAMA_MODEL = 'llava:7b'
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# LLM抽象化レイヤー
+from llm_client import analyze_image as _llm_analyze_image
 
 # ── DB接続 ─────────────────────────────────────────
 def get_conn():
@@ -58,24 +59,9 @@ Respond ONLY in this exact JSON format:
 }"""
 
     try:
-        resp = requests.post(OLLAMA_URL, json={
-            'model': OLLAMA_MODEL,
-            'prompt': prompt,
-            'images': [img_b64],
-            'stream': False,
-            'options': {'temperature': 0.1}
-        }, timeout=90)
-        resp.raise_for_status()
-        raw = resp.json().get('response', '')
-        return raw
-    except requests.exceptions.ConnectionError:
-        print(f"    [エラー] Ollamaに接続できません。ollama serve が起動しているか確認してください")
-        return None
-    except requests.exceptions.Timeout:
-        print(f"    [エラー] Ollamaの応答タイムアウト（90秒）")
-        return None
+        return _llm_analyze_image(abs_path, prompt)
     except Exception as e:
-        print(f"    [エラー] llava分析失敗: {e}")
+        print(f"    [エラー] LLM分析失敗: {e}")
         return None
 
 # ── JSON抽出 ────────────────────────────────────────

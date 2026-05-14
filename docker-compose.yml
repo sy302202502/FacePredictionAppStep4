@@ -1,0 +1,91 @@
+version: '3.9'
+
+services:
+
+  # ── Java Spring Boot アプリ ─────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.java
+    image: faceprediction-app
+    container_name: faceprediction-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://${DB_HOST}:${DB_PORT:-5432}/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      UPLOAD_DIR:                 /data/uploads
+      PYTHON_SCRIPT_DIR:          /python-scripts
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      - db
+    networks:
+      - facenet
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Python スクリプト実行環境 ────────────────────────────────────
+  python:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    image: faceprediction-python
+    container_name: faceprediction-python
+    restart: "no"          # スクリプト実行は都度起動
+    environment:
+      DB_HOST:     ${DB_HOST}
+      DB_PORT:     ${DB_PORT:-5432}
+      DB_NAME:     ${DB_NAME}
+      DB_USER:     ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-ollama}
+      OLLAMA_URL:            ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-llava:7b}
+      GROQ_API_KEY:          ${GROQ_API_KEY:-}
+      GROQ_MODEL:            ${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
+      GEMINI_API_KEY:        ${GEMINI_API_KEY:-}
+      GEMINI_MODEL:          ${GEMINI_MODEL:-gemini-2.0-flash}
+      OPENROUTER_API_KEY:    ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL:      ${OPENROUTER_MODEL:-meta-llama/llama-3.2-11b-vision-instruct}
+      UPLOAD_DIR:            /data/uploads
+    volumes:
+      - uploads:/data/uploads
+    networks:
+      - facenet
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux で Ollama にアクセスする場合
+
+  # ── PostgreSQL（Supabase 使用時はこのサービス不要） ──────────────
+  db:
+    image: postgres:16-alpine
+    container_name: faceprediction-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${DB_NAME}
+      POSTGRES_USER:     ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - facenet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - local-db   # `docker compose --profile local-db up` で起動。Supabase利用時は除外
+
+volumes:
+  uploads:
+  pgdata:
+
+networks:
+  facenet:
+    driver: bridge

@@ -45,85 +45,78 @@ def ensure_table(conn):
     conn.commit()
     cur.close()
 
-def fetch_odds_from_page(race_id):
-    """
-    netkeibaの単勝オッズページからオッズを取得
-    戻り値: {horse_name: {'odds': float, 'popularity': int}, ...}
-    """
-    url = f"https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1"
+def fetch_horse_numbers(race_id):
+    """シュツバ表から 馬番→(horse_name, horse_id) マッピングを取得"""
+    url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
         resp.encoding = 'EUC-JP'
         soup = BeautifulSoup(resp.text, 'lxml')
     except Exception as e:
-        print(f"  [エラー] オッズページ取得失敗: {e}")
+        print(f"  [エラー] シュツバ取得失敗: {e}")
         return {}
 
-    results = {}
-    # 単勝オッズテーブルを探す
-    table = soup.find('table', id='odds_tan_block') or soup.find('table', class_=re.compile(r'Odds'))
-    if not table:
-        # 別のセレクターを試す
-        divs = soup.find_all('tr', class_=re.compile(r'HorseList'))
-        for row in divs:
-            cols = row.find_all('td')
-            if len(cols) < 5:
-                continue
-            horse_link = row.find('a', href=re.compile(r'/horse/'))
-            if not horse_link:
-                continue
-            horse_name = horse_link.text.strip()
-            # オッズ列を探す
-            for col in cols:
-                txt = col.text.strip()
-                if re.match(r'^\d+\.\d+$', txt):
-                    try:
-                        results[horse_name] = {'odds': float(txt), 'popularity': 0}
-                    except Exception:
-                        pass
-                    break
-        return results
-
-    for row in table.find_all('tr')[1:]:
-        cols = row.find_all('td')
-        if len(cols) < 3:
+    mapping = {}
+    # 馬番セルとHorseNameスパンを同一行から取得
+    for row in soup.find_all('tr'):
+        # 馬番セル
+        num_td = None
+        for td in row.find_all('td'):
+            cls = ' '.join(td.get('class', []))
+            if re.match(r'Umaban\d*', cls) and td.text.strip().isdigit():
+                num_td = td
+                break
+        if not num_td:
             continue
+        horse_num = int(num_td.text.strip())
+
+        horse_a = row.find('a', href=re.compile(r'db\.netkeiba\.com/horse/\d+'))
+        if not horse_a:
+            continue
+        horse_name = horse_a.get('title') or horse_a.text.strip()
+        m = re.search(r'/horse/(\d+)', horse_a['href'])
+        horse_id = m.group(1) if m else None
+        mapping[horse_num] = (horse_name, horse_id)
+
+    return mapping
+
+def fetch_odds_api(race_id):
+    """JSON APIから単勝オッズ・人気を取得。{馬番str: (odds_float, pop_int)}"""
+    url = f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type=1&action=update"
+    try:
+        resp = requests.get(url, headers={**HEADERS, 'Referer': 'https://race.netkeiba.com/'}, timeout=15)
+        data = resp.json()
+    except Exception as e:
+        print(f"  [エラー] オッズAPI失敗: {e}")
+        return {}
+
+    if data.get('status') not in ('middle', 'final', 'fixed'):
+        print(f"  [スキップ] APIステータス: {data.get('status')} (発売前の可能性)")
+        return {}
+
+    raw = data.get('data', {}).get('odds', {}).get('1', {})
+    result = {}
+    for num_str, vals in raw.items():
         try:
-            horse_link = row.find('a', href=re.compile(r'/horse/'))
-            if not horse_link:
-                continue
-            horse_name = horse_link.text.strip()
-            # 人気順位（最初のtd）
-            pop_text = cols[0].text.strip()
-            pop = int(pop_text) if pop_text.isdigit() else 0
-            # オッズ（数値のtd）
-            odds_val = None
-            for col in cols:
-                txt = col.text.strip().replace(',', '')
-                if re.match(r'^\d+\.\d+$', txt):
-                    odds_val = float(txt)
-                    break
-            if odds_val:
-                results[horse_name] = {'odds': odds_val, 'popularity': pop}
+            odds_val = float(vals[0])
+            pop = int(vals[2]) if vals[2] else 0
+            result[int(num_str)] = (odds_val, pop)
         except Exception:
             continue
+    return result
 
-    return results
-
-def save_odds(conn, race_id, race_name, odds_dict):
+def save_odds(conn, race_id, race_name, horse_map, odds_map):
     cur = conn.cursor()
     cur.execute("DELETE FROM race_odds WHERE race_id = %s", (race_id,))
-    for horse_name, info in odds_dict.items():
-        # horse_idをrace_entryから検索
-        cur.execute("SELECT horse_id FROM race_entry WHERE race_name ILIKE %s AND horse_name = %s LIMIT 1",
-                    (f"%{race_name}%", horse_name))
-        row = cur.fetchone()
-        horse_id = row[0] if row else None
+    for horse_num, (odds_val, pop) in odds_map.items():
+        info = horse_map.get(horse_num)
+        if not info:
+            continue
+        horse_name, horse_id = info
         cur.execute("""
             INSERT INTO race_odds (race_id, race_name, horse_name, horse_id, win_odds, popularity, fetched_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (race_id, race_name, horse_name, horse_id,
-              info['odds'], info['popularity']))
+        """, (race_id, race_name, horse_name, horse_id, odds_val, pop))
     conn.commit()
     cur.close()
 
@@ -133,12 +126,9 @@ def main():
     ensure_table(conn)
     cur = conn.cursor()
 
-    # race_entryからrace_id取得
     if query:
-        cur.execute("""
-            SELECT DISTINCT race_id, race_name FROM race_entry
-            WHERE race_name ILIKE %s
-        """, (f"%{query}%",))
+        cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry WHERE race_name ILIKE %s",
+                    (f"%{query}%",))
     else:
         cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry ORDER BY race_name")
     races = cur.fetchall()
@@ -152,13 +142,18 @@ def main():
     print(f"=== オッズ取得: {len(races)}レース ===")
     for race_id, race_name in races:
         print(f"  [{race_name}] race_id={race_id}")
-        odds = fetch_odds_from_page(race_id)
-        if odds:
-            save_odds(conn, race_id, race_name, odds)
-            for name, info in sorted(odds.items(), key=lambda x: x[1]['popularity'] or 99):
-                print(f"    {info['popularity']}人気 {name}: {info['odds']}倍")
-        else:
-            print(f"    [スキップ] オッズ未確定（発売前の可能性）")
+        odds_map  = fetch_odds_api(race_id)
+        if not odds_map:
+            continue
+        horse_map = fetch_horse_numbers(race_id)
+        if not horse_map:
+            print("  [警告] 馬番マッピング取得失敗")
+            continue
+        save_odds(conn, race_id, race_name, horse_map, odds_map)
+        for horse_num in sorted(odds_map.keys()):
+            odds_val, pop = odds_map[horse_num]
+            name = horse_map.get(horse_num, ('不明',))[0]
+            print(f"    {pop}人気 {horse_num}番 {name}: {odds_val}倍")
         time.sleep(1.5)
 
     conn.close()

@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+WORKDIR /app
+
+# 軽量化: キャッシュなしインストール
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY python/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY python/ ./python/
+COPY .env.example .env
+
+# アップロードディレクトリ
+RUN mkdir -p /data/uploads
+VOLUME ["/data/uploads"]
+
+# Python スクリプトはコマンド指定で実行（デーモンではない）
+# 例: docker run faceprediction-python python python/race_specific_analyzer.py "日本ダービー"
+CMD ["python", "--version"]

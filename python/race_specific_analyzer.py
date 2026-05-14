@@ -417,8 +417,12 @@ def encode_image(path):
     with open(path, 'rb') as f:
         return base64.standard_b64encode(f.read()).decode('utf-8')
 
-OLLAMA_URL   = 'http://localhost:11434/api/generate'
-OLLAMA_MODEL = 'llava:7b'
+# LLM抽象化レイヤー（Ollama / Groq / Gemini / OpenRouter 切り替え可能）
+from llm_client import analyze_image as _llm_analyze_image, current_provider as _llm_provider
+
+# 後方互換のため変数は残す（直接参照しているコードがあれば動く）
+OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://localhost:11434') + '/api/generate'
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llava:7b')
 
 LLAVA_PROMPT = """Look at this racehorse image carefully and describe its physical features.
 Return ONLY a JSON object. No explanation, no markdown, just the JSON.
@@ -461,31 +465,11 @@ def analyze_face_with_claude(client, abs_path, force=False):
     try:
         if not os.path.exists(abs_path):
             return None
-        with open(abs_path, 'rb') as f:
-            img_b64 = base64.b64encode(f.read()).decode()
 
-        # ストリームモードで取得（チャンク間タイムアウト600秒）
-        # 初回はモデルロード込みで時間がかかるため余裕を持たせる
-        resp = requests.post(OLLAMA_URL, json={
-            'model': OLLAMA_MODEL,
-            'prompt': LLAVA_PROMPT,
-            'images': [img_b64],
-            'stream': True,
-            'keep_alive': 1800,  # 30分間モデル常駐（80頭連続分析でもアンロードしない）
-            'options': {'temperature': 0.5}
-        }, stream=True, timeout=(15, 600))  # (接続15秒, チャンク間600秒)
-        resp.raise_for_status()
-        # ストリームを結合してレスポンスを得る
-        raw = ''
-        for line in resp.iter_lines():
-            if line:
-                try:
-                    chunk = json.loads(line.decode())
-                    raw += chunk.get('response', '')
-                    if chunk.get('done', False):
-                        break
-                except json.JSONDecodeError:
-                    pass
+        # LLM抽象化レイヤー経由で呼び出し（Ollama / Groq / Gemini / OpenRouter）
+        raw = _llm_analyze_image(abs_path, LLAVA_PROMPT)
+        if raw is None:
+            return None
 
         # JSONブロックを抽出
         j_start = raw.find('{')
@@ -516,15 +500,8 @@ def analyze_face_with_claude(client, abs_path, force=False):
                 features[k] = v
 
         return features
-    except requests.exceptions.ConnectionError:
-        print(f"    [エラー] Ollamaに接続できません。ollama serve が起動しているか確認してください")
-        return None
-    except requests.exceptions.Timeout:
-        print(f"    [エラー] llava応答タイムアウト（600秒）。スキップして次の馬へ")
-        # モデルはアンロードしない（次の馬の分析でそのまま使えるよう維持）
-        return None
     except Exception as e:
-        print(f"    [llava エラー] {e}")
+        print(f"    [llm エラー] {e}")
         return None
 
 # ------------------------------------------------------------------

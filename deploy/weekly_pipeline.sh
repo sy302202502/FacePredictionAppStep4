@@ -64,6 +64,10 @@ for race in races:
     subprocess.run(['python3', 'python/race_specific_analyzer.py', race], timeout=600)
 PYEOF
 
+# Step4.5: レース名整合性チェック・自動修正・未予想を自動予想
+echo "[Step4.5] レース名整合性チェック..."
+python3 python/race_name_reconciler.py --apply --predict 2>&1 | tail -10 || echo "  [警告] 整合性チェック失敗"
+
 # Step5: バックアップ
 echo "[Step5] DBバックアップ..."
 mkdir -p "$APP_DIR/backups"

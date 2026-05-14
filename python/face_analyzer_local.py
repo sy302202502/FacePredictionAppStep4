@@ -18,7 +18,9 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), over
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # LLM抽象化レイヤー
-from llm_client import analyze_image as _llm_analyze_image
+from llm_client import analyze_image as _llm_analyze_image, current_provider as _llm_provider
+from llm_client import OLLAMA_MODEL, OLLAMA_BASE
+OLLAMA_URL = OLLAMA_BASE + '/api/generate'
 
 # ── DB接続 ─────────────────────────────────────────
 def get_conn():
@@ -31,8 +33,8 @@ def get_conn():
 # ── llavaで画像を英語分析 ───────────────────────────
 def analyze_image_llava(image_path):
     """
-    llava:7bに競走馬の画像を渡し、コンディション評価を得る。
-    Returns: (score: float 0-100, raw_text: str)
+    LLMに競走馬の画像を渡し、コンディション評価を得る。
+    Returns: raw_text (str) or None on failure
     """
     abs_path = os.path.join(PROJECT_DIR, image_path.lstrip('/'))
     if not os.path.exists(abs_path):
@@ -250,7 +252,7 @@ def main():
 
     print(f"{'='*60}")
     print(f"  llava顔面分析: {race_name}")
-    print(f"  モデル: {OLLAMA_MODEL} (ローカル・APIなし)")
+    print(f"  モデル: {_llm_provider()}")
     print(f"{'='*60}\n")
 
     conn = get_conn()

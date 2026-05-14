@@ -1,0 +1,46 @@
+# ============================================================
+# Caddyfile — リバースプロキシ + 自動 HTTPS
+# /etc/caddy/Caddyfile に配置して sudo systemctl reload caddy
+#
+# ① ドメインあり（推奨）: 自動 Let's Encrypt 証明書
+# ② Cloudflare Tunnel 経由: このファイル不要（Tunnelがやってくれる）
+# ============================================================
+
+# ── ドメインあり の場合 ──────────────────────────────────────
+# your-domain.com の部分を実際のドメインに変更
+{
+    # Let's Encrypt の ACME メール（証明書期限通知を受け取る）
+    email your-email@example.com
+}
+
+your-domain.com {
+    # Spring Boot アプリへリバースプロキシ
+    reverse_proxy localhost:8081
+
+    # 静的ファイルキャッシュ
+    header /css/*    Cache-Control "public, max-age=86400"
+    header /images/* Cache-Control "public, max-age=86400"
+    header /uploads/* Cache-Control "public, max-age=3600"
+
+    # セキュリティヘッダー
+    header {
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # ログ
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+
+# ── ドメインなし（IPアドレス直アクセス）の場合 ───────────────
+# 上の your-domain.com ブロックをコメントアウトして以下を有効化
+#
+# :80 {
+#     reverse_proxy localhost:8081
+# }

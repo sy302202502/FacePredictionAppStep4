@@ -25,7 +25,11 @@ source .env 2>/dev/null || true
 
 # Step1: 今週末のレース情報を取得
 echo "[Step1] レースエントリー取得..."
-python3 python/race_entry_fetcher.py 2>&1 | tail -5 || echo "  [警告] エントリー取得に失敗"
+python3 python/entry_fetcher.py 2>&1 | tail -5 || echo "  [警告] エントリー取得に失敗"
+
+# Step1.5: レース名の切り詰めを自動修正（"ヴィクトリア"→"ヴィクトリアマイル"等）
+echo "[Step1.5] レース名正規化..."
+python3 python/race_name_normalizer.py --apply 2>&1 | tail -5 || echo "  [警告] 正規化失敗"
 
 # Step2: オッズ取得
 echo "[Step2] オッズ取得..."

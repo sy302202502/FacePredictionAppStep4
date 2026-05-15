@@ -76,7 +76,7 @@ def find_unrecorded_old(conn):
             SELECT 1 FROM prediction_accuracy pa
             WHERE pa.race_name = pr.target_race_name
         )
-        AND pr.target_race_date < CURRENT_DATE
+        AND pr.target_race_date < (NOW() AT TIME ZONE 'Asia/Tokyo')::date  -- Supabase(UTC)対策
         ORDER BY pr.target_race_date DESC
         LIMIT 30
     """)

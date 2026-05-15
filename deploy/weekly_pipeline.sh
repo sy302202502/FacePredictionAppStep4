@@ -54,7 +54,8 @@ conn = psycopg2.connect(
 cur = conn.cursor()
 cur.execute("""
     SELECT DISTINCT race_name FROM race_entry
-    WHERE race_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+    WHERE race_date BETWEEN (NOW() AT TIME ZONE 'Asia/Tokyo')::date
+                        AND (NOW() AT TIME ZONE 'Asia/Tokyo')::date + INTERVAL '7 days'
       AND grade IN ('G1','G2','G3','OP')
     ORDER BY race_name
 """)

@@ -135,9 +135,66 @@ def parse_grade_from_class(li):
 
 def fetch_all_races_for_date(target_date):
     """
-    race_list_sub.html から指定日の全レース情報を取得。
-    戻り値: list of dict {race_id, race_name, race_date, grade, is_grade_race}
+    指定日の全レース情報を取得。
+    まず DB の race_entry から取得（高速・確実）、空なら netkeiba にフォールバック。
+    DB ファーストにすることで netkeiba 側の構造変更に強くなる。
+
+    戻り値: list of dict {race_id, race_name, race_date, grade, is_grade_race, horse_count_hint}
     """
+    # ① DB から取得（高速・確実・netkeiba非依存）
+    db_races = _fetch_races_from_db(target_date)
+    if db_races:
+        print(f"  [DB] {target_date.strftime('%Y-%m-%d')}: {len(db_races)}レース取得")
+        return db_races
+
+    # ② DBに無ければ netkeiba から取得（フォールバック）
+    print(f"  [DB空] {target_date.strftime('%Y-%m-%d')}: netkeibaから取得を試みます")
+    return _fetch_races_from_netkeiba(target_date)
+
+
+def _fetch_races_from_db(target_date):
+    """race_entry テーブルから指定日のレース一覧を取得"""
+    races = []
+    non_grade_races = []
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT race_id, race_name, MAX(grade) as grade, COUNT(*) as horse_count
+            FROM race_entry
+            WHERE race_date = %s
+            GROUP BY race_id, race_name
+            ORDER BY race_name
+        """, (target_date,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"  [DB取得エラー] {e}")
+        return []
+
+    for race_id, race_name, grade, horse_count in rows:
+        is_grade = bool(grade and grade.strip() and grade in ('G1', 'G2', 'G3', 'OP', 'L'))
+        info = {
+            'race_id': race_id,
+            'race_name': race_name,
+            'race_date': target_date,
+            'grade': grade or '',
+            'is_grade_race': is_grade,
+            'horse_count_hint': int(horse_count) if horse_count else 0,
+        }
+        if is_grade:
+            races.append(info)
+        else:
+            non_grade_races.append(info)
+
+    non_grade_races.sort(key=lambda x: x['horse_count_hint'], reverse=True)
+    races.extend(non_grade_races[:MAX_NON_GRADE_RACES])
+    return races
+
+
+def _fetch_races_from_netkeiba(target_date):
+    """netkeiba から取得（旧来のフォールバック）"""
     url = f"https://race.netkeiba.com/top/race_list_sub.html?kaisai_date={target_date.strftime('%Y%m%d')}"
     races = []
     non_grade_races = []
@@ -163,7 +220,6 @@ def fetch_all_races_for_date(target_date):
             grade = parse_grade_from_class(li)
             is_grade = grade is not None
 
-            # 頭数を取得（RaceList_Item05_Num などから取れる場合）
             horse_count_text = ''
             for span in li.find_all('span'):
                 t = span.text.strip()
@@ -189,7 +245,6 @@ def fetch_all_races_for_date(target_date):
     except Exception as e:
         print(f"  [警告] {target_date.strftime('%Y%m%d')} の取得失敗: {e}")
 
-    # 一般戦は頭数ヒントで降順ソートして上位MAX件のみ
     non_grade_races.sort(key=lambda x: x['horse_count_hint'], reverse=True)
     races.extend(non_grade_races[:MAX_NON_GRADE_RACES])
 

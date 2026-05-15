@@ -394,5 +394,23 @@ def main():
     conn.close()
     print("\n=== 取得完了 ===")
 
+    # ── レース名正規化（netkeibaが切り詰めた名前を完全名に補正） ──
+    try:
+        import subprocess
+        normalizer = os.path.join(os.path.dirname(__file__), 'race_name_normalizer.py')
+        if os.path.exists(normalizer):
+            print("\n[後処理] レース名の切り詰めを自動補正...")
+            r = subprocess.run(
+                ['python3', normalizer, '--apply'],
+                capture_output=True, text=True, timeout=60
+            )
+            if r.returncode == 0:
+                # 修正された件数を出力
+                for line in r.stdout.splitlines():
+                    if '🔧' in line or '修正完了' in line or '切り詰め検出' in line:
+                        print(f"  {line.strip()}")
+    except Exception as e:
+        print(f"  [警告] 正規化スキップ: {e}")
+
 if __name__ == '__main__':
     main()

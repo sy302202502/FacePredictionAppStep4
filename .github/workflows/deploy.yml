@@ -52,7 +52,7 @@ jobs:
             ghcr.io/${{ github.repository }}/app:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
 
       - name: Build and push Python image
         uses: docker/build-push-action@v5
@@ -65,7 +65,7 @@ jobs:
             ghcr.io/${{ github.repository }}/python:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
 
   # ── ジョブ2: OCI VMへデプロイ（OCI_HOSTが設定済みの場合のみ） ──
   deploy:

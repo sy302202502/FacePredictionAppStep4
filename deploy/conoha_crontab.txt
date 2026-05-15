@@ -11,6 +11,18 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # ── 金曜朝：今週末の準備（エントリー・オッズ・万馬券・予想） ──
 0 8 * * 5  /opt/faceprediction/deploy/conoha_pipeline.sh weekly
 
+# ── 土曜：レース当日オッズ更新（朝〜夕方まで2時間おき） ──
+0  9 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+0 11 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+0 13 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+0 15 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+
+# ── 日曜：レース当日オッズ更新（朝〜夕方まで2時間おき） ──
+0  9 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+0 11 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+0 13 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+0 15 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+
 # ── 土日午後・夜：レース結果取得（複数回試行で取りこぼし防止） ──
 0 17 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
 0 19 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
@@ -24,4 +36,3 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # ── 毎日深夜：古いログ削除（30日以前） ──
 0 3 * * *  find /opt/faceprediction/logs -name "conoha_*.log" -mtime +30 -delete
-

@@ -90,6 +90,12 @@ for race in races:
         run_py odds_fetcher.py || true
         ;;
 
+    odds)
+        # ── レース当日（土日）：オッズだけ更新（軽量・短時間） ──
+        echo "[Step1] オッズ取得"
+        run_py odds_fetcher.py
+        ;;
+
     *)
         echo "Unknown mode: $MODE"
         exit 1

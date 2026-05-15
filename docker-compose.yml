@@ -37,7 +37,9 @@ services:
       dockerfile: Dockerfile.python
     image: faceprediction-python
     container_name: faceprediction-python
-    restart: "no"          # スクリプト実行は都度起動
+    restart: unless-stopped  # cronから docker exec で使うため常駐
+    # 何もしないが起動状態を維持（docker exec で実行するため）
+    command: ["sleep", "infinity"]
     environment:
       DB_HOST:     ${DB_HOST}
       DB_PORT:     ${DB_PORT:-5432}

@@ -1,0 +1,27 @@
+# ============================================================
+# ConoHa VPS用 cron設定（タイムゾーン: JST）
+# 設定: crontab /opt/faceprediction/deploy/conoha_crontab.txt
+# 確認: crontab -l
+# ============================================================
+
+# 環境変数
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ── 金曜朝：今週末の準備（エントリー・オッズ・万馬券・予想） ──
+0 8 * * 5  /opt/faceprediction/deploy/conoha_pipeline.sh weekly
+
+# ── 土日午後・夜：レース結果取得（複数回試行で取りこぼし防止） ──
+0 17 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
+0 19 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
+0 22 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
+0 17 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh results
+0 19 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh results
+0 22 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh results
+
+# ── 平日：オッズ更新（金曜以外） ──
+0 12 * * 1-4  /opt/faceprediction/deploy/conoha_pipeline.sh quick
+
+# ── 毎日深夜：古いログ削除（30日以前） ──
+0 3 * * *  find /opt/faceprediction/logs -name "conoha_*.log" -mtime +30 -delete
+

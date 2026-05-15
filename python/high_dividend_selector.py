@@ -312,9 +312,10 @@ def fetch_odds_info(race_id):
             pass
 
     # --- Step B: JSON APIから単勝オッズを取得 ---
+    # ※ action=init は古いAPI仕様で空レスポンスを返すため action=update を使用
     api_url = (
         f"https://race.netkeiba.com/api/api_get_jra_odds.html"
-        f"?race_id={race_id}&type=1&action=init"
+        f"?race_id={race_id}&type=1&action=update"
     )
     try:
         api_resp = requests.get(api_url, headers=api_headers, timeout=15)

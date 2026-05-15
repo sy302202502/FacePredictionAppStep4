@@ -182,7 +182,8 @@ CREATE TABLE IF NOT EXISTS public.race_entry (
     horse_number integer,
     jockey_name character varying(100),
     image_path character varying(500),
-    fetched_at timestamp without time zone DEFAULT now()
+    fetched_at timestamp without time zone DEFAULT now(),
+    sex character varying(2)
 );
 
 CREATE TABLE IF NOT EXISTS public.race_odds (
@@ -206,7 +207,8 @@ CREATE TABLE IF NOT EXISTS public.race_specific_accuracy (
     top5_hit boolean DEFAULT false,
     score double precision,
     data_source character varying(20) DEFAULT 'image'::character varying,
-    recorded_at timestamp without time zone DEFAULT now()
+    recorded_at timestamp without time zone DEFAULT now(),
+    top5hit boolean
 );
 
 CREATE TABLE IF NOT EXISTS public.race_specific_prediction (

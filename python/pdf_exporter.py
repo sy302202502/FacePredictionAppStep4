@@ -58,7 +58,7 @@ FONT_NAME = register_japanese_font()
 # ─────────────────────────────────────────────
 # DB 接続
 # ─────────────────────────────────────────────
-load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=False)
 
 def get_connection():
     return psycopg2.connect(

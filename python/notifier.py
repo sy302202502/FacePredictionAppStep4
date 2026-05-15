@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=False)
 
 LINE_NOTIFY_URL = "https://notify-api.line.me/api/notify"
 LINE_TOKEN = os.getenv("LINE_NOTIFY_TOKEN", "")

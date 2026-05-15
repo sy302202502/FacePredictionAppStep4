@@ -14,7 +14,7 @@ import anthropic
 from collections import Counter
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=True)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 ANALYSIS_ROUNDS = 3        # 多数決のための分析回数
 QUALITY_THRESHOLD = 0.5   # この値未満の画像は分析をスキップ

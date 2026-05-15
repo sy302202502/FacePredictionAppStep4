@@ -6,7 +6,7 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=True)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 def get_conn():
     return psycopg2.connect(

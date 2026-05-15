@@ -10,7 +10,8 @@ COPY python/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY python/ ./python/
-COPY .env.example .env
+# ※ .env はコピーしない（docker-compose の environment が優先される）
+# ローカル開発時は .env を bind mount するか、override=False に頼る
 
 # アップロードディレクトリ
 RUN mkdir -p /data/uploads

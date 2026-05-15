@@ -31,7 +31,7 @@ import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=True)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR  = os.path.join(SCRIPT_DIR, '../logs')

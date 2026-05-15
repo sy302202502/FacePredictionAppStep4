@@ -32,7 +32,7 @@ run_py() {
     local script="$1"; shift
     echo ""
     echo "[実行] python/$script $@"
-    docker exec "$PYC" python3 "/python-scripts/$script" "$@" 2>&1 | tail -50 || echo "  [警告] $script 失敗"
+    docker exec "$PYC" python3 "/app/python/$script" "$@" 2>&1 | tail -50 || echo "  [警告] $script 失敗"
 }
 
 case "$MODE" in
@@ -68,7 +68,7 @@ conn.close()
 print(f'  対象レース: {len(races)}件')
 for race in races:
     print(f'  予想実行: {race}')
-    r = subprocess.run(['python3', '/python-scripts/race_specific_analyzer.py', race],
+    r = subprocess.run(['python3', '/app/python/race_specific_analyzer.py', race],
                        timeout=1800, capture_output=True, text=True)
     # 結果の最後だけ表示
     for line in (r.stdout or '').splitlines()[-3:]:

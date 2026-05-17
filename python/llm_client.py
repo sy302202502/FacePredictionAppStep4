@@ -22,6 +22,7 @@ LLM呼び出し抽象化レイヤー
 
 import os
 import json
+import time
 import base64
 import requests
 from dotenv import load_dotenv
@@ -84,7 +85,7 @@ def _call_ollama(image_b64: str, prompt: str) -> str | None:
 
 
 def _call_groq(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | None:
-    """Groq Vision API (OpenAI互換)"""
+    """Groq Vision API (OpenAI互換) — 429レート制限時に最大3回リトライ"""
     if not GROQ_API_KEY:
         print("    [エラー] GROQ_API_KEY が未設定です")
         return None
@@ -102,19 +103,31 @@ def _call_groq(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | N
         "temperature": 0.5,
         "max_tokens": 1024
     }
-    try:
-        resp = requests.post(url, json=payload,
-                             headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-                             timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
-        resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"    [llm エラー] Groq: {e}")
-        return None
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload,
+                                 headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                                 timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
+            if resp.status_code == 429:
+                wait = float(resp.headers.get('retry-after', 2 ** (attempt + 1)))
+                print(f"    [レート制限] Groq 429: {wait:.0f}秒待機してリトライ ({attempt+1}/3)...")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()['choices'][0]['message']['content']
+        except requests.exceptions.Timeout:
+            wait = 2 ** attempt
+            print(f"    [タイムアウト] Groq: {wait}秒後リトライ ({attempt+1}/3)")
+            if attempt < 2:
+                time.sleep(wait)
+        except Exception as e:
+            print(f"    [llm エラー] Groq: {e}")
+            return None
+    return None
 
 
 def _call_gemini(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | None:
-    """Google Gemini Vision API (REST)"""
+    """Google Gemini Vision API (REST) — 429時に最大3回リトライ"""
     if not GEMINI_API_KEY:
         print("    [エラー] GEMINI_API_KEY が未設定です")
         return None
@@ -127,17 +140,24 @@ def _call_gemini(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str |
         ]}],
         "generationConfig": {"temperature": 0.5, "maxOutputTokens": 1024}
     }
-    try:
-        resp = requests.post(url, json=payload,
-                             timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
-        resp.raise_for_status()
-        candidates = resp.json().get('candidates', [])
-        if not candidates:
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload,
+                                 timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
+            if resp.status_code == 429:
+                wait = float(resp.headers.get('retry-after', 2 ** (attempt + 1)))
+                print(f"    [レート制限] Gemini 429: {wait:.0f}秒待機してリトライ ({attempt+1}/3)...")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            candidates = resp.json().get('candidates', [])
+            if not candidates:
+                return None
+            return candidates[0]['content']['parts'][0]['text']
+        except Exception as e:
+            print(f"    [llm エラー] Gemini: {e}")
             return None
-        return candidates[0]['content']['parts'][0]['text']
-    except Exception as e:
-        print(f"    [llm エラー] Gemini: {e}")
-        return None
+    return None
 
 
 def _call_openrouter(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | None:

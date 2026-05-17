@@ -64,7 +64,7 @@ def fetch_grade_races(year):
         f"&jyo[]=01&jyo[]=02&jyo[]=03&jyo[]=04"
         f"&jyo[]=05&jyo[]=06&jyo[]=07&jyo[]=08"
         f"&jyo[]=09&jyo[]=10"
-        f"&grade[]=1&grade[]=2&grade[]=3"
+        f"&grade[]=1&grade[]=2&grade[]=3&grade[]=4&grade[]=5&grade[]=6"
         f"&kyori_min=&kyori_max=&sort=date&list=100"
     )
     resp = requests.get(url, headers=HEADERS, timeout=15)

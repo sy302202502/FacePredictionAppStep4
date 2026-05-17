@@ -121,7 +121,7 @@ def fetch_odds_api(race_id):
     for num_str, vals in raw.items():
         try:
             odds_val = float(vals[0])
-            pop = int(vals[2]) if vals[2] else 0
+            pop = int(vals[2]) if len(vals) > 2 and vals[2] else 0
             result[int(num_str)] = (odds_val, pop)
         except Exception:
             continue

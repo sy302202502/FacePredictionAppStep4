@@ -47,7 +47,7 @@ def analyze_image_llava(image_path):
     abs_path = _url_to_fs(image_path)
     if not os.path.exists(abs_path):
         print(f"    [警告] 画像ファイルが見つかりません: {abs_path}")
-        return None, None
+        return None
 
     with open(abs_path, 'rb') as f:
         img_b64 = base64.b64encode(f.read()).decode()

@@ -116,7 +116,7 @@ public class StatsPredictionController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> run(@RequestParam String raceName) {
         Map<String, Object> resp = new LinkedHashMap<>();
-        String key = "stats_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String key = "stats_" + Math.abs(raceName.hashCode());
 
         if (running.getOrDefault(key, false)) {
             resp.put("error", "すでに実行中です");
@@ -139,7 +139,7 @@ public class StatsPredictionController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> runFace(@RequestParam String raceName) {
         Map<String, Object> resp = new LinkedHashMap<>();
-        String key = "face_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String key = "face_" + Math.abs(raceName.hashCode());
 
         if (running.getOrDefault(key, false)) {
             resp.put("error", "すでに顔面分析が実行中です");

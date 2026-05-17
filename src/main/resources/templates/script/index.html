@@ -256,7 +256,8 @@
         const started = params.get('started');
         if (started) {
             const bar = document.getElementById('startedBar');
-            const labels = { scraper: 'スクレイピング', analyzer: '顔分析', entries: '出走馬取得' };
+            const labels = { scraper: 'スクレイピング', analyzer: '顔分析', entries: '出走馬取得',
+                             result_fetch: '結果自動取得', odds_fetch: 'オッズ取得', weight_learn: '体重学習' };
             bar.textContent = labels[started] + ' を開始しました。ログは下のボックスに表示されます。';
             bar.classList.add('visible');
             openLog(started);

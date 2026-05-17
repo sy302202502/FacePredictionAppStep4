@@ -58,6 +58,9 @@ services:
       UPLOAD_DIR:            /data/uploads
       UPLOAD_DIR_PAST:       /data/uploads/race_specific
       UPLOAD_DIR_CANDIDATES: /data/uploads/candidates
+      ANTHROPIC_API_KEY:     ${ANTHROPIC_API_KEY:-}
+      PADDOCK_MODEL:         ${PADDOCK_MODEL:-claude-opus-4-6}
+      LINE_NOTIFY_TOKEN:     ${LINE_NOTIFY_TOKEN:-}
     volumes:
       - uploads:/data/uploads
     networks:

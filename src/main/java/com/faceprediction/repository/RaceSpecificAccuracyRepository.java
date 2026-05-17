@@ -11,7 +11,8 @@ public interface RaceSpecificAccuracyRepository extends JpaRepository<RaceSpecif
 
     /** 1着的中率を出すための集計：[totalRaces, winHits] */
     @Query("SELECT COUNT(DISTINCT a.raceName), " +
-           "       SUM(CASE WHEN a.predictedRank = 1 AND a.actualRank = 1 THEN 1 ELSE 0 END) " +
-           "FROM RaceSpecificAccuracy a")
+           "       SUM(CASE WHEN a.actualRank = 1 THEN 1 ELSE 0 END) " +
+           "FROM RaceSpecificAccuracy a " +
+           "WHERE a.predictedRank = 1")
     List<Object[]> findOverallWinStats();
 }

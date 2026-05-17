@@ -10,6 +10,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Controller
 @RequestMapping("/high-dividend")
 public class HighDividendController {
+
+    @Value("${python.script.dir}")
+    private String pythonScriptDir;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -61,8 +65,8 @@ public class HighDividendController {
 
         emitters.put(STREAM_KEY, emitter);
         startScript(STREAM_KEY,
-                List.of("python3", "python/high_dividend_selector.py"),
-                System.getProperty("user.dir"));
+                List.of("python3", pythonScriptDir + File.separator + "high_dividend_selector.py"),
+                null);
 
         return emitter;
     }
@@ -112,7 +116,7 @@ public class HighDividendController {
                 pb.redirectErrorStream(true);
                 pb.environment().put("PYTHONUNBUFFERED", "1");
                 pb.environment().put("PYTHONIOENCODING", "utf-8");
-                pb.directory(new File(workDir));
+                if (workDir != null) pb.directory(new File(workDir));
                 proc = pb.start();
 
                 try (BufferedReader br = new BufferedReader(

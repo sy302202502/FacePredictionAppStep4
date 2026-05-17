@@ -20,16 +20,17 @@ public class RaceSpecificPrediction {
     private String raceName;
     private Integer totalYears;
     private Integer totalHorses;
+    @Column(name = "top5horses")
     private Integer top5Horses;
     private Integer bottomHorses;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "top5pattern_json", columnDefinition = "TEXT")
     private String top5PatternJson;
 
     @Column(columnDefinition = "TEXT")
     private String bottomPatternJson;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "top5comment", columnDefinition = "TEXT")
     private String top5Comment;
 
     @Column(columnDefinition = "TEXT")

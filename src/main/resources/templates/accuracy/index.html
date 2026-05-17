@@ -359,7 +359,8 @@
                           class="src-badge src-no_data"
                           style="cursor: pointer; padding: 5px 12px; font-size: 12px;"
                           th:text="${r.race_name}"
-                          th:onclick="'document.getElementById(\'raceSelect\').value=\'' + ${r.race_name} + '\'; updateHorseList(\'' + ${r.race_name} + '\')'">
+                          th:data-race="${r.race_name}"
+                          onclick="selectRace(this.dataset.race)">
                     </span>
                 </div>
                 <p class="empty-text" style="margin: 0; font-size: 11px;">↑ クリックするとフォームにセットされます</p>
@@ -388,7 +389,8 @@
                 <tbody>
                     <tr th:each="r : ${v2RecentResults}">
                         <td th:text="${r.race_name}" style="cursor: pointer; color: var(--neon-dim);"
-                            th:onclick="'document.getElementById(\'raceSelect\').value=\'' + ${r.race_name} + '\'; updateHorseList(\'' + ${r.race_name} + '\'); document.getElementById(\'record-v2-form\').scrollIntoView({behavior:\'smooth\'}'">
+                            th:data-race="${r.race_name}"
+                            onclick="selectRaceScroll(this.dataset.race)">
                         </td>
                         <td th:text="${r.horse_name}" style="color: var(--text);">馬名</td>
                         <td th:text="${r.actual_rank != null ? r.actual_rank + '着' : '未記録'}"
@@ -424,6 +426,16 @@
                 const dl = document.getElementById(id);
                 dl.innerHTML = horses.map(h => `<option value="${h}">`).join('');
             });
+        }
+
+        function selectRace(raceName) {
+            document.getElementById('raceSelect').value = raceName;
+            updateHorseList(raceName);
+        }
+
+        function selectRaceScroll(raceName) {
+            selectRace(raceName);
+            document.getElementById('record-v2-form').scrollIntoView({behavior: 'smooth'});
         }
 
         function showTab(name, btn) {

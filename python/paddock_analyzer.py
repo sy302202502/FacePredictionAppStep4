@@ -109,7 +109,7 @@ def analyze_image(client, image_path):
         image_data  = encode_image(image_path)
         media_type  = detect_media_type(image_path)
         msg = client.messages.create(
-            model="claude-opus-4-6",
+            model=os.getenv('PADDOCK_MODEL', 'claude-opus-4-6'),
             max_tokens=700,
             messages=[{
                 "role": "user",

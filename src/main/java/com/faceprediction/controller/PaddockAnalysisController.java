@@ -97,11 +97,19 @@ public class PaddockAnalysisController {
             return ResponseEntity.badRequest().body(resp);
         }
 
+        String contentType = image.getContentType();
+        if (contentType == null || (!contentType.equals("image/jpeg") && !contentType.equals("image/png"))) {
+            resp.put("error", "JPEG または PNG 画像のみ受け付けます");
+            return ResponseEntity.badRequest().body(resp);
+        }
+        if (image.getSize() > 15 * 1024 * 1024L) {
+            resp.put("error", "ファイルサイズは 15MB 以内にしてください");
+            return ResponseEntity.badRequest().body(resp);
+        }
+
         // ファイル保存
         String origName = image.getOriginalFilename();
-        String ext = (origName != null && origName.contains("."))
-            ? origName.substring(origName.lastIndexOf('.'))
-            : ".jpg";
+        String ext = "image/png".equals(contentType) ? ".png" : ".jpg";
         String fileName = "paddock_" + UUID.randomUUID().toString().replace("-", "") + ext;
 
         try {

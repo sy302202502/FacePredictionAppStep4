@@ -146,9 +146,10 @@ def main():
     print(f"\n=== {race_name} 複合スコア計算 ===")
     results = []
     for row_id, horse_name, face_score, win_odds, popularity in rows:
-        comp  = calc_composite(face_score or 50, win_odds)
-        rat   = value_rating(face_score or 50, win_odds)
-        comm  = composite_comment(horse_name, face_score or 50, win_odds, rat)
+        fs    = 50 if face_score is None else face_score
+        comp  = calc_composite(fs, win_odds)
+        rat   = value_rating(fs, win_odds)
+        comm  = composite_comment(horse_name, fs, win_odds, rat)
         results.append((row_id, horse_name, face_score, win_odds, popularity, comp, rat, comm))
 
     # 複合スコアでソートして順位を再計算
@@ -158,7 +159,7 @@ def main():
     print("-" * 55)
     for rank, (row_id, horse_name, face_score, win_odds, pop, comp, rat, comm) in enumerate(results, 1):
         odds_str = f"{win_odds:.1f}倍" if win_odds else "---"
-        print(f"{rank:4} {horse_name:12} {face_score or 0:5.1f}点  {odds_str:7} {comp:5.1f}点  {rat}")
+        print(f"{rank:4} {horse_name:12} {(face_score or 0):5.1f}点  {odds_str:7} {comp:5.1f}点  {rat}")
 
     # DBに保存
     for rank, (row_id, horse_name, face_score, win_odds, pop, comp, rat, comm) in enumerate(results, 1):

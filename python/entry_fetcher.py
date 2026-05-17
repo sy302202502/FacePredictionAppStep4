@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '../uploads/candidates')
+UPLOAD_DIR = os.environ.get('UPLOAD_DIR_CANDIDATES', os.path.join(os.path.dirname(__file__), '../uploads/candidates'))
 
 CATEGORY_MAP = {
     'sprint': '短距離（〜1400m）', 'mile': 'マイル（1600〜1800m）',

@@ -16,6 +16,14 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UPLOAD_DIR  = os.environ.get('UPLOAD_DIR', os.path.join(PROJECT_DIR, 'uploads'))
+
+def _url_to_fs(url_path):
+    """URL path (/uploads/...) をファイルシステムパスに変換する。"""
+    rel = url_path.lstrip('/')
+    if rel.startswith('uploads/'):
+        rel = rel[len('uploads/'):]
+    return os.path.join(UPLOAD_DIR, rel)
 
 # LLM抽象化レイヤー
 from llm_client import analyze_image as _llm_analyze_image, current_provider as _llm_provider
@@ -36,8 +44,9 @@ def analyze_image_llava(image_path):
     LLMに競走馬の画像を渡し、コンディション評価を得る。
     Returns: raw_text (str) or None on failure
     """
-    abs_path = os.path.join(PROJECT_DIR, image_path.lstrip('/'))
+    abs_path = _url_to_fs(image_path)
     if not os.path.exists(abs_path):
+        print(f"    [警告] 画像ファイルが見つかりません: {abs_path}")
         return None, None
 
     with open(abs_path, 'rb') as f:

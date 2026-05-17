@@ -437,14 +437,21 @@ def get_horse_photo_no(horse_id):
         pass
     return None
 
+def _fs_to_url(fs_path):
+    """ファイルシステムパスをSpring Bootが配信するURLパスに変換する。"""
+    upload_dir = os.environ.get('UPLOAD_DIR', '')
+    if upload_dir and fs_path.startswith(upload_dir):
+        return '/uploads' + fs_path[len(upload_dir):]
+    rel = fs_path.replace(os.path.dirname(__file__) + '/../', '/')
+    return rel.replace('//', '/')
+
 def download_horse_image(horse_id, horse_name, save_dir=None):
     if save_dir is None:
         save_dir = UPLOAD_DIR_PAST
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"{horse_id}.jpg")
     if os.path.exists(save_path):
-        rel = save_path.replace(os.path.dirname(__file__) + '/../', '/')
-        return rel.replace('//', '/')
+        return _fs_to_url(save_path)
 
     # まず show_photo.php で試みる
     photo_no = get_horse_photo_no(horse_id)
@@ -455,10 +462,9 @@ def download_horse_image(horse_id, horse_name, save_dir=None):
             if r.status_code == 200 and len(r.content) > 5000 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
-                rel = save_path.replace(os.path.dirname(__file__) + '/../', '/')
-                return rel.replace('//', '/')
-        except Exception:
-            pass
+                return _fs_to_url(save_path)
+        except Exception as e:
+            print(f"    [警告] show_photo取得失敗 {horse_name}: {e}")
 
     # CDN fallback（db.netkeiba.comが正しいURL、cdn.は404になるため順序修正）
     for cdn in [
@@ -473,11 +479,11 @@ def download_horse_image(horse_id, horse_name, save_dir=None):
             if r.status_code == 200 and len(r.content) > 5000 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
-                rel = save_path.replace(os.path.dirname(__file__) + '/../', '/')
-                return rel.replace('//', '/')
-        except Exception:
-            pass
+                return _fs_to_url(save_path)
+        except Exception as e:
+            print(f"    [警告] CDN取得失敗 {cdn}: {e}")
 
+    print(f"    [警告] 画像取得失敗: {horse_name} ({horse_id})")
     return None
 
 # ------------------------------------------------------------------

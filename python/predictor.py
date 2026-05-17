@@ -321,57 +321,56 @@ def main():
 
     client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
     conn = get_conn()
+    try:
+        print("差分プロファイル構築中...")
+        w_dist, diff_w, num_prof = build_diff_profile(conn, race_category)
+        if not w_dist:
+            print(f"  [{race_category}]データ不足 → 全体プロファイルを使用")
+            w_dist, diff_w, num_prof = build_diff_profile(conn, None)
+        if not w_dist:
+            print("[エラー] 分析済みデータがありません。face_analyzer.pyを先に実行してください。")
+            sys.exit(1)
+        print(f"  完了\n")
 
-    print("差分プロファイル構築中...")
-    w_dist, diff_w, num_prof = build_diff_profile(conn, race_category)
-    if not w_dist:
-        print(f"  [{race_category}]データ不足 → 全体プロファイルを使用")
-        w_dist, diff_w, num_prof = build_diff_profile(conn, None)
-    if not w_dist:
-        print("[エラー] 分析済みデータがありません。face_analyzer.pyを先に実行してください。")
+        results = []
+        for i, horse in enumerate(horse_list):
+            name = horse['name']
+            hid = horse['horse_id']
+            print(f"[{i+1}/{len(horse_list)}] {name} ({hid}) — {ANALYSIS_ROUNDS}回分析中...")
+
+            image_path = download_candidate_image(hid, name)
+            if not image_path:
+                print(f"  [スキップ] 画像取得失敗")
+                continue
+
+            abs_path = os.path.join(os.path.dirname(__file__), '..', image_path.lstrip('/'))
+            features = analyze_candidate(client, abs_path)
+            if not features:
+                print(f"  [スキップ] 顔分析失敗")
+                continue
+
+            sim, diff, final = calc_score(features, w_dist, diff_w, num_prof)
+            results.append({'name': name, 'horse_id': hid, 'image_path': image_path,
+                            'features': features, 'sim': sim, 'diff': diff, 'final': final})
+            print(f"  類似:{sim:.1f} 差分:{diff:.1f} 最終:{final:.1f}")
+
+        results.sort(key=lambda x: x['final'], reverse=True)
+
+        print(f"\n{'='*55}")
+        print(f"  【{race_name}】優勝候補 TOP5")
+        print(f"  種別: {CATEGORY_LABEL.get(race_category, '全体')}")
+        print(f"{'='*55}")
+        for rank, r in enumerate(results[:5], 1):
+            medals = ['1位', '2位', '3位', '4位', '5位']
+            print(f"  {medals[rank-1]}: {r['name']:12s} 最終:{r['final']:.1f}点"
+                  f" (類似:{r['sim']:.1f} 差分:{r['diff']:.1f})")
+            save_prediction(conn, race_name, race_category or 'all',
+                            r['name'], r['horse_id'], r['image_path'],
+                            r['sim'], r['diff'], r['final'],
+                            rank, json.dumps(r['features'], ensure_ascii=False))
+        print(f"{'='*55}")
+    finally:
         conn.close()
-        sys.exit(1)
-    print(f"  完了\n")
-
-    results = []
-    for i, horse in enumerate(horse_list):
-        name = horse['name']
-        hid = horse['horse_id']
-        print(f"[{i+1}/{len(horse_list)}] {name} ({hid}) — {ANALYSIS_ROUNDS}回分析中...")
-
-        image_path = download_candidate_image(hid, name)
-        if not image_path:
-            print(f"  [スキップ] 画像取得失敗")
-            continue
-
-        abs_path = os.path.join(os.path.dirname(__file__), '..', image_path.lstrip('/'))
-        features = analyze_candidate(client, abs_path)
-        if not features:
-            print(f"  [スキップ] 顔分析失敗")
-            continue
-
-        sim, diff, final = calc_score(features, w_dist, diff_w, num_prof)
-        results.append({'name': name, 'horse_id': hid, 'image_path': image_path,
-                        'features': features, 'sim': sim, 'diff': diff, 'final': final})
-        print(f"  類似:{sim:.1f} 差分:{diff:.1f} 最終:{final:.1f}")
-
-    results.sort(key=lambda x: x['final'], reverse=True)
-
-    print(f"\n{'='*55}")
-    print(f"  【{race_name}】優勝候補 TOP5")
-    print(f"  種別: {CATEGORY_LABEL.get(race_category, '全体')}")
-    print(f"{'='*55}")
-    for rank, r in enumerate(results[:5], 1):
-        medals = ['1位', '2位', '3位', '4位', '5位']
-        print(f"  {medals[rank-1]}: {r['name']:12s} 最終:{r['final']:.1f}点"
-              f" (類似:{r['sim']:.1f} 差分:{r['diff']:.1f})")
-        save_prediction(conn, race_name, race_category or 'all',
-                        r['name'], r['horse_id'], r['image_path'],
-                        r['sim'], r['diff'], r['final'],
-                        rank, json.dumps(r['features'], ensure_ascii=False))
-    print(f"{'='*55}")
-
-    conn.close()
 
 if __name__ == '__main__':
     main()

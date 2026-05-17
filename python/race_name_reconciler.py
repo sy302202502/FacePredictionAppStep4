@@ -191,49 +191,50 @@ def main():
     print("=" * 60)
 
     conn = get_conn()
-    mismatches = find_mismatches(conn, date_from, date_to)
+    try:
+        mismatches = find_mismatches(conn, date_from, date_to)
 
-    if not mismatches:
-        print("  対象レースがありません")
-        return
+        if not mismatches:
+            print("  対象レースがありません")
+            return
 
-    ok_count = 0
-    fixed_count = 0
-    predicted_count = 0
-    skipped_count = 0
+        ok_count = 0
+        fixed_count = 0
+        predicted_count = 0
+        skipped_count = 0
 
-    for race_date, entry_name, status, matched, horses in mismatches:
-        line = f"  {race_date} {entry_name:<25}"
-        if status == 'OK':
-            print(f"{line} ✅ ({horses}頭)")
-            ok_count += 1
-        elif status == 'NO_HORSES':
-            print(f"{line} ⚠️  出走馬データなし")
-            ok_count += 1
-        elif status == 'MISMATCH':
-            print(f"{line} 🔧 名前不一致 → '{matched}' ({horses}頭)")
-            if apply:
-                fix_mismatch(conn, entry_name, matched)
-                print(f"       ✓ '{matched}' → '{entry_name}' にリネーム")
-                fixed_count += 1
-        elif status == 'NOT_PREDICTED':
-            print(f"{line} ❌ 未予想")
-            if apply and do_predict:
-                if run_prediction(entry_name):
-                    predicted_count += 1
+        for race_date, entry_name, status, matched, horses in mismatches:
+            line = f"  {race_date} {entry_name:<25}"
+            if status == 'OK':
+                print(f"{line} ✅ ({horses}頭)")
+                ok_count += 1
+            elif status == 'NO_HORSES':
+                print(f"{line} ⚠️  出走馬データなし")
+                ok_count += 1
+            elif status == 'MISMATCH':
+                print(f"{line} 🔧 名前不一致 → '{matched}' ({horses}頭)")
+                if apply:
+                    fix_mismatch(conn, entry_name, matched)
+                    print(f"       ✓ '{matched}' → '{entry_name}' にリネーム")
+                    fixed_count += 1
+            elif status == 'NOT_PREDICTED':
+                print(f"{line} ❌ 未予想")
+                if apply and do_predict:
+                    if run_prediction(entry_name):
+                        predicted_count += 1
+                    else:
+                        skipped_count += 1
                 else:
                     skipped_count += 1
-            else:
-                skipped_count += 1
 
-    conn.close()
-
-    print("=" * 60)
-    print(f"  ✅ 表示OK     : {ok_count}件")
-    print(f"  🔧 名前修正   : {fixed_count}件")
-    print(f"  ▶️  新規予想   : {predicted_count}件")
-    print(f"  ⏭️  スキップ   : {skipped_count}件")
-    print("=" * 60)
+        print("=" * 60)
+        print(f"  ✅ 表示OK     : {ok_count}件")
+        print(f"  🔧 名前修正   : {fixed_count}件")
+        print(f"  ▶️  新規予想   : {predicted_count}件")
+        print(f"  ⏭️  スキップ   : {skipped_count}件")
+        print("=" * 60)
+    finally:
+        conn.close()
 
     if not apply and (fixed_count + skipped_count > 0 or any(m[2] in ('MISMATCH', 'NOT_PREDICTED') for m in mismatches)):
         print("\n  💡 自動修正するには --apply オプションを付けて再実行してください")

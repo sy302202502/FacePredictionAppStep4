@@ -14,5 +14,8 @@ public interface RaceEntryRepository extends JpaRepository<RaceEntry, Long> {
 
     List<RaceEntry> findByRaceNameOrderByHorseNumber(String raceName);
 
+    @Query("SELECT e.raceName, COUNT(e) FROM RaceEntry e GROUP BY e.raceName")
+    List<Object[]> countEntriesByRaceName();
+
     List<RaceEntry> findByRaceIdOrderByHorseNumber(String raceId);
 }

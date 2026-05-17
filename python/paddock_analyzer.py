@@ -291,10 +291,10 @@ def main():
 
     client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
     conn   = get_conn()
-
-    # Step1: 画像分析
-    features, error = analyze_image(client, image_path)
-    if error or features is None:
+    try:
+      # Step1: 画像分析
+      features, error = analyze_image(client, image_path)
+      if error or features is None:
         log(f"  [エラー] 顔分析失敗: {error}")
         result = {
             "success": False,
@@ -303,13 +303,11 @@ def main():
             "race_name":  race_name,
         }
         print(f"RESULT:{json.dumps(result, ensure_ascii=False)}", flush=True)
-        conn.close()
         sys.exit(0)
 
-    # Step2: パターン読み込み
-    pattern_data = load_race_pattern(conn, race_name)
-    if pattern_data is None:
-        # パターンなしでも特徴だけ返す
+      # Step2: パターン読み込み
+      pattern_data = load_race_pattern(conn, race_name)
+      if pattern_data is None:
         result = {
             "success":     True,
             "horse_name":  horse_name,
@@ -321,25 +319,20 @@ def main():
             "no_pattern":  True,
         }
         print(f"RESULT:{json.dumps(result, ensure_ascii=False)}", flush=True)
-        conn.close()
         return
 
-    top5_patterns, bottom_patterns, stats = pattern_data
+      top5_patterns, bottom_patterns, stats = pattern_data
 
-    # Step3: スコアリング
-    log("  [3/4] パターンと照合してスコアを計算中...")
-    score   = score_horse(features, top5_patterns, bottom_patterns)
-    comment = build_comment(horse_name, features, top5_patterns, bottom_patterns, stats, score)
-    log(f"  → スコア: {score:.1f}点")
+      log("  [3/4] パターンと照合してスコアを計算中...")
+      score   = score_horse(features, top5_patterns, bottom_patterns)
+      comment = build_comment(horse_name, features, top5_patterns, bottom_patterns, stats, score)
+      log(f"  → スコア: {score:.1f}点")
 
-    # Step4: 出走馬リストとの比較
-    log("  [4/4] 出走馬リストと比較中...")
-    est_rank, entry_list = compare_with_entries(conn, race_name, score)
-    conn.close()
+      log("  [4/4] 出走馬リストと比較中...")
+      est_rank, entry_list = compare_with_entries(conn, race_name, score)
 
-    # 特徴の差分サマリ
-    diff_summary = []
-    for key in FEATURE_KEYS_LABEL:
+      diff_summary = []
+      for key in FEATURE_KEYS_LABEL:
         val = features.get(key)
         if not val:
             continue
@@ -355,15 +348,14 @@ def main():
             "diff":     round(diff, 1),
         })
 
-    # 結果出力
-    entry_compact = None
-    if entry_list:
+      entry_compact = None
+      if entry_list:
         entry_compact = [
             {"name": r[0], "rank": r[1], "score": round(r[2], 1) if r[2] else None}
             for r in entry_list[:10]
         ]
 
-    result = {
+      result = {
         "success":           True,
         "horse_name":        horse_name,
         "race_name":         race_name,
@@ -377,11 +369,13 @@ def main():
         "confidence":        stats['confidence'],
         "entry_list":        entry_compact,
         "no_pattern":        False,
-    }
-    log("")
-    log(f"  スコア: {score:.1f}点  推定順位: {est_rank if est_rank else '?'}位相当")
-    log("=== 分析完了 ===")
-    print(f"RESULT:{json.dumps(result, ensure_ascii=False)}", flush=True)
+      }
+      log("")
+      log(f"  スコア: {score:.1f}点  推定順位: {est_rank if est_rank else '?'}位相当")
+      log("=== 分析完了 ===")
+      print(f"RESULT:{json.dumps(result, ensure_ascii=False)}", flush=True)
+    finally:
+      conn.close()
 
 if __name__ == '__main__':
     main()

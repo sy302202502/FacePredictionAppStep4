@@ -552,7 +552,7 @@ def download_image(horse_id, horse_name):
     ]:
         try:
             r = requests.get(url_t, headers=HEADERS, timeout=10)
-            if r.status_code == 200 and len(r.content) > 5000:
+            if r.status_code == 200 and len(r.content) > 5000 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
                 return f"/uploads/candidates/{horse_id}.jpg"

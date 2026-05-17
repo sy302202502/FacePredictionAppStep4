@@ -124,7 +124,7 @@ public class PredictionController {
             }
 
             // ファイル名: 日本語対応 RFC 5987
-            String encoded = URLEncoder.encode(raceName + "_予想.pdf", "UTF-8").replace("+", "%20");
+            String encoded = URLEncoder.encode(raceName + "_予想.pdf", java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
             String disposition = "attachment; filename*=UTF-8''" + encoded;
 
             HttpHeaders headers = new HttpHeaders();

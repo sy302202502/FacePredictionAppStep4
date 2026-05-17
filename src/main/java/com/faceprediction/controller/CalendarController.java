@@ -37,6 +37,12 @@ public class CalendarController {
         // 分析済みレース名の集合
         List<String> analyzedNames = patternRepo.findAllRaceNames();
 
+        // 出走頭数を1クエリで取得（N+1防止）
+        Map<String, Long> entryCountMap = new java.util.HashMap<>();
+        for (Object[] ec : entryRepo.countEntriesByRaceName()) {
+            entryCountMap.put(ec[0].toString(), ((Number) ec[1]).longValue());
+        }
+
         List<Map<String, Object>> events = new ArrayList<>();
         for (Object[] row : upcoming) {
             // [race_name, race_date, race_category, distance, surface, venue]
@@ -57,8 +63,7 @@ public class CalendarController {
                 .anyMatch(n -> n.contains(raceName) || raceName.contains(n));
             boolean isPast = raceDate.isBefore(today);
 
-            // 出走頭数を取得
-            long entryCount = entryRepo.findByRaceNameOrderByHorseNumber(raceName).size();
+            long entryCount = entryCountMap.getOrDefault(raceName, 0L);
 
             String urgency;
             if (isPast) {

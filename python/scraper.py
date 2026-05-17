@@ -279,46 +279,45 @@ def main():
     print(f"=== 中央競馬重賞スクレイピング開始 ({target_years[0]}〜{target_years[-1]}) ===")
     print(f"  取得対象: 1〜5着の馬（勝ち馬 + 負け馬）")
     conn = get_conn()
+    try:
+        for year in target_years:
+            print(f"\n【{year}年】重賞レース一覧を取得中...")
+            races = fetch_grade_races(year)
+            print(f"  {len(races)}件のレースを発見")
 
-    for year in target_years:
-        print(f"\n【{year}年】重賞レース一覧を取得中...")
-        races = fetch_grade_races(year)
-        print(f"  {len(races)}件のレースを発見")
+            for i, race in enumerate(races):
+                print(f"  [{i+1}/{len(races)}] {race['race_name']} ({race['race_date']}) {race['grade']}")
+                try:
+                    results, distance, surface = fetch_race_results(race['race_id'])
+                    if not results:
+                        print(f"    [スキップ] 結果情報なし")
+                        time.sleep(1)
+                        continue
 
-        for i, race in enumerate(races):
-            print(f"  [{i+1}/{len(races)}] {race['race_name']} ({race['race_date']}) {race['grade']}")
-            try:
-                results, distance, surface = fetch_race_results(race['race_id'])
-                if not results:
-                    print(f"    [スキップ] 結果情報なし")
-                    time.sleep(1)
-                    continue
+                    race_category = classify_race(distance, surface)
+                    print(f"    距離:{distance}m 馬場:{surface} 種別:{CATEGORY_LABEL.get(race_category)}")
 
-                race_category = classify_race(distance, surface)
-                print(f"    距離:{distance}m 馬場:{surface} 種別:{CATEGORY_LABEL.get(race_category)}")
+                    winner = next((r for r in results if r['rank'] == 1), None)
+                    if winner:
+                        image_url = f"https://cdn.netkeiba.com/horse/pic/{winner['horse_id']}_l.jpg"
+                        image_path = download_horse_image(winner['horse_id'], winner['horse_name'])
+                        upsert_race(conn, race, distance, surface, race_category,
+                                    winner['horse_name'], winner['horse_id'], image_path, image_url)
 
-                winner = next((r for r in results if r['rank'] == 1), None)
-                if winner:
-                    image_url = f"https://cdn.netkeiba.com/horse/pic/{winner['horse_id']}_l.jpg"
-                    image_path = download_horse_image(winner['horse_id'], winner['horse_name'])
-                    upsert_race(conn, race, distance, surface, race_category,
-                                winner['horse_name'], winner['horse_id'], image_path, image_url)
+                    for entry in results:
+                        img = download_horse_image(entry['horse_id'], entry['horse_name'])
+                        upsert_horse_entry(conn, entry['horse_id'], entry['horse_name'],
+                                           entry['rank'], img, race_category)
+                        label = "勝ち馬" if entry['rank'] == 1 else f"{entry['rank']}着"
+                        print(f"    {label}: {entry['horse_name']}")
+                        time.sleep(0.5)
 
-                # 1〜5着全員を horse_face_feature に登録
-                for entry in results:
-                    img = download_horse_image(entry['horse_id'], entry['horse_name'])
-                    upsert_horse_entry(conn, entry['horse_id'], entry['horse_name'],
-                                       entry['rank'], img, race_category)
-                    label = "勝ち馬" if entry['rank'] == 1 else f"{entry['rank']}着"
-                    print(f"    {label}: {entry['horse_name']}")
-                    time.sleep(0.5)
+                except Exception as e:
+                    print(f"    [エラー] {e}")
 
-            except Exception as e:
-                print(f"    [エラー] {e}")
-
-            time.sleep(1.0)
-
-    conn.close()
+                time.sleep(1.0)
+    finally:
+        conn.close()
     print("\n=== スクレイピング完了 ===")
 
 if __name__ == '__main__':

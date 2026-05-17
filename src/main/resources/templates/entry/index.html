@@ -342,7 +342,7 @@
             </div>
         </div>
 
-        <div th:if="${entries.isEmpty() and selectedRace != ''}">
+        <div th:if="${entries.isEmpty() and selectedRace != null and !#strings.isEmpty(selectedRace)}">
             <div class="glass-card">
                 <div class="glass-card-inner">
                     <div class="empty-msg">出走馬データがありません。「出走馬を自動取得」ボタンで取得してください。</div>

@@ -389,67 +389,65 @@ def main():
     report  = '--report'  in sys.argv
 
     conn = get_conn()
-    ensure_tables(conn)
+    try:
+        ensure_tables(conn)
 
-    if report:
-        show_report(conn)
+        if report:
+            show_report(conn)
+            return
+
+        print("=== 的中記録 自動取得 ===\n")
+
+        old_races = find_unrecorded_old(conn)
+        print(f"旧システム未記録: {len(old_races)}レース")
+
+        for race_name, race_date, race_id in old_races:
+            print(f"\n  [{race_name}] {race_date}")
+            rid = race_id or search_race_id_by_name(conn, race_name, race_date)
+            if not rid:
+                print(f"    [スキップ] race_idが特定できません")
+                continue
+            if dry_run:
+                print(f"    [dry-run] race_id={rid}")
+                continue
+            actual = scrape_actual_results(rid)
+            if not actual:
+                print(f"    [スキップ] 結果が取得できません (race_id={rid})")
+                time.sleep(1)
+                continue
+            winner = next((n for n, r in actual.items() if r == 1), '不明')
+            print(f"    実際の1着: {winner}  ({len(actual)}頭分取得)")
+            n = record_old_system(conn, race_name, actual)
+            print(f"    → {n}件記録完了")
+            time.sleep(1.5)
+
+        new_races = find_unrecorded_new(conn)
+        print(f"\n新システム未記録: {len(new_races)}レース")
+
+        for race_name, race_date, race_id in new_races:
+            print(f"\n  [{race_name}] {race_date}")
+            rid = race_id or search_race_id_by_name(conn, race_name, race_date)
+            if not rid:
+                print(f"    [スキップ] race_idが特定できません")
+                continue
+            if dry_run:
+                print(f"    [dry-run] race_id={rid}")
+                continue
+            actual = scrape_actual_results(rid)
+            if not actual:
+                print(f"    [スキップ] 結果取得失敗")
+                time.sleep(1)
+                continue
+            winner = next((n for n, r in actual.items() if r == 1), '不明')
+            print(f"    実際の1着: {winner}")
+            n = record_new_system(conn, race_name, actual)
+            print(f"    → {n}件記録完了")
+            time.sleep(1.5)
+
+        if not dry_run:
+            show_report(conn)
+    finally:
         conn.close()
-        return
-
-    print("=== 的中記録 自動取得 ===\n")
-
-    # 旧システム
-    old_races = find_unrecorded_old(conn)
-    print(f"旧システム未記録: {len(old_races)}レース")
-
-    for race_name, race_date, race_id in old_races:
-        print(f"\n  [{race_name}] {race_date}")
-        rid = race_id or search_race_id_by_name(conn, race_name, race_date)
-        if not rid:
-            print(f"    [スキップ] race_idが特定できません")
-            continue
-        if dry_run:
-            print(f"    [dry-run] race_id={rid}")
-            continue
-        actual = scrape_actual_results(rid)
-        if not actual:
-            print(f"    [スキップ] 結果が取得できません (race_id={rid})")
-            time.sleep(1)
-            continue
-        winner = next((n for n, r in actual.items() if r == 1), '不明')
-        print(f"    実際の1着: {winner}  ({len(actual)}頭分取得)")
-        n = record_old_system(conn, race_name, actual)
-        print(f"    → {n}件記録完了")
-        time.sleep(1.5)
-
-    # 新システム
-    new_races = find_unrecorded_new(conn)
-    print(f"\n新システム未記録: {len(new_races)}レース")
-
-    for race_name, race_date, race_id in new_races:
-        print(f"\n  [{race_name}] {race_date}")
-        rid = race_id or search_race_id_by_name(conn, race_name, race_date)
-        if not rid:
-            print(f"    [スキップ] race_idが特定できません")
-            continue
-        if dry_run:
-            print(f"    [dry-run] race_id={rid}")
-            continue
-        actual = scrape_actual_results(rid)
-        if not actual:
-            print(f"    [スキップ] 結果取得失敗")
-            time.sleep(1)
-            continue
-        winner = next((n for n, r in actual.items() if r == 1), '不明')
-        print(f"    実際の1着: {winner}")
-        n = record_new_system(conn, race_name, actual)
-        print(f"    → {n}件記録完了")
-        time.sleep(1.5)
-
-    if not dry_run:
-        show_report(conn)
-
-    conn.close()
     print("\n=== 完了 ===")
 
 if __name__ == '__main__':

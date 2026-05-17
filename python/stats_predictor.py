@@ -230,7 +230,6 @@ def main():
 
     print(f"{'='*60}")
     print(f"  統計ベース予想（APIなし）: {race_name}")
-    print(f"  本日馬場: 稍重（雨）")
     print(f"{'='*60}\n")
 
     conn = get_conn()

@@ -146,8 +146,7 @@ CREATE TABLE IF NOT EXISTS public.prediction_accuracy (
     hit boolean,
     top5_hit boolean,
     final_score double precision,
-    recorded_at timestamp without time zone DEFAULT now(),
-    top5hit boolean
+    recorded_at timestamp without time zone DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.prediction_result (
@@ -207,8 +206,7 @@ CREATE TABLE IF NOT EXISTS public.race_specific_accuracy (
     top5_hit boolean DEFAULT false,
     score double precision,
     data_source character varying(20) DEFAULT 'image'::character varying,
-    recorded_at timestamp without time zone DEFAULT now(),
-    top5hit boolean
+    recorded_at timestamp without time zone DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.race_specific_prediction (
@@ -322,6 +320,16 @@ EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 DO $$ BEGIN
     ALTER TABLE ONLY public.race_specific_result ADD CONSTRAINT race_specific_result_pkey PRIMARY KEY (id);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE ONLY public.race_specific_result
+        ADD CONSTRAINT race_specific_result_race_horse_key UNIQUE (race_name, horse_name);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE ONLY public.race_specific_prediction
+        ADD CONSTRAINT race_specific_prediction_race_name_key UNIQUE (race_name);
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 DO $$ BEGIN

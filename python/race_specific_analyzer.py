@@ -1459,7 +1459,7 @@ def generate_horse_comment(horse_name, features, top5_patterns, bottom_patterns,
 # ------------------------------------------------------------------
 def save_prediction_pattern(conn, race_name, top5_patterns, bottom_patterns,
                              top5_comment, bottom_comment, diff_comment,
-                             stats, supplemental_count, confidence_level):
+                             stats, supplemental_count, confidence_level, years=0):
     cur = conn.cursor()
     cur.execute("DELETE FROM race_specific_prediction WHERE race_name = %s", (race_name,))
     # DBの実際のカラム名に合わせる（JPA生成: top5horses, top5comment, top5pattern_json）
@@ -1472,7 +1472,7 @@ def save_prediction_pattern(conn, race_name, top5_patterns, bottom_patterns,
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
     """, (
         race_name,
-        0,  # total_yearsは呼び出し元で設定
+        years,
         stats['top5_n'] + stats['bottom_n'],
         stats['top5_n'],
         stats['bottom_n'],
@@ -1741,7 +1741,7 @@ def main():
     # パターンをDBに保存
     save_prediction_pattern(conn, race_name, top5_patterns, bottom_patterns,
                             top5_comment, bottom_comment, diff_comment,
-                            stats, supplemental_count, confidence)
+                            stats, supplemental_count, confidence, years=years)
 
     # ----------------------------------------------------------------
     # Step6: 今年の出走馬を取得

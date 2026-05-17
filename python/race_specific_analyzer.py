@@ -39,8 +39,8 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), over
 # 定数
 # ------------------------------------------------------------------
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
-UPLOAD_DIR_PAST      = os.path.join(os.path.dirname(__file__), '../uploads/race_specific')
-UPLOAD_DIR_CANDIDATES = os.path.join(os.path.dirname(__file__), '../uploads/candidates')
+UPLOAD_DIR_PAST      = os.environ.get('UPLOAD_DIR_PAST', os.path.join(os.path.dirname(__file__), '../uploads/race_specific'))
+UPLOAD_DIR_CANDIDATES = os.environ.get('UPLOAD_DIR_CANDIDATES', os.path.join(os.path.dirname(__file__), '../uploads/candidates'))
 
 MIN_HORSES_FOR_PATTERN = 10   # パターン計算に必要な最低頭数
 SUPPLEMENT_THRESHOLD   = 30   # この頭数未満なら補完データを使う

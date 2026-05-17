@@ -56,6 +56,8 @@ services:
       OPENROUTER_API_KEY:    ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL:      ${OPENROUTER_MODEL:-meta-llama/llama-3.2-11b-vision-instruct}
       UPLOAD_DIR:            /data/uploads
+      UPLOAD_DIR_PAST:       /data/uploads/race_specific
+      UPLOAD_DIR_CANDIDATES: /data/uploads/candidates
     volumes:
       - uploads:/data/uploads
     networks:

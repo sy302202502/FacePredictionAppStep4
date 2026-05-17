@@ -227,6 +227,138 @@ def fetch_past_editions(race_name, years, search_word=None):
 
     return found
 
+
+def get_target_race_conditions(race_name):
+    """
+    race_entry テーブルから対象レースの venue / distance / surface を取得。
+    戻り値: (venue, distance, surface) または (None, None, None)
+    """
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT race_id, venue, distance, surface
+            FROM race_entry
+            WHERE race_name = %s
+            ORDER BY race_date DESC
+            LIMIT 1
+        """, (race_name,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row:
+            return None, None, None
+        race_id, venue, distance, surface = row
+        # venue が空の場合は race_id から推定（YYYYKKDDVVRR の VV部分 = 競馬場コード）
+        if not venue and race_id and len(race_id) >= 10:
+            venue_code = race_id[8:10]
+            VENUE_MAP = {
+                '01': '札幌', '02': '函館', '03': '福島', '04': '新潟',
+                '05': '東京', '06': '中山', '07': '中京', '08': '京都',
+                '09': '阪神', '10': '小倉',
+            }
+            venue = VENUE_MAP.get(venue_code, '')
+        return venue, distance, surface
+    except Exception:
+        return None, None, None
+
+
+def fetch_similar_races_by_condition(venue, distance, surface, years):
+    """
+    同コース・同距離・同馬場の過去レースをnetkeibaから検索。
+    フォールバックとして race_name 検索で見つからない時に使用。
+
+    戻り値: list of {race_id, race_name, race_date, race_year, grade, venue}
+    """
+    # 競馬場名 → 競馬場コード（netkeiba）
+    VENUE_CODE_MAP = {
+        '札幌': '01', '函館': '02', '福島': '03', '新潟': '04',
+        '東京': '05', '中山': '06', '中京': '07', '京都': '08',
+        '阪神': '09', '小倉': '10',
+    }
+    venue_code = None
+    for jp, code in VENUE_CODE_MAP.items():
+        if venue and jp in venue:
+            venue_code = code
+            break
+
+    current_year = datetime.now().year
+    target_years = list(range(current_year - years, current_year + 1))
+    found = []
+    seen_race_ids = set()
+
+    if not venue_code or not distance or not surface:
+        return []
+
+    for year in target_years:
+        # netkeiba 開催検索API: 競馬場と年で絞り込み
+        url = (
+            f"https://db.netkeiba.com/?pid=race_list"
+            f"&start_year={year}&start_mon=1"
+            f"&end_year={year}&end_mon=12"
+            f"&jyo[]={venue_code}"
+            f"&kyori_min={distance}&kyori_max={distance}"
+            f"&list=100&sort=date"
+        )
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            text = resp.content.decode('EUC-JP', errors='replace')
+            soup = BeautifulSoup(text, 'lxml')
+            table = soup.find('table', class_='nk_tb_common')
+            if not table:
+                time.sleep(1)
+                continue
+
+            for row in table.find_all('tr')[1:]:
+                cols = row.find_all('td')
+                if len(cols) < 5:
+                    continue
+                race_link = cols[4].find('a')
+                if not race_link:
+                    continue
+                rname = race_link.text.strip()
+                race_url = race_link.get('href', '')
+                race_id = race_url.strip('/').split('/')[-1]
+                if race_id in seen_race_ids:
+                    continue
+                # 距離・コース確認（cols構成: 日付,場所,天気,R,レース名,映像,頭数,枠,馬番,馬名,...距離(列5以降)）
+                # cols[5]あたりに距離・芝/ダ情報が入る
+                row_text = ' '.join(c.text.strip() for c in cols)
+                # 馬場確認
+                if surface == '芝' and ('芝' not in row_text):
+                    continue
+                if surface in ('ダ', 'ダート') and ('ダ' not in row_text):
+                    continue
+                date_text = cols[0].text.strip()
+                try:
+                    race_date = datetime.strptime(date_text, '%Y/%m/%d').date()
+                except Exception:
+                    continue
+                seen_race_ids.add(race_id)
+                grade = ''
+                for g in ['G1', 'G2', 'G3']:
+                    if g in rname:
+                        grade = g
+                        break
+                found.append({
+                    'race_id': race_id,
+                    'race_name': rname,
+                    'race_date': race_date,
+                    'race_year': year,
+                    'grade': grade,
+                    'venue': cols[1].text.strip() if len(cols) > 1 else '',
+                })
+                # 各年最大8件まで
+                if len([r for r in found if r['race_year'] == year]) >= 8:
+                    break
+            time.sleep(1.0)
+        except Exception as e:
+            print(f"    [エラー] {year}年検索失敗: {e}")
+            continue
+
+    return found
+
+
 # ------------------------------------------------------------------
 # Step1: 全着順取得（scraper.pyと異なりrank制限なし）
 # ------------------------------------------------------------------
@@ -1414,10 +1546,25 @@ def main():
     print(f"[Step1] {race_name} の過去開催を検索中...")
     past_editions = fetch_past_editions(race_name, years, search_word=search_word)
     if not past_editions:
+        # ── フォールバック：同コース・同距離・同馬場で類似レースを検索 ──
         print(f"  [警告] {race_name} の過去開催が見つかりませんでした")
+        print(f"  → 同コース・同距離・同馬場で類似レースを検索...")
+        venue, distance, surface = get_target_race_conditions(race_name)
+        if venue and distance and surface:
+            print(f"  条件: {venue} {distance}m {surface}")
+            past_editions = fetch_similar_races_by_condition(venue, distance, surface, years)
+            if past_editions:
+                print(f"  → 類似レース {len(past_editions)}件を発見（同コース・同距離・同馬場）")
+            else:
+                print(f"  → 類似レースも見つかりませんでした")
+        else:
+            print(f"  → race_entryに対象レースの条件情報がありません")
+
+    if not past_editions:
+        print(f"  [中止] 過去データが取得できないため分析を終了します")
         conn.close()
         sys.exit(1)
-    print(f"  → {len(past_editions)}開催を発見\n")
+    print(f"  → {len(past_editions)}開催を分析対象として使用\n")
 
     # ----------------------------------------------------------------
     # Step2: 全着順を取得 + 画像ダウンロード

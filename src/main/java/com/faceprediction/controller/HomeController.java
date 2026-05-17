@@ -32,6 +32,8 @@ public class HomeController {
         long oldAnalyzedWinners = featureRepo.countAnalyzedWinners();
         long oldAnalyzedLosers  = featureRepo.countAnalyzedLosers();
         long newAnalyzed        = specificResultRepo.count();  // race_specific_result
+        long newAnalyzedWinners = specificResultRepo.countByRankPosition(1);
+        long newAnalyzedLosers  = newAnalyzed - newAnalyzedWinners;
         long totalAnalyzed      = oldAnalyzedWinners + oldAnalyzedLosers + newAnalyzed;
 
         // ── 予想レコード数（旧 prediction_result + 新 race_specific_prediction）──
@@ -63,8 +65,8 @@ public class HomeController {
         long winHits    = oldWins + newWins;
         double winHitRate = totalRaces > 0 ? Math.round(winHits * 1000.0 / totalRaces) / 10.0 : 0.0;
 
-        model.addAttribute("analyzedWinners",  oldAnalyzedWinners);
-        model.addAttribute("analyzedLosers",   oldAnalyzedLosers + newAnalyzed);
+        model.addAttribute("analyzedWinners",  oldAnalyzedWinners + newAnalyzedWinners);
+        model.addAttribute("analyzedLosers",   oldAnalyzedLosers + newAnalyzedLosers);
         model.addAttribute("totalAnalyzed",    totalAnalyzed);
         model.addAttribute("totalPredictions", totalPredictions);
         model.addAttribute("totalEntries",     totalEntries);

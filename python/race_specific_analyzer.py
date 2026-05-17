@@ -249,9 +249,11 @@ def get_target_race_conditions(race_name):
         if not row:
             return None, None, None
         race_id, venue, distance, surface = row
-        # venue が空の場合は race_id から推定（YYYYKKDDVVRR の VV部分 = 競馬場コード）
-        if not venue and race_id and len(race_id) >= 10:
-            venue_code = race_id[8:10]
+        # venue が空の場合は race_id から推定
+        # race_id 形式: YYYY(4) + 場(2) + 回(2) + 日(2) + R(2) = 12桁
+        # 競馬場コードは index 4-6 の2桁
+        if not venue and race_id and len(race_id) >= 6:
+            venue_code = race_id[4:6]
             VENUE_MAP = {
                 '01': '札幌', '02': '函館', '03': '福島', '04': '新潟',
                 '05': '東京', '06': '中山', '07': '中京', '08': '京都',

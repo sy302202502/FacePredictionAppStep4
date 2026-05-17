@@ -81,13 +81,35 @@ def fetch_horse_numbers(race_id):
     return mapping
 
 def fetch_odds_api(race_id):
-    """JSON APIから単勝オッズ・人気を取得。{馬番str: (odds_float, pop_int)}"""
+    """JSON APIから単勝オッズ・人気を取得。{馬番str: (odds_float, pop_int)}
+    ※ netkeiba API は初回アクセスでCookie無しだと400を返す。
+    Session で Cookie を保持 + 初回HTMLアクセスで Cookie を取得してから API を叩く。
+    """
     url = f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type=1&action=update"
+    referer = f'https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1'
+    session = requests.Session()
+    session.headers.update({**HEADERS, 'Referer': referer})
+
+    # 先にHTMLを取得してCookieを得る（失敗しても続行）
     try:
-        resp = requests.get(url, headers={**HEADERS, 'Referer': 'https://race.netkeiba.com/'}, timeout=15)
-        data = resp.json()
-    except Exception as e:
-        print(f"  [エラー] オッズAPI失敗: {e}")
+        session.get(referer, timeout=10)
+    except Exception:
+        pass
+
+    # APIを呼ぶ（最大3回リトライ）
+    data = None
+    for attempt in range(3):
+        try:
+            resp = session.get(url, timeout=15)
+            if resp.status_code == 200 and resp.text.strip():
+                data = resp.json()
+                break
+        except Exception:
+            pass
+        time.sleep(1.0)
+
+    if not data:
+        print(f"  [エラー] オッズAPI失敗: 空レスポンス or 400 (3回試行)")
         return {}
 
     if data.get('status') not in ('middle', 'final', 'fixed'):

@@ -268,6 +268,10 @@ def fetch_odds_info(race_id):
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         'Referer': f'https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1',
     }
+    # ※ netkeiba API は初回アクセスでCookieが無いと400を返す。
+    # requests.Session() で Cookie を保持して2回目以降を成功させる。
+    session = requests.Session()
+    session.headers.update(api_headers)
 
     # --- Step A: 馬番→馬名 マッピングを取得 ---
     # 枠確定済みレース: オッズHTMLから col1=馬番(01,02,..) → col4=馬名
@@ -276,7 +280,7 @@ def fetch_odds_info(race_id):
 
     html_url = f"https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1"
     try:
-        resp = requests.get(html_url, headers=api_headers, timeout=15)
+        resp = session.get(html_url, timeout=15)
         resp.encoding = 'EUC-JP'
         soup = BeautifulSoup(resp.text, 'lxml')
         table = soup.find('table', class_='RaceOdds_HorseList_Table')
@@ -293,35 +297,47 @@ def fetch_odds_info(race_id):
         pass
 
     # 枠確定前（horse_mapが空）の場合: 出馬表のtr_IDで紐付け
-    # （枠未確定時、APIキーはゼロパディングなしの内部エントリIDと一致）
     if not horse_map:
         shutuba_url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
         try:
-            resp2 = requests.get(shutuba_url, headers=api_headers, timeout=15)
+            resp2 = session.get(shutuba_url, timeout=15)
             resp2.encoding = 'EUC-JP'
             soup2 = BeautifulSoup(resp2.text, 'lxml')
             shutuba_table = soup2.find('table', class_='Shutuba_Table')
             if shutuba_table:
                 for row in shutuba_table.find_all('tr', class_=re.compile(r'HorseList')):
-                    tr_id = row.get('id', '')  # 'tr_21', 'tr_1', ...
+                    tr_id = row.get('id', '')
                     horse_link = row.find('a', href=re.compile(r'/horse/'))
                     if tr_id.startswith('tr_') and horse_link:
-                        entry_id = tr_id[3:]  # '21', '1', ...
+                        entry_id = tr_id[3:]
                         horse_map[entry_id] = horse_link.text.strip()
         except Exception:
             pass
 
     # --- Step B: JSON APIから単勝オッズを取得 ---
     # ※ action=init は古いAPI仕様で空レスポンスを返すため action=update を使用
+    # ※ session を使って Cookie を持ち回すことで初回400エラーを回避
     api_url = (
         f"https://race.netkeiba.com/api/api_get_jra_odds.html"
         f"?race_id={race_id}&type=1&action=update"
     )
+    # リトライ機構（最大3回、毎回少し待つ）
+    api_data = None
+    for attempt in range(3):
+        try:
+            api_resp = session.get(api_url, timeout=15)
+            if api_resp.status_code == 200 and api_resp.text.strip():
+                api_data = api_resp.json()
+                break
+        except Exception:
+            pass
+        time.sleep(1.0)
+
+    if not api_data:
+        return None
     try:
-        api_resp = requests.get(api_url, headers=api_headers, timeout=15)
-        api_data = api_resp.json()
         odds_raw = api_data['data']['odds']['1']  # '1' = 単勝
-    except Exception:
+    except (KeyError, TypeError):
         return None
 
     results = []

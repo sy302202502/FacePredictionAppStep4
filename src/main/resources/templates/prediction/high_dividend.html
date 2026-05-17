@@ -447,6 +447,11 @@ function fetchResult(raceNameHint) {
         })
         .catch(function() { /* 取得失敗時は無視 */ });
 }
+
+// ── ページ読み込み時に最新の選定結果を自動表示 ──
+document.addEventListener('DOMContentLoaded', function() {
+    fetchResult();
+});
 </script>
 </body>
 </html>

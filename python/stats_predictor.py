@@ -45,10 +45,16 @@ def ensure_stats_table(conn):
             race_name    VARCHAR(200),
             horse_name   VARCHAR(100),
             horse_id     VARCHAR(20),
+            horse_number INTEGER,
             rank_position INTEGER,
             score        FLOAT,
+            face_score   FLOAT,
             score_detail TEXT,
             comment      TEXT,
+            face_comment TEXT,
+            image_path   VARCHAR(500),
+            jockey_name  VARCHAR(100),
+            face_analyzed_at TIMESTAMP,
             created_at   TIMESTAMP DEFAULT NOW()
         )
     """)
@@ -93,10 +99,10 @@ def fetch_horse_results(horse_id, horse_name):
                 results.append({
                     'date':      cols[0],
                     'race_name': cols[4],
-                    'horses':    int(cols[6]) if cols[6].isdigit() else 10,
-                    'odds':      float(cols[9]) if cols[9].replace('.','').isdigit() else 10.0,
-                    'popularity':int(cols[10]) if cols[10].isdigit() else 10,
-                    'rank':      int(cols[11]) if cols[11].isdigit() else 10,
+                    'horses':    int(cols[6]) if cols[6].strip().isdigit() else 10,
+                    'odds':      (lambda v: float(v) if v.replace('.','',1).isdigit() else 10.0)(cols[9].strip()),
+                    'popularity':int(cols[10]) if cols[10].strip().isdigit() else 10,
+                    'rank':      int(cols[11]) if cols[11].strip().isdigit() else 10,
                     'distance':  int(re.sub(r'\D','', cols[14])) if re.search(r'\d', cols[14]) else 2000,
                     'surface':   '芝' if cols[14].startswith('芝') else 'ダート',
                     'condition': cols[16] if len(cols) > 16 else '良',

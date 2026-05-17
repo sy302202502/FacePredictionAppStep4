@@ -1546,6 +1546,14 @@ def main():
 
     client = None  # llava:7b使用のためAnthropicクライアント不要
     conn   = get_conn()
+    _conn_closed = False
+    def _close_conn():
+        nonlocal _conn_closed
+        if not _conn_closed:
+            conn.close()
+            _conn_closed = True
+    import atexit
+    atexit.register(_close_conn)
     ensure_tables(conn)
 
     # ----------------------------------------------------------------
@@ -1570,7 +1578,7 @@ def main():
 
     if not past_editions:
         print(f"  [中止] 過去データが取得できないため分析を終了します")
-        conn.close()
+        _close_conn()
         sys.exit(1)
     print(f"  → {len(past_editions)}開催を分析対象として使用\n")
 
@@ -1975,7 +1983,7 @@ def main():
 
     print(f"\n[Step8] 予想結果をDBに保存...")
     save_race_results(conn, race_name, prediction_results)
-    conn.close()
+    _close_conn()
 
     # ----------------------------------------------------------------
     # 結果サマリ表示

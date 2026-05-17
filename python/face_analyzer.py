@@ -236,81 +236,83 @@ def main():
     client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
     print("=== 分析エンジン: Claude Vision API ===")
     conn = get_conn()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # 未分析レコードを取得
-    if winners_only:
-        cur.execute("""
-            SELECT id, horse_id, horse_name, image_path, race_category
-            FROM horse_face_feature
-            WHERE nose_shape IS NULL AND image_path IS NOT NULL AND is_winner = TRUE
-            ORDER BY win_count DESC, id
-        """)
-        print("=== モード: 勝ち馬のみ分析 ===")
-    else:
-        cur.execute("""
-            SELECT id, horse_id, horse_name, image_path, race_category
-            FROM horse_face_feature
-            WHERE nose_shape IS NULL AND image_path IS NOT NULL
-            ORDER BY is_winner DESC, win_count DESC, id
-        """)
-        print("=== モード: 全馬分析（勝ち馬優先） ===")
+        # 未分析レコードを取得
+        if winners_only:
+            cur.execute("""
+                SELECT id, horse_id, horse_name, image_path, race_category
+                FROM horse_face_feature
+                WHERE nose_shape IS NULL AND image_path IS NOT NULL AND is_winner = TRUE
+                ORDER BY win_count DESC, id
+            """)
+            print("=== モード: 勝ち馬のみ分析 ===")
+        else:
+            cur.execute("""
+                SELECT id, horse_id, horse_name, image_path, race_category
+                FROM horse_face_feature
+                WHERE nose_shape IS NULL AND image_path IS NOT NULL
+                ORDER BY is_winner DESC, win_count DESC, id
+            """)
+            print("=== モード: 全馬分析（勝ち馬優先） ===")
 
-    targets = cur.fetchall()
-    cur.close()
+        targets = cur.fetchall()
+        cur.close()
 
-    print(f"未分析: {len(targets)}頭 / 1頭あたり{ANALYSIS_ROUNDS}回分析して多数決を取ります\n")
+        print(f"未分析: {len(targets)}頭 / 1頭あたり{ANALYSIS_ROUNDS}回分析して多数決を取ります\n")
 
-    success = 0
-    fail = 0
-    for i, (row_id, horse_id, horse_name, image_path_rel, race_category) in enumerate(targets):
-        print(f"[{i+1}/{len(targets)}] {horse_name} ({horse_id}) [{race_category}]")
+        success = 0
+        fail = 0
+        for i, (row_id, horse_id, horse_name, image_path_rel, race_category) in enumerate(targets):
+            print(f"[{i+1}/{len(targets)}] {horse_name} ({horse_id}) [{race_category}]")
 
-        abs_path = os.path.join(os.path.dirname(__file__), '..', image_path_rel.lstrip('/'))
-        if not os.path.exists(abs_path):
-            print(f"  [スキップ] 画像ファイルなし")
-            fail += 1
-            continue
-
-        try:
-            # 品質チェック
-            image_data_for_check = encode_image(abs_path)
-            quality_score, reject_reason = check_image_quality(client, image_data_for_check)
-            if quality_score < QUALITY_THRESHOLD:
-                print(f"  [スキップ] 低品質画像 score={quality_score:.2f} 理由:{reject_reason}")
-                fail += 1
-                time.sleep(0.5)
-                continue
-            print(f"  品質OK: score={quality_score:.2f}")
-
-            features, raw_text, avg_conf = analyze_face_with_voting(client, abs_path)
-
-            if features is None:
-                print(f"  [スキップ] {raw_text}")
+            abs_path = os.path.join(os.path.dirname(__file__), '..', image_path_rel.lstrip('/'))
+            if not os.path.exists(abs_path):
+                print(f"  [スキップ] 画像ファイルなし")
                 fail += 1
                 continue
 
-            save_feature(conn, row_id, features, raw_text, avg_conf, ANALYSIS_ROUNDS)
+            try:
+                # 品質チェック
+                image_data_for_check = encode_image(abs_path)
+                quality_score, reject_reason = check_image_quality(client, image_data_for_check)
+                if quality_score < QUALITY_THRESHOLD:
+                    print(f"  [スキップ] 低品質画像 score={quality_score:.2f} 理由:{reject_reason}")
+                    fail += 1
+                    time.sleep(0.5)
+                    continue
+                print(f"  品質OK: score={quality_score:.2f}")
 
-            # grade_race_resultの分析済みフラグを更新（勝ち馬のみ）
-            cur2 = conn.cursor()
-            cur2.execute(
-                "UPDATE grade_race_result SET analyzed = TRUE WHERE winner_horse_id = %s",
-                (horse_id,)
-            )
-            conn.commit()
-            cur2.close()
+                features, raw_text, avg_conf = analyze_face_with_voting(client, abs_path)
 
-            print(f"  [完了] 確信度:{avg_conf} 鼻:{features.get('nose_shape')} 目:{features.get('eye_size')}")
-            success += 1
+                if features is None:
+                    print(f"  [スキップ] {raw_text}")
+                    fail += 1
+                    continue
 
-        except Exception as e:
-            print(f"  [エラー] {e}")
-            fail += 1
+                save_feature(conn, row_id, features, raw_text, avg_conf, ANALYSIS_ROUNDS)
 
-        time.sleep(1.5)
+                # grade_race_resultの分析済みフラグを更新（勝ち馬のみ）
+                cur2 = conn.cursor()
+                cur2.execute(
+                    "UPDATE grade_race_result SET analyzed = TRUE WHERE winner_horse_id = %s",
+                    (horse_id,)
+                )
+                conn.commit()
+                cur2.close()
 
-    conn.close()
+                print(f"  [完了] 確信度:{avg_conf} 鼻:{features.get('nose_shape')} 目:{features.get('eye_size')}")
+                success += 1
+
+            except Exception as e:
+                print(f"  [エラー] {e}")
+                fail += 1
+
+            time.sleep(1.5)
+
+    finally:
+        conn.close()
     print(f"\n=== 分析完了: 成功{success}頭 / 失敗{fail}頭 ===")
 
 if __name__ == '__main__':

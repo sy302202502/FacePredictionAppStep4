@@ -188,7 +188,7 @@ public class AccuracyController {
             acc.setHorseName(p.getHorseName());
             acc.setPredictedRank(p.getRankPosition());
             acc.setActualRank(p.getHorseName().equals(actualWinner) ? 1 : null);
-            acc.setHit(hit1st && p.getRankPosition() == 1);
+            acc.setHit(hit1st && Integer.valueOf(1).equals(p.getRankPosition()));
             // top5Hit は予測上位5頭の行にのみ記録（全行に同一値を付けると集計が狂う）
             acc.setTop5Hit(p.getRankPosition() != null && p.getRankPosition() <= 5 ? top5Hit : null);
             acc.setFinalScore(p.getFinalScore());

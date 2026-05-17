@@ -238,7 +238,12 @@ CREATE TABLE IF NOT EXISTS public.race_specific_result (
     image_path character varying(255),
     race_name character varying(255),
     rank_position integer,
-    score double precision
+    score double precision,
+    composite_score double precision,
+    win_odds double precision,
+    popularity integer,
+    value_rating character varying(20),
+    composite_comment text
 );
 
 CREATE TABLE IF NOT EXISTS public.races (

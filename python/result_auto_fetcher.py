@@ -361,6 +361,8 @@ def show_report(conn):
     r = cur.fetchone()
     if r and r[0]:
         total, wh, t5h = r
+        wh  = wh  or 0
+        t5h = t5h or 0
         print(f"\n  【旧システム予想】")
         print(f"  記録済み: {total}レース  1位的中:{wh}回({wh/total*100:.1f}%)  TOP5:{t5h}回({t5h/total*100:.1f}%)")
 
@@ -375,6 +377,8 @@ def show_report(conn):
     r2 = cur.fetchone()
     if r2 and r2[0]:
         total, wh, t5h = r2
+        wh  = wh  or 0
+        t5h = t5h or 0
         print(f"\n  【顔面傾向分析予想（新）】")
         print(f"  記録済み: {total}レース  1位的中:{wh}回({wh/total*100:.1f}%)  TOP5:{t5h}回({t5h/total*100:.1f}%)")
 

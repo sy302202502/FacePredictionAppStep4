@@ -12,6 +12,6 @@ public interface RaceSpecificPredictionRepository extends JpaRepository<RaceSpec
 
     Optional<RaceSpecificPrediction> findFirstByRaceNameOrderByAnalyzedAtDesc(String raceName);
 
-    @Query("SELECT p.raceName FROM RaceSpecificPrediction p ORDER BY p.analyzedAt DESC")
+    @Query("SELECT DISTINCT p.raceName FROM RaceSpecificPrediction p ORDER BY p.raceName")
     List<String> findAllRaceNames();
 }

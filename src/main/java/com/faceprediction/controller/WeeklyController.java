@@ -125,7 +125,7 @@ public class WeeklyController {
                 pb.redirectErrorStream(true);
                 pb.environment().put("PYTHONUNBUFFERED", "1");
                 pb.environment().put("PYTHONIOENCODING", "utf-8");
-                pb.directory(new File(pythonScriptDir).getParentFile());
+                pb.directory(new File(pythonScriptDir));
                 proc = pb.start();
 
                 try (BufferedReader br = new BufferedReader(

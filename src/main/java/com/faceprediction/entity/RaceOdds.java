@@ -6,6 +6,7 @@ import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.PrePersist;
 import javax.persistence.Table;
 
 @Entity
@@ -23,6 +24,11 @@ public class RaceOdds {
     private Double winOdds;
     private Integer popularity;
     private LocalDateTime fetchedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (fetchedAt == null) fetchedAt = LocalDateTime.now();
+    }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

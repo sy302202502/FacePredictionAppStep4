@@ -40,7 +40,9 @@ public class CalendarController {
         // 出走頭数を1クエリで取得（N+1防止）
         Map<String, Long> entryCountMap = new java.util.HashMap<>();
         for (Object[] ec : entryRepo.countEntriesByRaceName()) {
-            entryCountMap.put(ec[0].toString(), ((Number) ec[1]).longValue());
+            if (ec[0] != null) {
+                entryCountMap.put(ec[0].toString(), ((Number) ec[1]).longValue());
+            }
         }
 
         List<Map<String, Object>> events = new ArrayList<>();

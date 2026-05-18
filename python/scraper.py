@@ -67,9 +67,13 @@ def fetch_grade_races(year):
         f"&grade[]=1&grade[]=2&grade[]=3&grade[]=4&grade[]=5&grade[]=6"
         f"&kyori_min=&kyori_max=&sort=date&list=100"
     )
-    resp = requests.get(url, headers=HEADERS, timeout=15)
-    resp.encoding = 'EUC-JP'
-    soup = BeautifulSoup(resp.text, 'lxml')
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.encoding = 'EUC-JP'
+        soup = BeautifulSoup(resp.text, 'lxml')
+    except Exception as e:
+        print(f"  [警告] {year}年のレース一覧取得失敗: {e}")
+        return []
 
     races = []
     table = soup.find('table', class_='nk_tb_common')
@@ -118,9 +122,13 @@ def fetch_race_results(race_id):
     距離と馬場も同時に取得
     """
     url = f"https://db.netkeiba.com/race/{race_id}/"
-    resp = requests.get(url, headers=HEADERS, timeout=15)
-    resp.encoding = 'EUC-JP'
-    soup = BeautifulSoup(resp.text, 'lxml')
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.encoding = 'EUC-JP'
+        soup = BeautifulSoup(resp.text, 'lxml')
+    except Exception as e:
+        print(f"  [警告] レース結果取得失敗 race_id={race_id}: {e}")
+        return [], None, '芝'
 
     # 距離・馬場を取得
     # 対応パターン例:
@@ -195,7 +203,7 @@ def download_horse_image(horse_id, horse_name):
         if photo_no:
             url = f"https://db.netkeiba.com/show_photo.php?horse_id={horse_id}&no={photo_no}&tn=no&tmp=no"
             resp = requests.get(url, headers=HEADERS, timeout=15)
-            if resp.status_code == 200 and len(resp.content) > 5000:
+            if resp.status_code == 200 and len(resp.content) > 5000 and resp.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(resp.content)
                 return f"/uploads/horses/{horse_id}.jpg"

@@ -148,10 +148,10 @@ python predictor.py</pre>
                     <div class="horse-name" th:text="${r.horseName}">馬名</div>
                     <div style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
                         <span class="score-label">SCORE</span>
-                        <span class="score-val" th:text="${r.finalScore} + 'pt'">0pt</span>
+                        <span class="score-val" th:text="${r.finalScore != null ? r.finalScore + 'pt' : '-'}">0pt</span>
                     </div>
                     <div class="score-bar-wrap">
-                        <div class="score-bar" th:style="'width:' + ${r.finalScore} + '%'"></div>
+                        <div class="score-bar" th:style="'width:' + ${r.finalScore != null ? r.finalScore : 0} + '%'"></div>
                     </div>
                     <div class="race-meta"
                          th:text="${r.targetRaceName} + ' (' + ${r.targetRaceDate} + ')'"></div>

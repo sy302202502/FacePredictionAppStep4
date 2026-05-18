@@ -145,40 +145,41 @@ def save_odds(conn, race_id, race_name, horse_map, odds_map):
 def main():
     query = sys.argv[1] if len(sys.argv) > 1 else None
     conn  = get_conn()
-    ensure_table(conn)
-    cur = conn.cursor()
+    try:
+        ensure_table(conn)
+        cur = conn.cursor()
+        try:
+            if query:
+                cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry WHERE race_name ILIKE %s",
+                            (f"%{query}%",))
+            else:
+                cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry ORDER BY race_name")
+            races = cur.fetchall()
+        finally:
+            cur.close()
 
-    if query:
-        cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry WHERE race_name ILIKE %s",
-                    (f"%{query}%",))
-    else:
-        cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry ORDER BY race_name")
-    races = cur.fetchall()
-    cur.close()
+        if not races:
+            print("対象レースが見つかりません。先に entry_fetcher.py を実行してください。")
+            return
 
-    if not races:
-        print("対象レースが見つかりません。先に entry_fetcher.py を実行してください。")
+        print(f"=== オッズ取得: {len(races)}レース ===")
+        for race_id, race_name in races:
+            print(f"  [{race_name}] race_id={race_id}")
+            odds_map  = fetch_odds_api(race_id)
+            if not odds_map:
+                continue
+            horse_map = fetch_horse_numbers(race_id)
+            if not horse_map:
+                print("  [警告] 馬番マッピング取得失敗")
+                continue
+            save_odds(conn, race_id, race_name, horse_map, odds_map)
+            for horse_num in sorted(odds_map.keys()):
+                odds_val, pop = odds_map[horse_num]
+                name = horse_map.get(horse_num, ('不明',))[0]
+                print(f"    {pop}人気 {horse_num}番 {name}: {odds_val}倍")
+            time.sleep(1.5)
+    finally:
         conn.close()
-        return
-
-    print(f"=== オッズ取得: {len(races)}レース ===")
-    for race_id, race_name in races:
-        print(f"  [{race_name}] race_id={race_id}")
-        odds_map  = fetch_odds_api(race_id)
-        if not odds_map:
-            continue
-        horse_map = fetch_horse_numbers(race_id)
-        if not horse_map:
-            print("  [警告] 馬番マッピング取得失敗")
-            continue
-        save_odds(conn, race_id, race_name, horse_map, odds_map)
-        for horse_num in sorted(odds_map.keys()):
-            odds_val, pop = odds_map[horse_num]
-            name = horse_map.get(horse_num, ('不明',))[0]
-            print(f"    {pop}人気 {horse_num}番 {name}: {odds_val}倍")
-        time.sleep(1.5)
-
-    conn.close()
     print("=== 完了 ===")
 
 if __name__ == '__main__':

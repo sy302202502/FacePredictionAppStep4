@@ -260,7 +260,8 @@ public class AccuracyController {
                     " (race_name, horse_name, predicted_rank, actual_rank, hit, top5_hit, score, data_source, recorded_at)" +
                     " VALUES (?,?,?,?,?,?,?,?,NOW())",
                     raceName, horseName, predRank, actualRank,
-                    hit1st && predRank == 1, top5Hit, score, dataSrc);
+                    hit1st && Integer.valueOf(1).equals(predRank),
+                    predRank <= 5 ? top5Hit : null, score, dataSrc);
             }
 
             String msg = raceName + " 記録完了 — 1位的中: " + (hit1st ? "✅ HIT" : "✗ MISS")

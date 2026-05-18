@@ -220,12 +220,12 @@ def _fetch_races_from_netkeiba(target_date):
             grade = parse_grade_from_class(li)
             is_grade = grade is not None
 
-            horse_count_text = ''
+            horse_count_hint = 0
             for span in li.find_all('span'):
                 t = span.text.strip()
                 m2 = re.search(r'(\d+)頭', t)
                 if m2:
-                    horse_count_text = int(m2.group(1))
+                    horse_count_hint = int(m2.group(1))
                     break
 
             info = {
@@ -234,7 +234,7 @@ def _fetch_races_from_netkeiba(target_date):
                 'race_date': target_date,
                 'grade': grade or '',
                 'is_grade_race': is_grade,
-                'horse_count_hint': horse_count_text or 0,
+                'horse_count_hint': horse_count_hint,
             }
 
             if is_grade:

@@ -235,17 +235,21 @@ def get_target_race_conditions(race_name):
     """
     try:
         conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT race_id, venue, distance, surface
-            FROM race_entry
-            WHERE race_name = %s
-            ORDER BY race_date DESC
-            LIMIT 1
-        """, (race_name,))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute("""
+                    SELECT race_id, venue, distance, surface
+                    FROM race_entry
+                    WHERE race_name = %s
+                    ORDER BY race_date DESC
+                    LIMIT 1
+                """, (race_name,))
+                row = cur.fetchone()
+            finally:
+                cur.close()
+        finally:
+            conn.close()
         if not row:
             return None, None, None
         race_id, venue, distance, surface = row

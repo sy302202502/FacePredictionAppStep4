@@ -93,7 +93,7 @@ public class WeeklyController {
     // ── GET /weekly/log ───────────────────────────────────────
     @GetMapping(value = "/log", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter log() {
-        SseEmitter emitter = new SseEmitter(0L);
+        SseEmitter emitter = new SseEmitter(30 * 60 * 1000L); // 30分タイムアウト
         emitters.put(PIPELINE_KEY, emitter);
 
         // 既存ログを即時送信

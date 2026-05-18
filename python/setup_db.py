@@ -246,7 +246,12 @@ def setup():
             comment TEXT,
             feature_json TEXT,
             data_source VARCHAR(20) DEFAULT 'image',
-            created_at TIMESTAMP DEFAULT NOW()
+            created_at TIMESTAMP DEFAULT NOW(),
+            composite_score FLOAT,
+            win_odds FLOAT,
+            popularity INTEGER,
+            value_rating VARCHAR(20),
+            composite_comment TEXT
         )
     """)
 

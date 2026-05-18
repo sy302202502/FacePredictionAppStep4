@@ -373,25 +373,25 @@ def main():
 
     print(f"{len(races)}件のレースを発見\n")
     conn = get_conn()
-
-    for race_info in races:
-        print(f"【{race_info['race_name']}】{race_info['race_date']} race_id={race_info['race_id']}")
-        try:
-            entries, distance, surface, race_name, venue = fetch_shutuba_entries(race_info['race_id'])
-            if not entries:
-                print("  出走馬情報なし（まだ確定前の可能性）")
-                continue
-            category = classify_race(distance, surface)
-            print(f"  {distance}m {surface} [{CATEGORY_MAP.get(category)}] {len(entries)}頭")
-            save_entries(conn, race_info['race_id'], race_name or race_info['race_name'],
-                         race_info['race_date'], '', venue, distance, surface, category, entries)
-            for e in entries:
-                print(f"  {e['horse_number']}番 {e['horse_name']} ({e['jockey_name']})")
-            time.sleep(1.0)
-        except Exception as ex:
-            print(f"  [エラー] {ex}")
-
-    conn.close()
+    try:
+        for race_info in races:
+            print(f"【{race_info['race_name']}】{race_info['race_date']} race_id={race_info['race_id']}")
+            try:
+                entries, distance, surface, race_name, venue = fetch_shutuba_entries(race_info['race_id'])
+                if not entries:
+                    print("  出走馬情報なし（まだ確定前の可能性）")
+                    continue
+                category = classify_race(distance, surface)
+                print(f"  {distance}m {surface} [{CATEGORY_MAP.get(category)}] {len(entries)}頭")
+                save_entries(conn, race_info['race_id'], race_name or race_info['race_name'],
+                             race_info['race_date'], '', venue, distance, surface, category, entries)
+                for e in entries:
+                    print(f"  {e['horse_number']}番 {e['horse_name']} ({e['jockey_name']})")
+                time.sleep(1.0)
+            except Exception as ex:
+                print(f"  [エラー] {ex}")
+    finally:
+        conn.close()
     print("\n=== 取得完了 ===")
 
     # ── レース名正規化（netkeibaが切り詰めた名前を完全名に補正） ──

@@ -18,8 +18,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       UPLOAD_DIR:                 /data/uploads
       PYTHON_SCRIPT_DIR:          /python-scripts
+      THYMELEAF_CACHE:            "true"
     volumes:
       - uploads:/data/uploads
+      - ./python:/python-scripts
     # Supabase使用時は `docker compose up app python` で起動（dbなし）
     # ローカルDB使用時は `docker compose --profile local-db up` で起動
     networks:

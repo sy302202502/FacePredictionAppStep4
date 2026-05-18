@@ -116,13 +116,17 @@ public class HealthController {
     }
 
     private long dirSizeMB(File dir) {
+        return dirSizeBytes(dir) / (1024 * 1024);
+    }
+
+    private long dirSizeBytes(File dir) {
         long size = 0;
         File[] files = dir.listFiles();
         if (files != null) {
             for (File f : files) {
-                size += f.isDirectory() ? dirSizeMB(f) * 1024 * 1024 : f.length();
+                size += f.isDirectory() ? dirSizeBytes(f) : f.length();
             }
         }
-        return size / (1024 * 1024);
+        return size;
     }
 }

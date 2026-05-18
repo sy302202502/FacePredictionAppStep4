@@ -118,64 +118,62 @@ def main():
 
     race_name = sys.argv[1]
     conn = get_conn()
-    ensure_column(conn)
-    cur = conn.cursor()
+    try:
+        ensure_column(conn)
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT r.id, r.horse_name, r.score, o.win_odds, o.popularity
+                FROM race_specific_result r
+                LEFT JOIN race_odds o ON o.race_name ILIKE '%%' || r.race_name || '%%'
+                                      AND o.horse_name = r.horse_name
+                WHERE r.race_name = %s
+                ORDER BY r.rank_position
+            """, (race_name,))
+            rows = cur.fetchall()
 
-    # race_specific_result と race_odds を結合
-    cur.execute("""
-        SELECT r.id, r.horse_name, r.score, o.win_odds, o.popularity
-        FROM race_specific_result r
-        LEFT JOIN race_odds o ON o.race_name ILIKE '%%' || r.race_name || '%%'
-                              AND o.horse_name = r.horse_name
-        WHERE r.race_name = %s
-        ORDER BY r.rank_position
-    """, (race_name,))
-    rows = cur.fetchall()
+            if not rows:
+                print(f"[エラー] {race_name} の予想データが見つかりません")
+                sys.exit(1)
 
-    if not rows:
-        print(f"[エラー] {race_name} の予想データが見つかりません")
-        cur.close()
+            has_odds = any(r[3] is not None for r in rows)
+            if not has_odds:
+                print(f"[警告] {race_name} のオッズデータがありません")
+                print("先に odds_fetcher.py を実行してください")
+
+            print(f"\n=== {race_name} 複合スコア計算 ===")
+            results = []
+            for row_id, horse_name, face_score, win_odds, popularity in rows:
+                fs    = 50 if face_score is None else face_score
+                comp  = calc_composite(fs, win_odds)
+                rat   = value_rating(fs, win_odds)
+                comm  = composite_comment(horse_name, fs, win_odds, rat)
+                results.append((row_id, horse_name, face_score, win_odds, popularity, comp, rat, comm))
+
+            results.sort(key=lambda x: x[5], reverse=True)
+
+            print(f"\n{'順位':4} {'馬名':12} {'顔':6} {'オッズ':7} {'複合':6} {'評価':10}")
+            print("-" * 55)
+            for rank, (row_id, horse_name, face_score, win_odds, pop, comp, rat, comm) in enumerate(results, 1):
+                odds_str = f"{win_odds:.1f}倍" if win_odds else "---"
+                print(f"{rank:4} {horse_name:12} {(face_score or 0):5.1f}点  {odds_str:7} {comp:5.1f}点  {rat}")
+
+            for rank, (row_id, horse_name, face_score, win_odds, pop, comp, rat, comm) in enumerate(results, 1):
+                cur.execute("""
+                    UPDATE race_specific_result
+                    SET composite_score   = %s,
+                        win_odds          = %s,
+                        popularity        = %s,
+                        value_rating      = %s,
+                        composite_comment = %s
+                    WHERE id = %s
+                """, (comp, win_odds, pop, rat, comm, row_id))
+
+            conn.commit()
+        finally:
+            cur.close()
+    finally:
         conn.close()
-        sys.exit(1)
-
-    has_odds = any(r[3] is not None for r in rows)
-    if not has_odds:
-        print(f"[警告] {race_name} のオッズデータがありません")
-        print("先に odds_fetcher.py を実行してください")
-
-    print(f"\n=== {race_name} 複合スコア計算 ===")
-    results = []
-    for row_id, horse_name, face_score, win_odds, popularity in rows:
-        fs    = 50 if face_score is None else face_score
-        comp  = calc_composite(fs, win_odds)
-        rat   = value_rating(fs, win_odds)
-        comm  = composite_comment(horse_name, fs, win_odds, rat)
-        results.append((row_id, horse_name, face_score, win_odds, popularity, comp, rat, comm))
-
-    # 複合スコアでソートして順位を再計算
-    results.sort(key=lambda x: x[5], reverse=True)
-
-    print(f"\n{'順位':4} {'馬名':12} {'顔':6} {'オッズ':7} {'複合':6} {'評価':10}")
-    print("-" * 55)
-    for rank, (row_id, horse_name, face_score, win_odds, pop, comp, rat, comm) in enumerate(results, 1):
-        odds_str = f"{win_odds:.1f}倍" if win_odds else "---"
-        print(f"{rank:4} {horse_name:12} {(face_score or 0):5.1f}点  {odds_str:7} {comp:5.1f}点  {rat}")
-
-    # DBに保存
-    for rank, (row_id, horse_name, face_score, win_odds, pop, comp, rat, comm) in enumerate(results, 1):
-        cur.execute("""
-            UPDATE race_specific_result
-            SET composite_score   = %s,
-                win_odds          = %s,
-                popularity        = %s,
-                value_rating      = %s,
-                composite_comment = %s
-            WHERE id = %s
-        """, (comp, win_odds, pop, rat, comm, row_id))
-
-    conn.commit()
-    cur.close()
-    conn.close()
     print(f"\n→ DBに保存完了。/predict-v2?raceName={race_name} で確認できます")
     print("=== 完了 ===")
 

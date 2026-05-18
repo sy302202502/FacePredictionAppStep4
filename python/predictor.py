@@ -319,7 +319,11 @@ def main():
     print(f"  種別: {CATEGORY_LABEL.get(race_category, '不明（全体プロファイル使用）')}")
     print(f"  出走馬: {len(horse_list)}頭\n")
 
-    client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not api_key:
+        print("[エラー] ANTHROPIC_API_KEY が未設定です。.env を確認してください。")
+        sys.exit(1)
+    client = anthropic.Anthropic(api_key=api_key)
     conn = get_conn()
     try:
         print("差分プロファイル構築中...")

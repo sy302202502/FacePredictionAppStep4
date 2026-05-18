@@ -444,9 +444,9 @@
                         </div>
                         <div class="horse-name" th:text="${h.horse_name}"></div>
                         <div class="horse-score-row">
-                            <div class="score-num" th:text="${h.score} + 'pt'"></div>
+                            <div class="score-num" th:text="${h.score != null ? h.score + 'pt' : '-'}"></div>
                             <div class="score-bar-wrap">
-                                <div class="score-bar" th:style="'width:' + ${h.score} + '%'"></div>
+                                <div class="score-bar" th:style="'width:' + ${h.score != null ? h.score : 0} + '%'"></div>
                             </div>
                         </div>
                         <!-- 統計コメント -->
@@ -463,7 +463,8 @@
                         <!-- スコア詳細 -->
                         <div th:if="${h.detail != null}">
                             <button class="detail-toggle"
-                                    th:onclick="'toggleDetail(' + ${iter.index} + ')'">
+                                    th:data-idx="${iter.index}"
+                                    onclick="toggleDetail(this.dataset.idx)">
                                 SCORE DETAIL ▼
                             </button>
                             <table class="detail-table" th:id="'detail-' + ${iter.index}">

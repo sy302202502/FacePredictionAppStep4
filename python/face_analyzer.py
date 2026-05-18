@@ -233,7 +233,11 @@ def save_feature(conn, row_id, features, raw_text, avg_confidence, analysis_coun
 
 def main():
     winners_only = '--winners-only' in sys.argv
-    client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not api_key:
+        print("[エラー] ANTHROPIC_API_KEY が未設定です。.env を確認してください。")
+        sys.exit(1)
+    client = anthropic.Anthropic(api_key=api_key)
     print("=== 分析エンジン: Claude Vision API ===")
     conn = get_conn()
     try:

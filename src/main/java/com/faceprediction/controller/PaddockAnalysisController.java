@@ -154,6 +154,7 @@ public class PaddockAnalysisController {
                 pb.environment().put("PYTHONUNBUFFERED",  "1");
                 pb.environment().put("PYTHONIOENCODING", "utf-8");
                 pb.redirectErrorStream(true);
+                pb.directory(new java.io.File(pythonScriptDir));
                 Process proc = pb.start();
 
                 try (BufferedReader reader = new BufferedReader(

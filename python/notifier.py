@@ -195,7 +195,8 @@ def build_v2_message(race_name: str, predictions: list) -> str:
 
     lines.append("━━━━━━━━━━━━━━")
     lines.append(f"🕐 {datetime.now().strftime('%m/%d %H:%M')} 送信")
-    lines.append("http://localhost:8081/predict-v2")
+    app_url = os.getenv("APP_URL", "http://localhost:8081")
+    lines.append(f"{app_url}/predict-v2")
     return "\n".join(lines)
 
 def cmd_send_v2(race_name: str):

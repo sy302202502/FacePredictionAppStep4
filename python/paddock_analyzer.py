@@ -289,7 +289,11 @@ def main():
     log(f"  画像: {os.path.basename(image_path)}")
     log("")
 
-    client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not api_key:
+        log("[エラー] ANTHROPIC_API_KEY が未設定です。.env を確認してください。")
+        sys.exit(1)
+    client = anthropic.Anthropic(api_key=api_key)
     conn   = get_conn()
     try:
       # Step1: 画像分析

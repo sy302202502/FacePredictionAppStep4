@@ -176,11 +176,13 @@ def make_horse_image(image_path: str, width_pt: float = 60, height_pt: float = 4
     """馬の顔画像を RLImage で返す。存在しなければ None"""
     if not image_path:
         return None
-    # DB 保存パスは /uploads/horses/xxx.jpg や /uploads/candidates/xxx.jpg 形式
-    upload_base = Path(os.getenv("UPLOAD_BASE", str(Path.home() / "faceapp")))
-    # image_path の先頭 "/" を除去して結合（サブディレクトリ構造を保持）
-    relative = image_path.lstrip("/")
-    full_path = upload_base / relative
+    # DB保存パスが絶対パスの場合はそのまま使用、相対パスの場合はUPLOAD_DIRを基点に解決
+    p = Path(image_path)
+    if p.is_absolute() and p.exists():
+        full_path = p
+    else:
+        upload_base = Path(os.getenv("UPLOAD_DIR", str(Path.home() / "faceapp" / "uploads")))
+        full_path = upload_base / image_path.lstrip("/")
     if not full_path.exists():
         return None
     try:

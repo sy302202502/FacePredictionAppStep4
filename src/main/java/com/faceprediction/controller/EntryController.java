@@ -91,6 +91,7 @@ public class EntryController {
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.environment().put("PYTHONIOENCODING", "utf-8");
             pb.redirectErrorStream(true);
+            pb.directory(new java.io.File(pythonScriptDir));
             Process proc = pb.start();
             try (BufferedReader br = new BufferedReader(
                     new InputStreamReader(proc.getInputStream(), "UTF-8"))) {

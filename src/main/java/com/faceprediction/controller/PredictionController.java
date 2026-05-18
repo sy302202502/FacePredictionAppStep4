@@ -96,11 +96,11 @@ public class PredictionController {
         try {
             ProcessBuilder pb = new ProcessBuilder("python3", scriptPath, raceName);
             pb.environment().put("PYTHONIOENCODING", "utf-8");
-            pb.redirectErrorStream(false);
+            pb.redirectErrorStream(true);
+            pb.directory(new java.io.File(pythonScriptDir));
 
             Process proc = pb.start();
 
-            // stdout からバイナリ読み込み
             ByteArrayOutputStream pdfBuf = new ByteArrayOutputStream();
             try (InputStream is = proc.getInputStream()) {
                 byte[] chunk = new byte[4096];
@@ -108,12 +108,8 @@ public class PredictionController {
                 while ((read = is.read(chunk)) != -1) {
                     pdfBuf.write(chunk, 0, read);
                 }
-            }
-
-            // stderr はログ用に読み捨て（ブロック回避）
-            try (BufferedReader err = new BufferedReader(
-                    new InputStreamReader(proc.getErrorStream(), StandardCharsets.UTF_8))) {
-                err.lines().forEach(l -> {}); // 読み捨て
+            } finally {
+                proc.destroyForcibly();
             }
 
             int exit = proc.waitFor();

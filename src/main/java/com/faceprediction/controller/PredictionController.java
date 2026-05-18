@@ -113,8 +113,6 @@ public class PredictionController {
                 while ((read = is.read(chunk)) != -1) {
                     pdfBuf.write(chunk, 0, read);
                 }
-            } finally {
-                proc.destroyForcibly();
             }
 
             int exit = proc.waitFor();

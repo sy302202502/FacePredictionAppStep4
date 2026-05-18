@@ -69,7 +69,7 @@ public class HighDividendController {
         emitters.put(STREAM_KEY, emitter);
         startScript(STREAM_KEY,
                 List.of("python3", pythonScriptDir + File.separator + "high_dividend_selector.py"),
-                null);
+                pythonScriptDir);
 
         return emitter;
     }

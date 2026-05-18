@@ -29,7 +29,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                     "/weekly/run-pipeline",
                     "/high-dividend/run-stream",
                     "/accuracy/record", "/accuracy/record-v2",
-                    "/prediction/notify", "/prediction/pdf",
+                    "/prediction/notify",
                     "/entry/fetch"
                 )
             .and()

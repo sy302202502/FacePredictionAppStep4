@@ -41,10 +41,6 @@ public class PredictionService {
         return predictionRepository.findByTargetRaceNameOrderByRankPosition(raceName);
     }
 
-    public List<PredictionResult> getLatestPredictions() {
-        return predictionRepository.findTop50ByOrderByCreatedAtDesc();
-    }
-
     /**
      * 勝ち馬・負け馬の統計を差分込みで返す
      * Map<特徴名, Map<"winner"/"loser"/"diff", Map<値, 出現率>>>
@@ -152,9 +148,4 @@ public class PredictionService {
         return result;
     }
 
-    private void addCount(Map<String, Map<String, Integer>> map, String key, String value, int weight) {
-        if (value == null || value.isBlank()) return;
-        map.computeIfAbsent(key, k -> new LinkedHashMap<>())
-           .merge(value, weight, Integer::sum);
-    }
 }

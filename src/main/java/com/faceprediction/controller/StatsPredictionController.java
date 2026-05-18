@@ -49,7 +49,7 @@ public class StatsPredictionController {
     private static final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Boolean>    running  = new ConcurrentHashMap<>();
     private static final ExecutorService executor = Executors.newFixedThreadPool(4);
-    private static final Pattern SAFE_INPUT = Pattern.compile("^[\\p{L}\\p{N}\\s　（）()\\-]{1,100}$");
+    private static final Pattern SAFE_INPUT = Pattern.compile("^[\\p{L}\\p{N}\\s　（）()\\-・／/★]{1,100}$");
     private static final ObjectMapper    mapper   = new ObjectMapper();
 
     // ──────────────────────────────────────────────

@@ -31,7 +31,7 @@ public class ScriptController {
     private static final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Boolean> running = new ConcurrentHashMap<>();
     private static final ExecutorService executor = Executors.newFixedThreadPool(4);
-    private static final Pattern SAFE_INPUT = Pattern.compile("^[\\p{L}\\p{N}\\s　（）()\\-]{1,100}$");
+    private static final Pattern SAFE_INPUT = Pattern.compile("^[\\p{L}\\p{N}\\s　（）()\\-・／/★]{1,100}$");
 
     @GetMapping
     public String showScriptPage(Model model) {
@@ -55,11 +55,9 @@ public class ScriptController {
     // スクレイピング実行
     @PostMapping("/scraper")
     public String runScraper(
-            @RequestParam(defaultValue = "5") int years,
-            Model model) {
+            @RequestParam(defaultValue = "5") int years) {
         if (running.getOrDefault("scraper", false)) {
-            model.addAttribute("message", "スクレイピングはすでに実行中です");
-            return "script/index";
+            return "redirect:/script?error=already_running_scraper";
         }
         String script = pythonScriptDir + File.separator + "scraper.py";
         startScript("scraper", new String[]{"python3", script, String.valueOf(years)});
@@ -69,11 +67,9 @@ public class ScriptController {
     // 顔分析実行
     @PostMapping("/analyzer")
     public String runAnalyzer(
-            @RequestParam(defaultValue = "false") boolean winnersOnly,
-            Model model) {
+            @RequestParam(defaultValue = "false") boolean winnersOnly) {
         if (running.getOrDefault("analyzer", false)) {
-            model.addAttribute("message", "顔分析はすでに実行中です");
-            return "script/index";
+            return "redirect:/script?error=already_running_analyzer";
         }
         String script = pythonScriptDir + File.separator + "face_analyzer.py";
         String[] cmd = winnersOnly
@@ -143,7 +139,7 @@ public class ScriptController {
         if (!SAFE_INPUT.matcher(raceName).matches()) {
             return "redirect:/script?error=invalid_race_name";
         }
-        String key = "race_" + raceName.hashCode();
+        String key = "race_" + Math.abs(raceName.hashCode());
         if (running.getOrDefault(key, false)) {
             return "redirect:/script?started=" + key;
         }

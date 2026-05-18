@@ -14,9 +14,4 @@ public interface PredictionResultRepository extends JpaRepository<PredictionResu
 
     List<PredictionResult> findByTargetRaceNameOrderByRankPosition(String raceName);
 
-    @Query("SELECT p FROM PredictionResult p ORDER BY p.createdAt DESC")
-    org.springframework.data.domain.Page<PredictionResult> findLatestResults(org.springframework.data.domain.Pageable pageable);
-
-    @Query("SELECT p FROM PredictionResult p ORDER BY p.createdAt DESC")
-    List<PredictionResult> findTop50ByOrderByCreatedAtDesc();
 }

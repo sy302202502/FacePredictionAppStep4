@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,7 +48,8 @@ public class StatsPredictionController {
 
     private static final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Boolean>    running  = new ConcurrentHashMap<>();
-    private static final ExecutorService executor = Executors.newCachedThreadPool();
+    private static final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private static final Pattern SAFE_INPUT = Pattern.compile("^[\\p{L}\\p{N}\\s　（）()\\-]{1,100}$");
     private static final ObjectMapper    mapper   = new ObjectMapper();
 
     // ──────────────────────────────────────────────
@@ -113,6 +115,7 @@ public class StatsPredictionController {
         emitters.put(key, emitter);
         emitter.onCompletion(() -> emitters.remove(key));
         emitter.onTimeout(()    -> emitters.remove(key));
+        emitter.onError(e       -> emitters.remove(key));
         return emitter;
     }
 
@@ -123,6 +126,10 @@ public class StatsPredictionController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> run(@RequestParam String raceName) {
         Map<String, Object> resp = new LinkedHashMap<>();
+        if (!SAFE_INPUT.matcher(raceName).matches()) {
+            resp.put("error", "レース名に使用できない文字が含まれています");
+            return ResponseEntity.badRequest().body(resp);
+        }
         String key = "stats_" + Math.abs(raceName.hashCode());
 
         if (running.getOrDefault(key, false)) {
@@ -146,6 +153,10 @@ public class StatsPredictionController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> runFace(@RequestParam String raceName) {
         Map<String, Object> resp = new LinkedHashMap<>();
+        if (!SAFE_INPUT.matcher(raceName).matches()) {
+            resp.put("error", "レース名に使用できない文字が含まれています");
+            return ResponseEntity.badRequest().body(resp);
+        }
         String key = "face_" + Math.abs(raceName.hashCode());
 
         if (running.getOrDefault(key, false)) {

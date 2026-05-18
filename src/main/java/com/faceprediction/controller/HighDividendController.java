@@ -34,7 +34,7 @@ public class HighDividendController {
     private static final ConcurrentHashMap<String, Boolean>     running  = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, List<String>> logs    = new ConcurrentHashMap<>();
     private static final int MAX_LOG_LINES = 2000;
-    private static final ExecutorService executor = Executors.newCachedThreadPool();
+    private static final ExecutorService executor = Executors.newFixedThreadPool(4);
     private static final String STREAM_KEY = "high_dividend";
 
     // ── GET /high-dividend ─────────────────────────────────────

@@ -29,6 +29,9 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.faceprediction.repository.RaceSpecificPredictionRepository;
@@ -36,6 +39,8 @@ import com.faceprediction.repository.RaceSpecificPredictionRepository;
 @Controller
 @RequestMapping("/paddock")
 public class PaddockAnalysisController {
+
+    private static final Logger log = LoggerFactory.getLogger(PaddockAnalysisController.class);
 
     @Value("${python.script.dir}")
     private String pythonScriptDir;
@@ -49,7 +54,7 @@ public class PaddockAnalysisController {
     private static final ConcurrentHashMap<String, SseEmitter> emitters  = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Boolean>    running   = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Object>     results   = new ConcurrentHashMap<>();
-    private static final ExecutorService executor = Executors.newCachedThreadPool();
+    private static final ExecutorService executor = Executors.newFixedThreadPool(4);
     private static final ObjectMapper    mapper   = new ObjectMapper();
 
     // 見せるフォーム
@@ -68,6 +73,7 @@ public class PaddockAnalysisController {
         emitters.put(key, emitter);
         emitter.onCompletion(() -> emitters.remove(key));
         emitter.onTimeout(()    -> emitters.remove(key));
+        emitter.onError(e       -> emitters.remove(key));
         return emitter;
     }
 
@@ -108,7 +114,6 @@ public class PaddockAnalysisController {
         }
 
         // ファイル保存
-        String origName = image.getOriginalFilename();
         String ext = "image/png".equals(contentType) ? ".png" : ".jpg";
         String fileName = "paddock_" + UUID.randomUUID().toString().replace("-", "") + ext;
 
@@ -130,7 +135,8 @@ public class PaddockAnalysisController {
             return ResponseEntity.ok(resp);
 
         } catch (Exception e) {
-            resp.put("error", "ファイル保存エラー: " + e.getMessage());
+            log.error("パドック画像保存中に例外が発生しました", e);
+            resp.put("error", "ファイルの保存に失敗しました");
             return ResponseEntity.status(500).body(resp);
         }
     }
@@ -178,10 +184,11 @@ public class PaddockAnalysisController {
                 proc.waitFor();
 
             } catch (Exception e) {
-                sendLog(key, "[エラー] " + e.getMessage());
+                log.error("パドック分析中に例外が発生しました key={}", key, e);
+                sendLog(key, "[エラー] 分析中に問題が発生しました");
                 java.util.Map<String, Object> errResult = new java.util.LinkedHashMap<>();
                 errResult.put("success", false);
-                errResult.put("error", e.getMessage());
+                errResult.put("error", "分析中にエラーが発生しました");
                 results.put(key, errResult);
             } finally {
                 running.put(key, false);

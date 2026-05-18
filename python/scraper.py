@@ -110,7 +110,8 @@ def fetch_grade_races(year):
                 'grade': grade,
                 'venue': venue,
             })
-        except Exception:
+        except Exception as e:
+            print(f"[警告] レース行のパース失敗: {e}")
             continue
 
     return races
@@ -186,8 +187,8 @@ def get_horse_photo_no(horse_id):
             m = re.search(r'show_photo\.php\?horse_id=\d+&no=(\d+)', src)
             if m:
                 return m.group(1)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[警告] 馬の写真番号取得失敗: {e}")
     return None
 
 def download_horse_image(horse_id, horse_name):
@@ -207,8 +208,8 @@ def download_horse_image(horse_id, horse_name):
                 with open(save_path, 'wb') as f:
                     f.write(resp.content)
                 return f"/uploads/horses/{horse_id}.jpg"
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[警告] 馬画像のダウンロード失敗 horse_id={horse_id}: {e}")
 
     return None
 

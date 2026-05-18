@@ -99,7 +99,8 @@ def parse_llava_response(raw):
             'eyes': eyes, 'coat': coat, 'muscle': muscle, 'vitality': vitality,
             'summary': summary, 'face_score': score
         }
-    except Exception:
+    except Exception as e:
+        print(f"[警告] LLMレスポンスのJSON解析失敗: {e}")
         return None
 
 # ── コンディションからコメント生成（バリエーション豊富版）───
@@ -326,8 +327,8 @@ def main():
     try:
         requests.post(OLLAMA_URL, json={'model': OLLAMA_MODEL, 'keep_alive': 0}, timeout=10)
         print("🧹 llava:7b をメモリから解放しました")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[警告] モデル解放失敗: {e}")
 
 if __name__ == '__main__':
     main()

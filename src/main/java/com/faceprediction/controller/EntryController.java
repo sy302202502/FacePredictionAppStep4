@@ -17,12 +17,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.faceprediction.entity.RaceEntry;
 import com.faceprediction.repository.RaceEntryRepository;
 
 @Controller
 @RequestMapping("/entry")
 public class EntryController {
+
+    private static final Logger log = LoggerFactory.getLogger(EntryController.class);
 
     private final RaceEntryRepository entryRepo;
 
@@ -105,7 +110,8 @@ public class EntryController {
                 ra.addFlashAttribute("error", "スクリプト異常終了 (code=" + exitCode + "):\n" + output);
             }
         } catch (Exception e) {
-            ra.addFlashAttribute("error", "取得失敗: " + e.getMessage());
+            log.error("出走馬取得中に例外が発生しました", e);
+            ra.addFlashAttribute("error", "出走馬の取得に失敗しました");
         }
         return "redirect:/entry";
     }

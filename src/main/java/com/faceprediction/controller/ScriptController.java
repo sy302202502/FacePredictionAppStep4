@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -29,7 +30,8 @@ public class ScriptController {
     // 実行中スクリプトのログをSSEで流すためのEmitter管理
     private static final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Boolean> running = new ConcurrentHashMap<>();
-    private static final ExecutorService executor = Executors.newCachedThreadPool();
+    private static final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private static final Pattern SAFE_INPUT = Pattern.compile("^[\\p{L}\\p{N}\\s　（）()\\-]{1,100}$");
 
     @GetMapping
     public String showScriptPage(Model model) {
@@ -46,6 +48,7 @@ public class ScriptController {
         emitters.put(key, emitter);
         emitter.onCompletion(() -> emitters.remove(key));
         emitter.onTimeout(()    -> emitters.remove(key));
+        emitter.onError(e       -> emitters.remove(key));
         return emitter;
     }
 
@@ -109,6 +112,9 @@ public class ScriptController {
         if (running.getOrDefault(key, false)) {
             return "redirect:/script?started=" + key;
         }
+        if (raceName != null && !raceName.isBlank() && !SAFE_INPUT.matcher(raceName).matches()) {
+            return "redirect:/script?error=invalid_race_name";
+        }
         String script = pythonScriptDir + File.separator + "odds_fetcher.py";
         String[] cmd = raceName != null && !raceName.isBlank()
             ? new String[]{"python3", script, raceName}
@@ -134,6 +140,9 @@ public class ScriptController {
             @RequestParam String raceName,
             @RequestParam(defaultValue = "10") int years,
             @RequestParam(defaultValue = "true") boolean supplement) {
+        if (!SAFE_INPUT.matcher(raceName).matches()) {
+            return "redirect:/script?error=invalid_race_name";
+        }
         String key = "race_" + raceName.hashCode();
         if (running.getOrDefault(key, false)) {
             return "redirect:/script?started=" + key;

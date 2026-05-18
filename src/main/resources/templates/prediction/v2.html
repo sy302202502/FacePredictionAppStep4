@@ -1121,6 +1121,10 @@
 
     <div class="page-body">
 
+        <!-- LINE通知フラッシュメッセージ -->
+        <div th:if="${notifySuccess}" style="margin:12px auto;max-width:900px;padding:10px 18px;background:rgba(125,255,79,0.12);border:1px solid var(--neon);border-radius:6px;color:var(--neon);" th:text="${notifySuccess}"></div>
+        <div th:if="${notifyError}"   style="margin:12px auto;max-width:900px;padding:10px 18px;background:rgba(255,34,68,0.12);border:1px solid var(--crimson);border-radius:6px;color:var(--crimson);" th:text="${notifyError}"></div>
+
         <!-- HEADER -->
         <div class="site-header">
             <div class="stream-badge">🎙 ON AIR</div>

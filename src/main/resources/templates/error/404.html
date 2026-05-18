@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 — ページが見つかりません</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        body { background:#050708; color:#d4e8cc; font-family:'Noto Sans JP',sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+        .error-box { text-align:center; padding:48px 32px; }
+        .error-code { font-size:96px; font-weight:900; color:#7dff4f; text-shadow:0 0 30px rgba(125,255,79,0.5); line-height:1; }
+        .error-msg  { font-size:22px; margin:16px 0 8px; }
+        .error-sub  { color:#607860; margin-bottom:32px; }
+        .btn-home   { display:inline-block; padding:10px 28px; background:#7dff4f; color:#050708; border-radius:6px; text-decoration:none; font-weight:700; }
+    </style>
+</head>
+<body>
+    <div class="error-box">
+        <div class="error-code">404</div>
+        <div class="error-msg">ページが見つかりません</div>
+        <div class="error-sub" th:text="${path != null ? path : ''}"></div>
+        <a href="/" class="btn-home">ホームへ戻る</a>
+    </div>
+</body>
+</html>

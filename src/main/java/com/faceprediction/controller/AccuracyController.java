@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
@@ -26,6 +29,8 @@ import com.faceprediction.repository.RaceSpecificResultRepository;
 @Controller
 @RequestMapping("/accuracy")
 public class AccuracyController {
+
+    private static final Logger log = LoggerFactory.getLogger(AccuracyController.class);
 
     private final PredictionAccuracyRepository accuracyRepo;
     private final PredictionResultRepository   predictionRepo;
@@ -85,9 +90,9 @@ public class AccuracyController {
         model.addAttribute("categoryRows", categoryRows);
 
         // ── 旧システム 直近記録 ──────────────────────────
-        List<PredictionAccuracy> recent = accuracyRepo.findRecordedResults();
-        model.addAttribute("recentResults",
-            recent.stream().limit(20).collect(Collectors.toList()));
+        List<PredictionAccuracy> recent = accuracyRepo.findRecordedResults(
+            org.springframework.data.domain.PageRequest.of(0, 20));
+        model.addAttribute("recentResults", recent);
 
         // ── 新システム（顔面傾向分析）統計 ───────────────
         try {
@@ -181,6 +186,7 @@ public class AccuracyController {
         boolean hit1st  = !predictions.isEmpty()
             && predictions.get(0).getHorseName().equals(actualWinner);
 
+        List<PredictionAccuracy> accList = new ArrayList<>();
         for (PredictionResult p : predictions) {
             PredictionAccuracy acc = new PredictionAccuracy();
             acc.setPredictionId(p.getId());
@@ -194,8 +200,9 @@ public class AccuracyController {
             // top5Hit は予測上位5頭の行にのみ記録（全行に同一値を付けると集計が狂う）
             acc.setTop5Hit(p.getRankPosition() != null && p.getRankPosition() <= 5 ? top5Hit : null);
             acc.setFinalScore(p.getFinalScore());
-            accuracyRepo.save(acc);
+            accList.add(acc);
         }
+        accuracyRepo.saveAll(accList);
 
         ra.addFlashAttribute("success",
             raceName + " の結果を記録しました。1位的中: " + (hit1st ? "✓" : "✗")
@@ -247,32 +254,38 @@ public class AccuracyController {
             // 既存レコードを削除して上書き
             jdbc.update("DELETE FROM race_specific_accuracy WHERE race_name = ?", raceName);
 
-            for (Map<String, Object> p : predictions) {
-                String horseName = (String) p.get("horse_name");
-                int predRank     = ((Number) p.get("rank_position")).intValue();
-                Double score     = p.get("score") != null ? ((Number) p.get("score")).doubleValue() : null;
-                String dataSrc   = (String) p.get("data_source");
-
-                Integer actualRank = null;
-                if (horseName.equals(first_))                          actualRank = 1;
-                else if (!second_.isEmpty() && horseName.equals(second_)) actualRank = 2;
-                else if (!third_.isEmpty()  && horseName.equals(third_))  actualRank = 3;
-
-                jdbc.update(
-                    "INSERT INTO race_specific_accuracy" +
-                    " (race_name, horse_name, predicted_rank, actual_rank, hit, top5_hit, score, data_source, recorded_at)" +
-                    " VALUES (?,?,?,?,?,?,?,?,NOW())",
-                    raceName, horseName, predRank, actualRank,
-                    hit1st && Integer.valueOf(1).equals(predRank),
-                    predRank <= 5 ? top5Hit : null, score, dataSrc);
-            }
+            jdbc.batchUpdate(
+                "INSERT INTO race_specific_accuracy" +
+                " (race_name, horse_name, predicted_rank, actual_rank, hit, top5_hit, score, data_source, recorded_at)" +
+                " VALUES (?,?,?,?,?,?,?,?,NOW())",
+                predictions,
+                predictions.size(),
+                (ps, p) -> {
+                    String horseName = (String) p.get("horse_name");
+                    int predRank     = ((Number) p.get("rank_position")).intValue();
+                    Double score     = p.get("score") != null ? ((Number) p.get("score")).doubleValue() : null;
+                    String dataSrc   = (String) p.get("data_source");
+                    Integer actualRank = null;
+                    if (horseName.equals(first_))                             actualRank = 1;
+                    else if (!second_.isEmpty() && horseName.equals(second_)) actualRank = 2;
+                    else if (!third_.isEmpty()  && horseName.equals(third_))  actualRank = 3;
+                    ps.setString(1, raceName);
+                    ps.setString(2, horseName);
+                    ps.setInt(3, predRank);
+                    if (actualRank != null) ps.setInt(4, actualRank); else ps.setNull(4, java.sql.Types.INTEGER);
+                    ps.setBoolean(5, hit1st && predRank == 1);
+                    if (predRank <= 5) ps.setBoolean(6, top5Hit); else ps.setNull(6, java.sql.Types.BOOLEAN);
+                    if (score != null) ps.setDouble(7, score); else ps.setNull(7, java.sql.Types.DOUBLE);
+                    ps.setString(8, dataSrc);
+                });
 
             String msg = raceName + " 記録完了 — 1位的中: " + (hit1st ? "✅ HIT" : "✗ MISS")
                        + "  TOP5的中: " + (top5Hit ? "✅ HIT" : "✗ MISS");
             ra.addFlashAttribute("success", msg);
 
         } catch (Exception e) {
-            ra.addFlashAttribute("error", "記録エラー: " + e.getMessage());
+            log.error("結果記録中に例外が発生しました raceName={}", raceName, e);
+            ra.addFlashAttribute("error", "結果の記録に失敗しました");
         }
         return "redirect:/accuracy";
     }

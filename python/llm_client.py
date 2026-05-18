@@ -179,18 +179,26 @@ def _call_openrouter(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> s
         "temperature": 0.5,
         "max_tokens": 1024
     }
-    try:
-        resp = requests.post(url, json=payload,
-                             headers={
-                                 "Authorization": f"Bearer {OR_API_KEY}",
-                                 "HTTP-Referer": "https://github.com/faceprediction"
-                             },
-                             timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
-        resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"    [llm エラー] OpenRouter: {e}")
-        return None
+    headers = {
+        "Authorization": f"Bearer {OR_API_KEY}",
+        "HTTP-Referer": "https://github.com/faceprediction"
+    }
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, headers=headers,
+                                 timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
+            if resp.status_code == 429:
+                wait = float(resp.headers.get('retry-after', 2 ** (attempt + 1)))
+                print(f"    [llm] OpenRouter レート制限 — {wait:.0f}秒待機")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()['choices'][0]['message']['content']
+        except Exception as e:
+            print(f"    [llm エラー] OpenRouter attempt={attempt+1}: {e}")
+            if attempt < 2:
+                time.sleep(2 ** (attempt + 1))
+    return None
 
 
 # ──────────────────────────────────────────────

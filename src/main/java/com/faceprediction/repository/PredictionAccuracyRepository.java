@@ -12,7 +12,7 @@ public interface PredictionAccuracyRepository extends JpaRepository<PredictionAc
     @Query("SELECT a FROM PredictionAccuracy a"
         + " WHERE a.predictedRank = 1 AND a.top5Hit IS NOT NULL"
         + " ORDER BY a.raceDate DESC")
-    List<PredictionAccuracy> findRecordedResults();
+    List<PredictionAccuracy> findRecordedResults(org.springframework.data.domain.Pageable pageable);
 
     @Query("SELECT a.raceCategory,"
         + " COUNT(DISTINCT a.raceName),"

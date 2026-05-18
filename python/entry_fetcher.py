@@ -134,7 +134,8 @@ def fetch_shutuba_entries(race_id):
                 'jockey_name': jockey,
                 'sex': sex,
             })
-        except Exception:
+        except Exception as e:
+            print(f"[警告] 出走馬行のパース失敗: {e}")
             continue
 
     return entries, distance, surface, race_name, venue

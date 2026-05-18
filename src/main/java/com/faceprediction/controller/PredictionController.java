@@ -25,12 +25,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.faceprediction.entity.PredictionResult;
 import com.faceprediction.service.PredictionService;
 
 @Controller
 @RequestMapping("/prediction")
 public class PredictionController {
+
+    private static final Logger log = LoggerFactory.getLogger(PredictionController.class);
 
     private final PredictionService predictionService;
 
@@ -130,8 +135,9 @@ public class PredictionController {
             return ResponseEntity.ok().headers(headers).body(pdfBuf.toByteArray());
 
         } catch (Exception e) {
+            log.error("PDF生成中に例外が発生しました raceName={}", raceName, e);
             return ResponseEntity.internalServerError()
-                    .body(("例外: " + e.getMessage()).getBytes(StandardCharsets.UTF_8));
+                    .body("PDF生成に失敗しました".getBytes(StandardCharsets.UTF_8));
         }
     }
 
@@ -162,7 +168,8 @@ public class PredictionController {
                 ra.addFlashAttribute("notifyError", "LINE送信失敗: " + sb.toString().trim());
             }
         } catch (Exception e) {
-            ra.addFlashAttribute("notifyError", "例外: " + e.getMessage());
+            log.error("LINE通知送信中に例外が発生しました raceName={}", raceName, e);
+            ra.addFlashAttribute("notifyError", "LINE通知の送信に失敗しました");
         }
         return "redirect:/predict-v2?raceName=" + URLEncoder.encode(raceName, StandardCharsets.UTF_8);
     }

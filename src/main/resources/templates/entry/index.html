@@ -266,7 +266,7 @@
                         <label class="form-label">レース名で絞り込み（省略可）</label>
                         <input type="text" name="query" placeholder="例: 日本ダービー" style="width: 200px;">
                     </div>
-                    <button type="submit" class="btn btn-neon">出走馬を自動取得</button>
+                    <button type="submit" class="btn btn-neon" onclick="this.disabled=true;this.textContent='取得中…';this.form.submit();">出走馬を自動取得</button>
                     <span class="fetch-hint">netkeibaから直近2週間の重賞出走馬を取得します</span>
                 </form>
             </div>
@@ -298,11 +298,11 @@
             <div class="glass-card">
                 <div class="glass-card-inner">
                     <div class="race-meta-bar">
-                        <span class="race-meta-name" th:text="${entries[0].raceName}">レース名</span>
+                        <span class="race-meta-name" th:text="${entries[0].raceName ?: '-'}">レース名</span>
                         <span class="race-meta-badge" th:text="${entries.size()} + '頭'"></span>
-                        <span class="race-meta-info" th:text="${entries[0].raceDate}"></span>
-                        <span class="race-meta-info" th:text="${entries[0].distance} + 'm ' + ${entries[0].surface}"></span>
-                        <span class="race-meta-info" th:text="${entries[0].venue}"></span>
+                        <span class="race-meta-info" th:text="${entries[0].raceDate ?: '-'}"></span>
+                        <span class="race-meta-info" th:text="${(entries[0].distance != null ? entries[0].distance + 'm ' : '') + (entries[0].surface ?: '')}"></span>
+                        <span class="race-meta-info" th:text="${entries[0].venue ?: '-'}"></span>
                     </div>
                 </div>
             </div>

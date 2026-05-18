@@ -30,12 +30,7 @@ public class HorseController {
     public String listHorses(
             @RequestParam(required = false, defaultValue = "") String q,
             Model model) {
-        List<HorseFaceFeature> horses = featureRepo.findAllWinnersWithFeatures();
-        if (!q.isBlank()) {
-            horses = horses.stream()
-                .filter(h -> h.getHorseName() != null && h.getHorseName().contains(q))
-                .collect(Collectors.toList());
-        }
+        List<HorseFaceFeature> horses = featureRepo.findWinnersWithNameFilter(q);
         model.addAttribute("horses", horses);
         model.addAttribute("q", q);
         return "horse/list";
@@ -53,16 +48,20 @@ public class HorseController {
         HorseFaceFeature horse = featureRepo.findById(id).orElse(null);
         if (horse == null) return "redirect:/horse";
 
-        // 同じ特徴を持つ類似馬（勝ち馬の中から）を検索
-        List<HorseFaceFeature> similar = featureRepo.findAllWinnersWithFeatures().stream()
-            .filter(h -> !h.getId().equals(id))
-            .filter(h -> h.getNoseShape() != null)
+        // 同じ特徴を持つ類似馬（DB側でフィルタ）
+        List<HorseFaceFeature> similar = featureRepo.findSimilarWinners(
+                id,
+                horse.getNoseShape(),
+                horse.getEyeSize(),
+                horse.getFaceContour(),
+                horse.getOverallImpression()
+            ).stream()
             .filter(h -> {
                 int match = 0;
-                if (eq(h.getNoseShape(),        horse.getNoseShape()))        match++;
-                if (eq(h.getEyeSize(),          horse.getEyeSize()))          match++;
-                if (eq(h.getFaceContour(),       horse.getFaceContour()))      match++;
-                if (eq(h.getOverallImpression(), horse.getOverallImpression())) match++;
+                if (eq(h.getNoseShape(),         horse.getNoseShape()))         match++;
+                if (eq(h.getEyeSize(),           horse.getEyeSize()))           match++;
+                if (eq(h.getFaceContour(),        horse.getFaceContour()))       match++;
+                if (eq(h.getOverallImpression(),  horse.getOverallImpression())) match++;
                 return match >= 3;
             })
             .limit(5)

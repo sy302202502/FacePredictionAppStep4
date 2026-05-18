@@ -13,6 +13,20 @@ public interface HorseFaceFeatureRepository extends JpaRepository<HorseFaceFeatu
     @Query("SELECT h FROM HorseFaceFeature h WHERE h.isWinner = true AND h.noseShape IS NOT NULL ORDER BY h.winCount DESC")
     List<HorseFaceFeature> findAllWinnersWithFeatures();
 
+    @Query("SELECT h FROM HorseFaceFeature h WHERE h.isWinner = true AND h.noseShape IS NOT NULL" +
+           " AND (:q = '' OR h.horseName LIKE %:q%) ORDER BY h.winCount DESC")
+    List<HorseFaceFeature> findWinnersWithNameFilter(@Param("q") String q);
+
+    @Query("SELECT h FROM HorseFaceFeature h WHERE h.isWinner = true AND h.id <> :id AND h.noseShape IS NOT NULL" +
+           " AND (h.noseShape = :ns OR h.eyeSize = :es OR h.faceContour = :fc OR h.overallImpression = :oi)" +
+           " ORDER BY h.winCount DESC")
+    List<HorseFaceFeature> findSimilarWinners(
+        @Param("id") Long id,
+        @Param("ns") String noseShape,
+        @Param("es") String eyeSize,
+        @Param("fc") String faceContour,
+        @Param("oi") String overallImpression);
+
     @Query("SELECT h FROM HorseFaceFeature h WHERE h.isWinner = false AND h.noseShape IS NOT NULL")
     List<HorseFaceFeature> findAllLosersWithFeatures();
 

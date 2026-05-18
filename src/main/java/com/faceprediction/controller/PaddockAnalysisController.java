@@ -118,9 +118,13 @@ public class PaddockAnalysisController {
         String fileName = "paddock_" + UUID.randomUUID().toString().replace("-", "") + ext;
 
         try {
-            Path paddockDir = Paths.get(uploadDir, "paddock");
+            Path paddockDir = Paths.get(uploadDir, "paddock").toAbsolutePath().normalize();
             Files.createDirectories(paddockDir);
-            Path dest = paddockDir.resolve(fileName);
+            Path dest = paddockDir.resolve(fileName).normalize();
+            if (!dest.startsWith(paddockDir)) {
+                resp.put("error", "不正なファイルパスです");
+                return ResponseEntity.badRequest().body(resp);
+            }
             Files.copy(image.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
 
             // 分析キー（レース名ベース、衝突防止にUUID短縮）

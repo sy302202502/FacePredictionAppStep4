@@ -94,75 +94,59 @@ def get_conn():
     return psycopg2.connect(
         host=os.getenv('DB_HOST','localhost'), port=os.getenv('DB_PORT','5432'),
         dbname=os.getenv('DB_NAME','faceapp'), user=os.getenv('DB_USER','postgres'),
-        password=os.getenv('DB_PASSWORD','postgrestest')
+        password=os.getenv('DB_PASSWORD') or sys.exit('[エラー] DB_PASSWORD 環境変数が設定されていません')
     )
 
-def already_has_entries(race_id):
+def already_has_entries(conn, race_id):
     """race_entry に既にデータがあるか"""
-    conn = get_conn()
+    cur = conn.cursor()
     try:
-        cur = conn.cursor()
-        try:
-            cur.execute("SELECT COUNT(*) FROM race_entry WHERE race_id = %s", (race_id,))
-            return cur.fetchone()[0] > 0
-        finally:
-            cur.close()
+        cur.execute("SELECT COUNT(*) FROM race_entry WHERE race_id = %s", (race_id,))
+        return cur.fetchone()[0] > 0
     finally:
-        conn.close()
+        cur.close()
 
-def already_has_stats(race_name):
+def already_has_stats(conn, race_name):
     """stats_prediction に既にデータがあるか"""
-    conn = get_conn()
+    cur = conn.cursor()
     try:
-        cur = conn.cursor()
-        try:
-            cur.execute("SELECT COUNT(*) FROM stats_prediction WHERE race_name = %s", (race_name,))
-            return cur.fetchone()[0] > 0
-        finally:
-            cur.close()
+        cur.execute("SELECT COUNT(*) FROM stats_prediction WHERE race_name = %s", (race_name,))
+        return cur.fetchone()[0] > 0
     finally:
-        conn.close()
+        cur.close()
 
-def face_analysis_done(race_name):
+def face_analysis_done(conn, race_name):
     """全馬の顔面分析が完了しているか"""
-    conn = get_conn()
+    cur = conn.cursor()
     try:
-        cur = conn.cursor()
-        try:
-            cur.execute("""
-                SELECT COUNT(*), COUNT(face_comment)
-                FROM stats_prediction WHERE race_name = %s
-            """, (race_name,))
-            total, done = cur.fetchone()
-            return total > 0 and total == done
-        finally:
-            cur.close()
+        cur.execute("""
+            SELECT COUNT(*), COUNT(face_comment)
+            FROM stats_prediction WHERE race_name = %s
+        """, (race_name,))
+        total, done = cur.fetchone()
+        return total > 0 and total == done
     finally:
-        conn.close()
+        cur.close()
 
-def update_image_paths(race_name):
+def update_image_paths(conn, race_name):
     """stats_predictionのimage_path等をrace_entryからJOINして更新"""
-    conn = get_conn()
+    cur = conn.cursor()
     try:
-        cur = conn.cursor()
-        try:
-            cur.execute("""
-                UPDATE stats_prediction sp
-                SET image_path    = '/uploads/candidates/' || re.horse_id || '.jpg',
-                    jockey_name   = re.jockey_name,
-                    horse_number  = re.horse_number
-                FROM race_entry re
-                WHERE sp.race_name = re.race_name
-                  AND sp.horse_name = re.horse_name
-                  AND sp.race_name  = %s
-            """, (race_name,))
-            updated = cur.rowcount
-            conn.commit()
-            return updated
-        finally:
-            cur.close()
+        cur.execute("""
+            UPDATE stats_prediction sp
+            SET image_path    = '/uploads/candidates/' || re.horse_id || '.jpg',
+                jockey_name   = re.jockey_name,
+                horse_number  = re.horse_number
+            FROM race_entry re
+            WHERE sp.race_name = re.race_name
+              AND sp.horse_name = re.horse_name
+              AND sp.race_name  = %s
+        """, (race_name,))
+        updated = cur.rowcount
+        conn.commit()
+        return updated
     finally:
-        conn.close()
+        cur.close()
 
 def main():
     dry_run = '--dry-run' in sys.argv
@@ -187,8 +171,10 @@ def main():
 
     log("")
     results = []
+    conn = get_conn()
 
-    for i, race in enumerate(races, 1):
+    try:
+      for i, race in enumerate(races, 1):
         race_name = race['race_name']
         race_id   = race['race_id']
 
@@ -197,7 +183,7 @@ def main():
         log(f"{'─'*50}")
 
         # 1. 出馬表・写真取得（既にDBに存在する場合はスキップ）
-        if already_has_entries(race_id):
+        if already_has_entries(conn, race_id):
             log(f"  → 出馬表: スキップ（DB既存）")
             ok1 = True
         else:
@@ -211,7 +197,7 @@ def main():
                 continue
 
         # 2. 統計予想（既に存在する場合はスキップ）
-        if already_has_stats(race_name):
+        if already_has_stats(conn, race_name):
             log(f"  → 統計予想: スキップ（DB既存）")
             ok2 = True
         else:
@@ -222,12 +208,12 @@ def main():
                 continue
 
         # 3. image_path 更新
-        updated = update_image_paths(race_name)
+        updated = update_image_paths(conn, race_name)
         if updated > 0:
             log(f"  → image_path 更新: {updated}頭")
 
         # 4. 顔面分析（全馬完了済みならスキップ）
-        if face_analysis_done(race_name):
+        if face_analysis_done(conn, race_name):
             log(f"  → 顔面分析: スキップ（全馬完了済み）")
             ok3 = True
         else:
@@ -239,6 +225,8 @@ def main():
         })
 
         time.sleep(1)
+    finally:
+        conn.close()
 
     log(f"\n{'='*60}")
     log("  週次パイプライン 完了")

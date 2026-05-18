@@ -68,7 +68,7 @@ def get_conn():
         port=os.getenv('DB_PORT', '5432'),
         dbname=os.getenv('DB_NAME', 'faceapp'),
         user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD', 'postgrestest')
+        password=os.getenv('DB_PASSWORD') or sys.exit('[エラー] DB_PASSWORD 環境変数が設定されていません')
     )
 
 def encode_image(path):

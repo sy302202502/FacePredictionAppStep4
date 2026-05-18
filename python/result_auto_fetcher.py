@@ -231,9 +231,19 @@ def search_race_id_from_netkeiba(race_name, race_date=None):
                 "&grade[]=1&grade[]=2&grade[]=3&grade[]=4&grade[]=5&grade[]=6"
                 "&track[]=1&track[]=2&sort=date&list=500"
             )
-            resp = requests.get(url, headers=HEADERS, timeout=15)
-            resp.encoding = 'EUC-JP'
-            soup = BeautifulSoup(resp.text, 'lxml')
+            soup = None
+            for attempt in range(3):
+                try:
+                    resp = requests.get(url, headers=HEADERS, timeout=15)
+                    resp.encoding = 'EUC-JP'
+                    soup = BeautifulSoup(resp.text, 'lxml')
+                    break
+                except Exception as e:
+                    print(f"    [警告] netkeiba検索リクエスト失敗 attempt={attempt+1}: {e}")
+                    if attempt < 2:
+                        time.sleep(2 ** (attempt + 1))
+            if soup is None:
+                continue
 
             for a in soup.select('a[href*="/race/"]'):
                 link_text = a.text.strip()

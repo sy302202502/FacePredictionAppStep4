@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 
 import com.faceprediction.entity.RaceSpecificAccuracy;
 
-public interface RaceSpecificAccuracyRepository extends JpaRepository<RaceSpecificAccuracy, Integer> {
+public interface RaceSpecificAccuracyRepository extends JpaRepository<RaceSpecificAccuracy, Long> {
 
     /** 1着的中率を出すための集計：[totalRaces, winHits] */
     @Query("SELECT COUNT(DISTINCT a.raceName), " +

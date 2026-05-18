@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -161,6 +162,7 @@ public class AccuracyController {
     }
 
     // ── 旧システム: 手動結果記録 ────────────────────────
+    @Transactional
     @PostMapping("/record")
     public String recordResult(
             @RequestParam String raceName,
@@ -203,6 +205,7 @@ public class AccuracyController {
 
     // ── 新システム: 手動結果記録 ────────────────────────
     // 1〜3着を入力して race_specific_accuracy に書き込む
+    @Transactional
     @PostMapping("/record-v2")
     public String recordV2(
             @RequestParam String raceName,

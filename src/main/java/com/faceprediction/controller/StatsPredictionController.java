@@ -27,12 +27,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Controller
 @RequestMapping("/stats-predict")
 public class StatsPredictionController {
+
+    private static final Logger log = LoggerFactory.getLogger(StatsPredictionController.class);
 
     @Value("${python.script.dir}")
     private String pythonScriptDir;
@@ -84,7 +89,9 @@ public class StatsPredictionController {
                         Map<String, String> detail = mapper.readValue(
                             detailJson, new TypeReference<Map<String, String>>() {});
                         r.put("detail", detail);
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        log.warn("score_detail のJSON解析に失敗: {}", detailJson, e);
+                    }
                 }
                 enriched.add(r);
             }

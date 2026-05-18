@@ -78,20 +78,32 @@ def run_script(script_name, *args):
 
 def task_scrape():
     log.info("=== タスク: 重賞結果スクレイピング ===")
-    run_script('scraper.py', '1')
+    if not run_script('scraper.py', '1'):
+        log.error("スクレイピング失敗。後続タスクに影響する可能性があります。")
+        return False
+    return True
 
 def task_analyze():
     log.info("=== タスク: 顔分析 ===")
-    run_script('face_analyzer.py')
+    if not run_script('face_analyzer.py'):
+        log.error("顔分析失敗。")
+        return False
+    return True
 
 def task_entries():
     log.info("=== タスク: 出走馬自動取得 ===")
-    run_script('entry_fetcher.py')
+    if not run_script('entry_fetcher.py'):
+        log.error("出走馬取得失敗。")
+        return False
+    return True
 
 def task_record():
     """的中記録の自動取得"""
     log.info("=== タスク: 的中記録 自動取得 ===")
-    run_script('result_auto_fetcher.py')
+    if not run_script('result_auto_fetcher.py'):
+        log.error("的中記録取得失敗。")
+        return False
+    return True
 
 def task_notify():
     """

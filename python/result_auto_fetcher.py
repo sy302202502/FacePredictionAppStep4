@@ -359,7 +359,7 @@ def show_report(conn):
         WHERE predicted_rank=1 AND top5_hit IS NOT NULL
     """)
     r = cur.fetchone()
-    if r and r[0]:
+    if r and r[0] and r[0] > 0:
         total, wh, t5h = r
         wh  = wh  or 0
         t5h = t5h or 0
@@ -375,7 +375,7 @@ def show_report(conn):
         WHERE predicted_rank=1
     """)
     r2 = cur.fetchone()
-    if r2 and r2[0]:
+    if r2 and r2[0] and r2[0] > 0:
         total, wh, t5h = r2
         wh  = wh  or 0
         t5h = t5h or 0

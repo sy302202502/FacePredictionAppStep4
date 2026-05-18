@@ -4,6 +4,8 @@ import java.io.File;
 
 import javax.annotation.PostConstruct;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -14,8 +16,10 @@ import org.springframework.stereotype.Component;
  * アップロードフォルダ（application.properties の upload.dir で指定）を
  * 存在確認・作成する役割を持つ。
  */
-@Component  // Spring 管理下の Bean として登録
+@Component
 public class UploadDirInitializer {
+
+    private static final Logger log = LoggerFactory.getLogger(UploadDirInitializer.class);
 
     /**
      * application.properties または application.yml から
@@ -39,15 +43,12 @@ public class UploadDirInitializer {
         // ディレクトリが存在しない場合は作成を試みる
         if (!dir.exists()) {
             if (dir.mkdirs()) {
-                // 成功した場合
-                System.out.println("✅ uploads ディレクトリを作成しました: " + dir.getAbsolutePath());
+                log.info("uploads ディレクトリを作成しました: {}", dir.getAbsolutePath());
             } else {
-                // 作成に失敗した場合
-                System.err.println("⚠️ uploads ディレクトリの作成に失敗しました");
+                log.error("uploads ディレクトリの作成に失敗しました: {}", dir.getAbsolutePath());
             }
         } else {
-            // すでに存在する場合
-            System.out.println("ℹ️ uploads ディレクトリは既に存在します: " + dir.getAbsolutePath());
+            log.info("uploads ディレクトリは既に存在します: {}", dir.getAbsolutePath());
         }
     }
 }

@@ -106,7 +106,7 @@ def check_image_quality(client, image_data):
             return score * 0.5, "横向きの画像"
         if result.get('face_size') == 'small':
             return score * 0.7, "顔が小さすぎる"
-        return score, None if score >= QUALITY_THRESHOLD else reject
+        return (score, None) if score >= QUALITY_THRESHOLD else (score, reject)
     except Exception:
         return 0.5, None
 

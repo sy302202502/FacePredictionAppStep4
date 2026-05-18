@@ -157,7 +157,7 @@
         </div>
 
         <!-- 類似馬 -->
-        <div th:unless="${similar.isEmpty()}">
+        <div th:unless="${similar == null or similar.isEmpty()}">
             <div class="section-heading">SIMILAR WINNERS</div>
             <div class="glass-card">
                 <div class="glass-card-inner">

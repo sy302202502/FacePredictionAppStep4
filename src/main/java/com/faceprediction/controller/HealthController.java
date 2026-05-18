@@ -124,6 +124,7 @@ public class HealthController {
         File[] files = dir.listFiles();
         if (files != null) {
             for (File f : files) {
+                if (java.nio.file.Files.isSymbolicLink(f.toPath())) continue;
                 size += f.isDirectory() ? dirSizeBytes(f) : f.length();
             }
         }

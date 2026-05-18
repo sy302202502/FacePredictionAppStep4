@@ -98,8 +98,12 @@ public class EntryController {
                 String line;
                 while ((line = br.readLine()) != null) output.append(line).append("\n");
             }
-            proc.waitFor();
-            ra.addFlashAttribute("success", "取得完了:\n" + output);
+            int exitCode = proc.waitFor();
+            if (exitCode == 0) {
+                ra.addFlashAttribute("success", "取得完了:\n" + output);
+            } else {
+                ra.addFlashAttribute("error", "スクリプト異常終了 (code=" + exitCode + "):\n" + output);
+            }
         } catch (Exception e) {
             ra.addFlashAttribute("error", "取得失敗: " + e.getMessage());
         }

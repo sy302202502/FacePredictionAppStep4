@@ -146,6 +146,7 @@ public class PredictionController {
             ProcessBuilder pb = new ProcessBuilder("python3", scriptPath, "send", raceName);
             pb.environment().put("PYTHONIOENCODING", "utf-8");
             pb.redirectErrorStream(true);
+            pb.directory(new java.io.File(pythonScriptDir));
             Process proc = pb.start();
 
             StringBuilder sb = new StringBuilder();

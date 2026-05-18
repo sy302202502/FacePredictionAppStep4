@@ -49,7 +49,14 @@ public class CalendarController {
         for (Object[] row : upcoming) {
             // [race_name, race_date, race_category, distance, surface, venue]
             String    raceName    = row[0] != null ? row[0].toString() : "";
-            LocalDate raceDate    = row[1] != null ? LocalDate.parse(row[1].toString()) : null;
+            LocalDate raceDate    = null;
+            if (row[1] != null) {
+                if (row[1] instanceof java.sql.Date) {
+                    raceDate = ((java.sql.Date) row[1]).toLocalDate();
+                } else {
+                    try { raceDate = LocalDate.parse(row[1].toString()); } catch (Exception ignored) {}
+                }
+            }
             String    category    = row[2] != null ? row[2].toString() : "";
             Object    distObj     = row[3];
             String    surface     = row[4] != null ? row[4].toString() : "";
@@ -61,7 +68,8 @@ public class CalendarController {
             if (raceDate.isAfter(limit)) continue;
 
             long daysLeft = ChronoUnit.DAYS.between(today, raceDate);
-            boolean isAnalyzed = analyzedNames.stream()
+            boolean isAnalyzed = !raceName.isBlank() && analyzedNames.stream()
+                .filter(n -> n != null && !n.isBlank())
                 .anyMatch(n -> n.contains(raceName) || raceName.contains(n));
             boolean isPast = raceDate.isBefore(today);
 

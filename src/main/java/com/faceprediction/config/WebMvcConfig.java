@@ -41,7 +41,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations(primaryPath, projectUploadPath, homeUploadPath)
-                .setCachePeriod(3600);
+                .setCachePeriod(0);
 
         // 静的リソース（CSS・JS・画像）
         registry.addResourceHandler("/css/**")

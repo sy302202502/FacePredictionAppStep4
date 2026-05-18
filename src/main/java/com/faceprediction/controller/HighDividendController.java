@@ -48,6 +48,9 @@ public class HighDividendController {
     @GetMapping(value = "/run-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter runStream() {
         SseEmitter emitter = new SseEmitter(1800000L); // 30分タイムアウト
+        emitter.onCompletion(() -> emitters.remove(STREAM_KEY, emitter));
+        emitter.onTimeout(()    -> emitters.remove(STREAM_KEY, emitter));
+        emitter.onError(e       -> emitters.remove(STREAM_KEY, emitter));
 
         // 既に実行中の場合は既存エミッターに追加し既存ログを送信
         if (running.getOrDefault(STREAM_KEY, false)) {

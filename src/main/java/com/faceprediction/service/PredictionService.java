@@ -42,7 +42,7 @@ public class PredictionService {
     }
 
     public List<PredictionResult> getLatestPredictions() {
-        return predictionRepository.findLatestResults();
+        return predictionRepository.findTop50ByOrderByCreatedAtDesc();
     }
 
     /**
@@ -99,8 +99,11 @@ public class PredictionService {
 
             // 差分: 勝ち馬% - 負け馬%（正の値が勝ち馬に特有）
             Map<String, Double> diffDist = new LinkedHashMap<>();
-            for (String val : winDist.keySet()) {
-                double diff = winDist.get(val) - loseDist.getOrDefault(val, 0.0);
+            java.util.Set<String> allVals = new java.util.LinkedHashSet<>();
+            allVals.addAll(winDist.keySet());
+            allVals.addAll(loseDist.keySet());
+            for (String val : allVals) {
+                double diff = winDist.getOrDefault(val, 0.0) - loseDist.getOrDefault(val, 0.0);
                 diffDist.put(val, Math.round(diff * 10.0) / 10.0);
             }
 

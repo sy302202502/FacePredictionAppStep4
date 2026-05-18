@@ -6,6 +6,7 @@ import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.PrePersist;
 import javax.persistence.Table;
 
 @Entity
@@ -14,7 +15,7 @@ public class RaceSpecificAccuracy {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
     private String raceName;
     private String horseName;
@@ -26,9 +27,14 @@ public class RaceSpecificAccuracy {
     private String dataSource;
     private LocalDateTime recordedAt;
 
+    @PrePersist
+    protected void onCreate() {
+        if (recordedAt == null) recordedAt = LocalDateTime.now();
+    }
+
     // Getters/Setters
-    public Integer getId() { return id; }
-    public void setId(Integer id) { this.id = id; }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public String getRaceName() { return raceName; }
     public void setRaceName(String raceName) { this.raceName = raceName; }
     public String getHorseName() { return horseName; }

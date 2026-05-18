@@ -45,7 +45,7 @@ public class RacePredictionV2Controller {
             patternOpt.ifPresent(p -> {
                 model.addAttribute("pattern", p);
                 // 信頼度を星文字列に変換
-                int lv = p.getConfidenceLevel() != null ? p.getConfidenceLevel() : 3;
+                int lv = Math.min(5, Math.max(0, p.getConfidenceLevel() != null ? p.getConfidenceLevel() : 3));
                 model.addAttribute("confidenceStars", "★".repeat(lv) + "☆".repeat(5 - lv));
             });
 

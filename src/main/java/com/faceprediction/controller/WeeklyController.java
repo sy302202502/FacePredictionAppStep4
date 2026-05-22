@@ -19,6 +19,8 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import javax.annotation.PreDestroy;
+
 @Controller
 @RequestMapping("/weekly")
 public class WeeklyController {
@@ -164,5 +166,10 @@ public class WeeklyController {
                 }
             }
         });
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdownNow();
     }
 }

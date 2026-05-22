@@ -31,6 +31,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.PreDestroy;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -212,5 +214,10 @@ public class StatsPredictionController {
             try { em.send(SseEmitter.event().data(line)); }
             catch (Exception e) { emitters.remove(key); }
         }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdownNow();
     }
 }

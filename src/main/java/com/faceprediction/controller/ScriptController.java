@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import javax.annotation.PreDestroy;
+
 @Controller
 @RequestMapping("/script")
 public class ScriptController {
@@ -211,5 +213,10 @@ public class ScriptController {
                 emitters.remove(key);
             }
         }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdownNow();
     }
 }

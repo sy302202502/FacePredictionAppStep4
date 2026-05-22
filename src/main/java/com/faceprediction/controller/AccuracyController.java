@@ -64,9 +64,9 @@ public class AccuracyController {
         // ── 旧システム 全体統計 ──────────────────────────
         List<Object[]> overallList = accuracyRepo.findOverallStats();
         Object[] overall = overallList.isEmpty() ? new Object[]{0L, 0L, 0L} : overallList.get(0);
-        long totalRaces = overall[0] != null ? ((Number) overall[0]).longValue() : 0;
-        long winHits    = overall[1] != null ? ((Number) overall[1]).longValue() : 0;
-        long top5Hits   = overall[2] != null ? ((Number) overall[2]).longValue() : 0;
+        long totalRaces = toLong(overall, 0);
+        long winHits    = toLong(overall, 1);
+        long top5Hits   = toLong(overall, 2);
 
         model.addAttribute("totalRaces",   totalRaces);
         model.addAttribute("winHitRate",   totalRaces > 0 ? Math.round(winHits  * 1000.0 / totalRaces) / 10.0 : 0.0);
@@ -77,9 +77,9 @@ public class AccuracyController {
         List<Map<String, Object>> categoryRows = new ArrayList<>();
         for (Object[] row : catStats) {
             String cat = (String) row[0];
-            long races = row[1] != null ? ((Number) row[1]).longValue() : 0;
-            long wh    = row[2] != null ? ((Number) row[2]).longValue() : 0;
-            long th    = row[3] != null ? ((Number) row[3]).longValue() : 0;
+            long races = toLong(row, 1);
+            long wh    = toLong(row, 2);
+            long th    = toLong(row, 3);
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("category",    CATEGORY_LABELS.getOrDefault(cat, cat));
             m.put("races",       races);
@@ -164,6 +164,11 @@ public class AccuracyController {
         model.addAttribute("raceNames", raceNames);
 
         return "accuracy/index";
+    }
+
+    private static long toLong(Object[] arr, int idx) {
+        if (arr == null || arr.length <= idx || arr[idx] == null) return 0L;
+        return ((Number) arr[idx]).longValue();
     }
 
     // ── 旧システム: 手動結果記録 ────────────────────────

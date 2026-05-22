@@ -48,12 +48,11 @@ public class HealthController {
 
         // ANTHROPIC_API_KEY確認
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
-        boolean apiKeySet = apiKey != null && !apiKey.isEmpty() && !apiKey.startsWith("sk-ant-api03-XXXX");
+        boolean apiKeySet = apiKey != null && apiKey.startsWith("sk-ant-") && apiKey.length() > 40;
 
         // LINE_NOTIFY_TOKEN確認
         String lineToken = System.getenv("LINE_NOTIFY_TOKEN");
-        boolean lineTokenSet = lineToken != null && !lineToken.isEmpty()
-                && !lineToken.contains("ここに");
+        boolean lineTokenSet = lineToken != null && lineToken.length() > 10;
 
         // Python スクリプトディレクトリ確認
         File scriptDir = new File(pythonScriptDir);

@@ -20,7 +20,6 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
-            // CSRF: SSE/REST エンドポイントは JavaScript fetch 呼び出しのため無効化
             .csrf()
                 .ignoringAntMatchers(
                     "/paddock/analyze",
@@ -34,9 +33,17 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 )
             .and()
             .authorizeRequests()
-                // 静的リソースは認証不要
+                // 静的リソース・公開ページは認証不要
                 .antMatchers("/css/**", "/js/**", "/images/**", "/uploads/**").permitAll()
-                // その他は全て認証必須
+                .antMatchers("/", "/stats-predict", "/weekly", "/predict-v2",
+                             "/calendar", "/horse", "/horse/**",
+                             "/high-dividend", "/accuracy").permitAll()
+                // 管理機能はADMINロール必須
+                .antMatchers("/script/**", "/health/**", "/entry/**", "/paddock/**",
+                             "/accuracy/record", "/accuracy/record-v2",
+                             "/stats-predict/run", "/stats-predict/run-face",
+                             "/weekly/run-pipeline", "/high-dividend/run-stream",
+                             "/entry/fetch").hasRole("ADMIN")
                 .anyRequest().authenticated()
             .and()
             .httpBasic()
@@ -50,6 +57,6 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         auth.inMemoryAuthentication()
             .withUser(username)
             .password("{noop}" + password)
-            .roles("USER");
+            .roles("ADMIN");
     }
 }

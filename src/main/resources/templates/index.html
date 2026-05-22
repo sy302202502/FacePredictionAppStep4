@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -313,13 +313,6 @@
                 <a href="/calendar" class="btn btn-fire">カレンダーを見る</a>
             </div>
 
-            <div class="feature-card accent-neon">
-                <div class="feature-card-label">ENTRY — RACE LINEUP</div>
-                <div class="feature-card-title">出走馬一覧</div>
-                <p class="feature-card-desc">直近の重賞レースの出走馬をnetkeibaから自動取得して確認できます。</p>
-                <a href="/entry" class="btn btn-neon">出走馬を確認</a>
-            </div>
-
             <div class="feature-card accent-gold">
                 <div class="feature-card-label">ACCURACY — HIT RATE</div>
                 <div class="feature-card-title">的中率チェック</div>
@@ -327,14 +320,22 @@
                 <a href="/accuracy" class="btn btn-fire">精度を確認</a>
             </div>
 
-            <div class="feature-card accent-orange">
+            <!-- 管理者のみ表示 -->
+            <div sec:authorize="isAuthenticated()" class="feature-card accent-neon">
+                <div class="feature-card-label">ENTRY — RACE LINEUP</div>
+                <div class="feature-card-title">出走馬一覧</div>
+                <p class="feature-card-desc">直近の重賞レースの出走馬をnetkeibaから自動取得して確認できます。</p>
+                <a href="/entry" class="btn btn-neon">出走馬を確認</a>
+            </div>
+
+            <div sec:authorize="isAuthenticated()" class="feature-card accent-orange">
                 <div class="feature-card-label">SCRIPT — EXECUTION</div>
                 <div class="feature-card-title">スクリプト実行</div>
                 <p class="feature-card-desc">スクレイピング・顔分析・重み学習などをブラウザから実行しリアルタイムログを確認できます。</p>
                 <a href="/script" class="btn btn-fire">スクリプトを実行</a>
             </div>
 
-            <div class="feature-card accent-purple">
+            <div sec:authorize="isAuthenticated()" class="feature-card accent-purple">
                 <div class="feature-card-label">SYSTEM — HEALTH CHECK</div>
                 <div class="feature-card-title">ヘルスチェック</div>
                 <p class="feature-card-desc">DB接続・APIキー設定・スクリプトファイルの状態を確認します。</p>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -151,8 +151,8 @@
         <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
         <div th:if="${error}"   class="alert alert-error"   th:text="${error}"></div>
 
-        <!-- 的中記録 自動取得バー -->
-        <div class="action-bar">
+        <!-- 的中記録 自動取得バー（管理者のみ） -->
+        <div class="action-bar" sec:authorize="isAuthenticated()">
             <span class="action-bar-text">レース後にnetkeibaから実際の着順を自動取得して的中率を更新します</span>
             <form method="post" action="/script/result-fetch" style="display:inline; margin:0;">
                 <button type="submit" class="btn btn-fire">AUTO FETCH RESULTS</button>
@@ -246,8 +246,8 @@
                 </tbody>
             </table>
 
-            <!-- 手動結果記録フォーム -->
-            <div class="record-form">
+            <!-- 手動結果記録フォーム（管理者のみ） -->
+            <div class="record-form" sec:authorize="isAuthenticated()">
                 <div class="record-form-title">MANUAL RECORD — レース結果を手動記録</div>
                 <form method="post" action="/accuracy/record">
                     <div class="form-row">
@@ -305,8 +305,8 @@
         <!-- 新システムタブ -->
         <div id="tab-new" class="tab-pane">
 
-            <!-- 手動結果記録フォーム（新システム用） -->
-            <div class="record-form" id="record-v2-form">
+            <!-- 手動結果記録フォーム（新システム用・管理者のみ） -->
+            <div class="record-form" id="record-v2-form" sec:authorize="isAuthenticated()">
                 <div class="record-form-title">MANUAL RECORD — 顔面予想の結果を手動入力</div>
                 <form method="post" action="/accuracy/record-v2" id="formV2">
                     <div class="form-row" style="margin-bottom: 12px;">

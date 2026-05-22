@@ -10,15 +10,13 @@ import sys
 import os
 import re
 import time
-import requests
 import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from constants import HEADERS, fetch_with_retry, polite_sleep
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
-
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
 UPLOAD_DIR = os.environ.get('UPLOAD_DIR_CANDIDATES', os.path.join(os.path.dirname(__file__), '../uploads/candidates'))
 
 CATEGORY_MAP = {
@@ -50,7 +48,7 @@ def fetch_upcoming_grade_races(query=None):
         # race_list_sub.html は静的HTMLで返る（race_list.html はJS動的読み込み）
         url = f"https://race.netkeiba.com/top/race_list_sub.html?kaisai_date={d.strftime('%Y%m%d')}"
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=10)
+            resp = fetch_with_retry(url, timeout=10, min_sleep=1.0, max_sleep=2.0)
             resp.encoding = 'utf-8'   # race_list_sub.html は UTF-8
             soup = BeautifulSoup(resp.text, 'lxml')
             for li in soup.find_all('li', class_='RaceList_DataItem'):
@@ -71,7 +69,6 @@ def fetch_upcoming_grade_races(query=None):
                 race_id = m.group(1) if m else None
                 if race_id:
                     results.append({'race_id': race_id, 'race_name': race_name, 'race_date': d.date()})
-            time.sleep(0.5)
         except Exception as e:
             print(f"  [警告] {d.strftime('%Y%m%d')} の取得失敗: {e}")
     return results
@@ -79,7 +76,7 @@ def fetch_upcoming_grade_races(query=None):
 def fetch_shutuba_entries(race_id):
     """出馬表ページから出走馬リストを取得"""
     url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp = fetch_with_retry(url, timeout=15, min_sleep=1.5, max_sleep=3.0)
     resp.encoding = 'EUC-JP'
     soup = BeautifulSoup(resp.text, 'lxml')
 
@@ -144,7 +141,7 @@ def get_horse_photo_no(horse_id):
     """馬詳細ページからshow_photo.phpのno番号を取得"""
     from bs4 import BeautifulSoup
     try:
-        r = requests.get(f"https://db.netkeiba.com/horse/{horse_id}/", headers=HEADERS, timeout=15)
+        r = fetch_with_retry(f"https://db.netkeiba.com/horse/{horse_id}/", timeout=15, min_sleep=1.0, max_sleep=2.0)
         r.encoding = 'EUC-JP'
         soup = BeautifulSoup(r.text, 'lxml')
         for img in soup.find_all('img'):
@@ -171,7 +168,7 @@ def download_image(horse_id, horse_name):
     if photo_no:
         url = f"https://db.netkeiba.com/show_photo.php?horse_id={horse_id}&no={photo_no}&tn=no&tmp=no"
         try:
-            r = requests.get(url, headers=HEADERS, timeout=15)
+            r = fetch_with_retry(url, timeout=15, min_sleep=1.0, max_sleep=2.0)
             if r.status_code == 200 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
@@ -187,7 +184,7 @@ def download_image(horse_id, horse_name):
         f"https://cdn.netkeiba.com/horse/pic/{horse_id}.jpg",
     ]:
         try:
-            r = requests.get(url_t, headers=HEADERS, timeout=10)
+            r = fetch_with_retry(url_t, timeout=10, min_sleep=1.0, max_sleep=2.0)
             if r.status_code == 200 and len(r.content) > 5000 and r.content[:2] == b'\xff\xd8':
                 with open(save_path, 'wb') as f:
                     f.write(r.content)
@@ -257,7 +254,7 @@ def sync_with_latest_shutuba():
             entries, distance, surface, scraped_name, venue = fetch_shutuba_entries(race_id)
             if not entries:
                 print(f"  出馬表未確定のためスキップ")
-                time.sleep(0.5)
+                polite_sleep(1.0, 2.0)
                 continue
 
             shutuba_names = {e['horse_name'] for e in entries}
@@ -271,7 +268,7 @@ def sync_with_latest_shutuba():
 
             if not removed and not added:
                 print(f"  変更なし（{len(db_names)}頭）✓")
-                time.sleep(0.5)
+                polite_sleep(1.0, 2.0)
                 continue
 
             if removed:
@@ -309,7 +306,7 @@ def sync_with_latest_shutuba():
                 else:
                     print(f"  予想結果に該当馬なし（分析前の可能性）")
 
-            time.sleep(1.0)
+            polite_sleep(2.0, 4.0)
 
         print("\n=== 同期完了 ===")
 
@@ -388,7 +385,7 @@ def main():
                              race_info['race_date'], '', venue, distance, surface, category, entries)
                 for e in entries:
                     print(f"  {e['horse_number']}番 {e['horse_name']} ({e['jockey_name']})")
-                time.sleep(1.0)
+                polite_sleep(2.0, 4.0)
             except Exception as ex:
                 print(f"  [エラー] {ex}")
     finally:

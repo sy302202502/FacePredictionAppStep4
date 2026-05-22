@@ -17,15 +17,13 @@ Claude Vision API は一切使用しない。
 """
 
 import sys, os, re, time, json
-import requests
 import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
+from constants import HEADERS, fetch_with_retry, polite_sleep
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
-
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
 
 # ----------------------------------------------------------------
 # DB
@@ -84,7 +82,7 @@ def fetch_horse_results(horse_id, horse_name):
     """直近20走を取得"""
     url = f'https://db.netkeiba.com/horse/result/{horse_id}/'
     try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
+        r = fetch_with_retry(url, timeout=15, min_sleep=1.5, max_sleep=3.0)
         text = r.content.decode('EUC-JP', errors='replace')
         soup = BeautifulSoup(text, 'lxml')
         table = soup.find('table', class_='db_h_race_results')
@@ -275,7 +273,7 @@ def main():
             'score': score, 'detail': detail, 'comment': comment,
             'results_count': len(results),
         })
-        time.sleep(0.8)
+        polite_sleep(1.5, 3.0)
 
     # 順位付け
     scored.sort(key=lambda x: x['score'], reverse=True)

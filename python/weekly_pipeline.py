@@ -15,13 +15,12 @@ weekly_pipeline.py — 週次自動予想パイプライン
 
 import sys, os, time, json, subprocess
 from datetime import datetime, timedelta
-import requests, re, psycopg2
+import re, psycopg2
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from constants import HEADERS, fetch_with_retry, polite_sleep
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
-
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
 PYTHON  = sys.executable
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -36,7 +35,7 @@ def fetch_upcoming_grade_races(days=14):
         d = today + timedelta(days=delta)
         url = f"https://race.netkeiba.com/top/race_list_sub.html?kaisai_date={d.strftime('%Y%m%d')}"
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=10)
+            resp = fetch_with_retry(url, timeout=10, min_sleep=1.0, max_sleep=2.0)
             resp.encoding = 'utf-8'
             soup = BeautifulSoup(resp.text, 'lxml')
             for li in soup.find_all('li', class_='RaceList_DataItem'):
@@ -55,7 +54,6 @@ def fetch_upcoming_grade_races(days=14):
                         'race_name': race_name,
                         'race_date': d.date(),
                     })
-            time.sleep(0.3)
         except Exception as e:
             log(f"  [警告] {d.strftime('%Y%m%d')} の取得失敗: {e}")
     return results
@@ -224,7 +222,7 @@ def main():
             'status': 'done' if ok3 else 'face_failed',
         })
 
-        time.sleep(1)
+        polite_sleep(2.0, 4.0)
     finally:
         conn.close()
 

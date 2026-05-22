@@ -22,9 +22,14 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.PreDestroy;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Controller
 @RequestMapping("/high-dividend")
 public class HighDividendController {
+
+    private static final Logger log = LoggerFactory.getLogger(HighDividendController.class);
 
     @Value("${python.script.dir}")
     private String pythonScriptDir;
@@ -63,7 +68,9 @@ public class HighDividendController {
                     for (String line : existing) {
                         emitter.send(SseEmitter.event().data(line));
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    log.warn("SSE既存ログ送信失敗: {}", e.getMessage());
+                }
             });
             return emitter;
         }
@@ -135,7 +142,7 @@ public class HighDividendController {
                         SseEmitter em = emitters.get(key);
                         if (em != null) {
                             try { em.send(SseEmitter.event().data(line)); }
-                            catch (Exception ignored) {}
+                            catch (Exception e) { log.warn("SSEログ送信失敗: {}", e.getMessage()); }
                         }
                     }
                 }
@@ -153,7 +160,9 @@ public class HighDividendController {
                     try {
                         em.send(SseEmitter.event().data("__DONE__"));
                         em.complete();
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        log.warn("SSE完了通知失敗: {}", e.getMessage());
+                    }
                 }
             }
         });

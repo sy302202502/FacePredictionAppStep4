@@ -205,31 +205,58 @@ def _call_openrouter(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> s
 # 公開インターフェース
 # ──────────────────────────────────────────────
 
+# フォールバック順序: 設定プロバイダー → groq → gemini → openrouter → ollama
+_FALLBACK_ORDER = ['groq', 'gemini', 'openrouter', 'ollama']
+
+def _call_provider(provider: str, image_b64: str, prompt: str, mime: str) -> str | None:
+    if provider == 'groq':
+        return _call_groq(image_b64, prompt, mime)
+    elif provider == 'gemini':
+        return _call_gemini(image_b64, prompt, mime)
+    elif provider == 'openrouter':
+        return _call_openrouter(image_b64, prompt, mime)
+    else:
+        return _call_ollama(image_b64, prompt)
+
+def _has_key(provider: str) -> bool:
+    return {
+        'groq': bool(GROQ_API_KEY),
+        'gemini': bool(GEMINI_API_KEY),
+        'openrouter': bool(OR_API_KEY),
+        'ollama': True,
+    }.get(provider, False)
+
+
 def analyze_image(image_path: str, prompt: str) -> str | None:
     """
     画像ファイルを読み込み、LLMで分析してテキストを返す。
-    プロバイダーは LLM_PROVIDER 環境変数で切り替え。
+    設定プロバイダーが429/失敗した場合、自動的に次のプロバイダーへフォールバック。
 
-    戻り値: LLMの生テキスト or None (失敗時)
+    戻り値: LLMの生テキスト or None (全プロバイダー失敗時)
     """
     if not os.path.exists(image_path):
         return None
 
-    # MIME推定
     ext = os.path.splitext(image_path)[1].lower()
     mime = 'image/png' if ext == '.png' else 'image/jpeg'
 
     with open(image_path, 'rb') as f:
         image_b64 = base64.b64encode(f.read()).decode()
 
-    if PROVIDER == 'groq':
-        return _call_groq(image_b64, prompt, mime)
-    elif PROVIDER == 'gemini':
-        return _call_gemini(image_b64, prompt, mime)
-    elif PROVIDER == 'openrouter':
-        return _call_openrouter(image_b64, prompt, mime)
-    else:  # ollama (default)
-        return _call_ollama(image_b64, prompt)
+    # 設定プロバイダーを先頭に、残りをフォールバック順で試行
+    order = [PROVIDER] + [p for p in _FALLBACK_ORDER if p != PROVIDER]
+    for provider in order:
+        if not _has_key(provider):
+            continue
+        print(f"    [LLM] {provider} で分析中...", end=' ', flush=True)
+        result = _call_provider(provider, image_b64, prompt, mime)
+        if result:
+            if provider != PROVIDER:
+                print(f"→ {provider} にフォールバック成功")
+            return result
+        print(f"→ 失敗、次のプロバイダーへ")
+
+    return None
 
 
 def current_provider() -> str:
@@ -240,4 +267,4 @@ def current_provider() -> str:
         'openrouter': OR_MODEL,
         'ollama': OLLAMA_MODEL,
     }.get(PROVIDER, OLLAMA_MODEL)
-    return f"{PROVIDER}:{model}"
+    return f"{PROVIDER}:{model} (fallback有効)"

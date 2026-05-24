@@ -27,7 +27,7 @@ def _url_to_fs(url_path):
 
 # LLM抽象化レイヤー
 from llm_client import analyze_image as _llm_analyze_image, current_provider as _llm_provider
-from llm_client import OLLAMA_MODEL, OLLAMA_BASE
+from llm_client import OLLAMA_MODEL, OLLAMA_BASE, PROVIDER as _PROVIDER
 OLLAMA_URL = OLLAMA_BASE + '/api/generate'
 
 # ── DB接続 ─────────────────────────────────────────
@@ -350,12 +350,13 @@ def main():
     print(f"{'='*60}")
     print(f"\nRESULT:{json.dumps({'success':True,'race':race_name}, ensure_ascii=False)}")
 
-    # llava:7b をRAMから即時解放（keep_alive=0）
-    try:
-        requests.post(OLLAMA_URL, json={'model': OLLAMA_MODEL, 'keep_alive': 0}, timeout=10)
-        print("🧹 llava:7b をメモリから解放しました")
-    except Exception as e:
-        print(f"[警告] モデル解放失敗: {e}")
+    # llava:7b をRAMから即時解放（keep_alive=0）— Ollama使用時のみ
+    if _PROVIDER == 'ollama':
+        try:
+            requests.post(OLLAMA_URL, json={'model': OLLAMA_MODEL, 'keep_alive': 0}, timeout=10)
+            print("🧹 llava:7b をメモリから解放しました")
+        except Exception as e:
+            print(f"[警告] モデル解放失敗: {e}")
 
 if __name__ == '__main__':
     main()

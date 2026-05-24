@@ -109,7 +109,11 @@ def _call_groq(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | N
                                  headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                                  timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
             if resp.status_code == 429:
-                wait = float(resp.headers.get('retry-after', 2 ** (attempt + 1)))
+                wait = float(resp.headers.get('retry-after', 60))
+                if wait > 30:
+                    # 長時間待機が必要な場合は即時Noneを返してフォールバックさせる
+                    print(f"    [レート制限] Groq 429: retry-after={wait:.0f}秒 → フォールバックへ")
+                    return None
                 print(f"    [レート制限] Groq 429: {wait:.0f}秒待機してリトライ ({attempt+1}/3)...")
                 time.sleep(wait)
                 continue

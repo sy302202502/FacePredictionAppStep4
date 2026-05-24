@@ -36,7 +36,6 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import com.faceprediction.repository.RaceSpecificPredictionRepository;
 
 @Controller
 @RequestMapping("/paddock")
@@ -51,7 +50,7 @@ public class PaddockAnalysisController {
     private String uploadDir;
 
     @Autowired
-    private RaceSpecificPredictionRepository patternRepo;
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     private static final ConcurrentHashMap<String, SseEmitter> emitters  = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Boolean>    running   = new ConcurrentHashMap<>();
@@ -62,7 +61,9 @@ public class PaddockAnalysisController {
     // 見せるフォーム
     @GetMapping
     public String showForm(Model model) {
-        List<String> raceNames = patternRepo.findAllRaceNames();
+        List<String> raceNames = jdbc.queryForList(
+            "SELECT race_name FROM stats_prediction GROUP BY race_name ORDER BY MAX(created_at) DESC",
+            String.class);
         model.addAttribute("raceNames", raceNames);
         return "prediction/paddock";
     }

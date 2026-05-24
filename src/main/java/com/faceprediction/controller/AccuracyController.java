@@ -24,7 +24,6 @@ import com.faceprediction.entity.PredictionAccuracy;
 import com.faceprediction.entity.PredictionResult;
 import com.faceprediction.repository.PredictionAccuracyRepository;
 import com.faceprediction.repository.PredictionResultRepository;
-import com.faceprediction.repository.RaceSpecificResultRepository;
 
 @Controller
 @RequestMapping("/accuracy")
@@ -34,7 +33,6 @@ public class AccuracyController {
 
     private final PredictionAccuracyRepository accuracyRepo;
     private final PredictionResultRepository   predictionRepo;
-    private final RaceSpecificResultRepository  v2ResultRepo;
     private final JdbcTemplate                  jdbc;
 
     private static final Map<String, String> CATEGORY_LABELS = new LinkedHashMap<>();
@@ -50,11 +48,9 @@ public class AccuracyController {
     @Autowired
     public AccuracyController(PredictionAccuracyRepository accuracyRepo,
                                PredictionResultRepository predictionRepo,
-                               RaceSpecificResultRepository v2ResultRepo,
                                JdbcTemplate jdbc) {
         this.accuracyRepo  = accuracyRepo;
         this.predictionRepo = predictionRepo;
-        this.v2ResultRepo   = v2ResultRepo;
         this.jdbc           = jdbc;
     }
 
@@ -125,22 +121,22 @@ public class AccuracyController {
 
             // 未記録レース（予想はあるが的中記録がないもの）
             List<Map<String, Object>> v2Pending = jdbc.queryForList(
-                "SELECT rsr.race_name, COUNT(*) AS horse_count," +
-                " MIN(rsr.created_at)::date AS predicted_on" +
-                " FROM race_specific_result rsr" +
+                "SELECT sp.race_name, COUNT(*) AS horse_count," +
+                " MIN(sp.created_at)::date AS predicted_on" +
+                " FROM stats_prediction sp" +
                 " WHERE NOT EXISTS (" +
                 "   SELECT 1 FROM race_specific_accuracy rsa" +
-                "   WHERE rsa.race_name = rsr.race_name" +
+                "   WHERE rsa.race_name = sp.race_name" +
                 " )" +
-                " GROUP BY rsr.race_name" +
-                " ORDER BY MIN(rsr.created_at) DESC");
+                " GROUP BY sp.race_name" +
+                " ORDER BY MIN(sp.created_at) DESC");
             model.addAttribute("v2PendingRaces", v2Pending);
 
             // 記録済みレースの馬名一覧（手動記録フォームの補助用）
             List<Map<String, Object>> v2AllRaces = jdbc.queryForList(
-                "SELECT DISTINCT rsr.race_name, rsr.horse_name, rsr.rank_position" +
-                " FROM race_specific_result rsr" +
-                " ORDER BY rsr.race_name, rsr.rank_position");
+                "SELECT DISTINCT sp.race_name, sp.horse_name, sp.rank_position" +
+                " FROM stats_prediction sp" +
+                " ORDER BY sp.race_name, sp.rank_position");
             // race_name → horses map に変換
             Map<String, List<String>> raceHorseMap = new LinkedHashMap<>();
             for (Map<String, Object> row : v2AllRaces) {
@@ -232,10 +228,10 @@ public class AccuracyController {
         }
 
         try {
-            // 予想データ取得
+            // 予想データ取得（現行システム: stats_prediction）
             List<Map<String, Object>> predictions = jdbc.queryForList(
-                "SELECT horse_name, rank_position, score, data_source" +
-                " FROM race_specific_result WHERE race_name = ?" +
+                "SELECT horse_name, rank_position, score" +
+                " FROM stats_prediction WHERE race_name = ?" +
                 " ORDER BY rank_position",
                 raceName);
 
@@ -269,7 +265,7 @@ public class AccuracyController {
                     String horseName = (String) p.get("horse_name");
                     int predRank     = ((Number) p.get("rank_position")).intValue();
                     Double score     = p.get("score") != null ? ((Number) p.get("score")).doubleValue() : null;
-                    String dataSrc   = (String) p.get("data_source");
+                    String dataSrc   = "stats";
                     Integer actualRank = null;
                     if (horseName.equals(first_))                             actualRank = 1;
                     else if (!second_.isEmpty() && horseName.equals(second_)) actualRank = 2;

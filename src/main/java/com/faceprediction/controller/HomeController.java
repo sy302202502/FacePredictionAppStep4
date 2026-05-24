@@ -1,6 +1,7 @@
 package com.faceprediction.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,8 +11,6 @@ import com.faceprediction.repository.PredictionAccuracyRepository;
 import com.faceprediction.repository.PredictionResultRepository;
 import com.faceprediction.repository.RaceEntryRepository;
 import com.faceprediction.repository.RaceSpecificAccuracyRepository;
-import com.faceprediction.repository.RaceSpecificPredictionRepository;
-import com.faceprediction.repository.RaceSpecificResultRepository;
 
 import java.util.List;
 
@@ -22,23 +21,25 @@ public class HomeController {
     @Autowired private PredictionResultRepository predictionRepo;
     @Autowired private PredictionAccuracyRepository accuracyRepo;
     @Autowired private RaceEntryRepository entryRepo;
-    @Autowired private RaceSpecificResultRepository specificResultRepo;
-    @Autowired private RaceSpecificPredictionRepository specificPredictionRepo;
     @Autowired private RaceSpecificAccuracyRepository specificAccuracyRepo;
+    @Autowired private JdbcTemplate jdbc;
 
     @GetMapping("/")
     public String index(Model model) {
-        // ── 顔分析済み（旧システム + 新システム両方カウント）──
+        // ── 顔分析済み（旧 horse_face_feature + 現行 stats_prediction）──
         long oldAnalyzedWinners = featureRepo.countAnalyzedWinners();
         long oldAnalyzedLosers  = featureRepo.countAnalyzedLosers();
-        long newAnalyzed        = specificResultRepo.count();  // race_specific_result
-        long newAnalyzedWinners = specificResultRepo.countByRankPosition(1);
-        long newAnalyzedLosers  = newAnalyzed - newAnalyzedWinners;
-        long totalAnalyzed      = oldAnalyzedWinners + oldAnalyzedLosers + newAnalyzed;
+        // 現行システム: stats_prediction の顔面分析済み頭数
+        Long newAnalyzedObj = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM stats_prediction WHERE face_comment IS NOT NULL", Long.class);
+        long newAnalyzed       = newAnalyzedObj != null ? newAnalyzedObj : 0;
+        long totalAnalyzed     = oldAnalyzedWinners + oldAnalyzedLosers + newAnalyzed;
 
-        // ── 予想レコード数（旧 prediction_result + 新 race_specific_prediction）──
+        // ── 予想レコード数（旧 prediction_result + 現行 stats_prediction）──
         long oldPredictions = predictionRepo.count();
-        long newPredictions = specificPredictionRepo.count();
+        Long newPredObj = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM stats_prediction", Long.class);
+        long newPredictions = newPredObj != null ? newPredObj : 0;
         long totalPredictions = oldPredictions + newPredictions;
 
         // ── 出走馬レコード ──
@@ -65,8 +66,8 @@ public class HomeController {
         long winHits    = oldWins + newWins;
         double winHitRate = totalRaces > 0 ? Math.round(winHits * 1000.0 / totalRaces) / 10.0 : 0.0;
 
-        model.addAttribute("analyzedWinners",  oldAnalyzedWinners + newAnalyzedWinners);
-        model.addAttribute("analyzedLosers",   oldAnalyzedLosers + newAnalyzedLosers);
+        model.addAttribute("analyzedWinners",  oldAnalyzedWinners);
+        model.addAttribute("analyzedLosers",   oldAnalyzedLosers + newAnalyzed);
         model.addAttribute("totalAnalyzed",    totalAnalyzed);
         model.addAttribute("totalPredictions", totalPredictions);
         model.addAttribute("totalEntries",     totalEntries);

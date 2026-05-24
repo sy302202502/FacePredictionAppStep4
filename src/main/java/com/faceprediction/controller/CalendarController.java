@@ -9,22 +9,20 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import com.faceprediction.repository.RaceEntryRepository;
-import com.faceprediction.repository.RaceSpecificPredictionRepository;
-import com.faceprediction.repository.RaceSpecificResultRepository;
 
 @Controller
 @RequestMapping("/calendar")
 public class CalendarController {
 
-    @Autowired private RaceEntryRepository               entryRepo;
-    @Autowired private RaceSpecificPredictionRepository  patternRepo;
-    @Autowired private RaceSpecificResultRepository      resultRepo;
+    @Autowired private RaceEntryRepository entryRepo;
+    @Autowired private JdbcTemplate        jdbc;
 
     @GetMapping
     public String show(Model model) {
@@ -34,8 +32,10 @@ public class CalendarController {
         LocalDate today = LocalDate.now();
         LocalDate limit = today.plusDays(21);
 
-        // 分析済みレース名の集合
-        List<String> analyzedNames = patternRepo.findAllRaceNames();
+        // 分析済みレース名の集合（顔面分析が1頭でも完了したレース = stats_prediction）
+        List<String> analyzedNames = jdbc.queryForList(
+            "SELECT race_name FROM stats_prediction WHERE face_comment IS NOT NULL GROUP BY race_name",
+            String.class);
 
         // 出走頭数を1クエリで取得（N+1防止）
         Map<String, Long> entryCountMap = new java.util.HashMap<>();

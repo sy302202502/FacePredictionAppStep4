@@ -231,10 +231,14 @@ def _has_key(provider: str) -> bool:
     }.get(provider, False)
 
 
-def analyze_image(image_path: str, prompt: str) -> str | None:
+def analyze_image(image_path: str, prompt: str, validator=None) -> str | None:
     """
     画像ファイルを読み込み、LLMで分析してテキストを返す。
     設定プロバイダーが429/失敗した場合、自動的に次のプロバイダーへフォールバック。
+
+    validator: Optional[Callable[[str], bool]]
+        指定すると、各プロバイダーのレスポンスが validator(text) を満たす場合のみ採用。
+        満たさない（解析不能など）場合は次のプロバイダーへフォールバックする。
 
     戻り値: LLMの生テキスト or None (全プロバイダー失敗時)
     """
@@ -249,18 +253,28 @@ def analyze_image(image_path: str, prompt: str) -> str | None:
 
     # 設定プロバイダーを先頭に、残りをフォールバック順で試行
     order = [PROVIDER] + [p for p in _FALLBACK_ORDER if p != PROVIDER]
+    last_result = None
     for provider in order:
         if not _has_key(provider):
             continue
         print(f"    [LLM] {provider} で分析中...", end=' ', flush=True)
         result = _call_provider(provider, image_b64, prompt, mime)
-        if result:
-            if provider != PROVIDER:
-                print(f"→ {provider} にフォールバック成功")
-            return result
-        print(f"→ 失敗、次のプロバイダーへ")
+        if not result:
+            print("→ 失敗、次のプロバイダーへ")
+            continue
+        # バリデーション（指定時）。解析不能なら次へ
+        if validator is not None and not validator(result):
+            print("→ レスポンス解析不能、次のプロバイダーへ")
+            last_result = result  # 一応保持
+            continue
+        if provider != PROVIDER:
+            print(f"→ {provider} にフォールバック成功")
+        else:
+            print("→ 成功")
+        return result
 
-    return None
+    # 全プロバイダーで有効レスポンスが得られなかった
+    return last_result if validator is None else None
 
 
 def current_provider() -> str:

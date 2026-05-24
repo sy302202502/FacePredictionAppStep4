@@ -8,7 +8,7 @@ Ollama + llava:7b モデルを使って競走馬の写真を解析し、
   python face_analyzer_local.py 大阪杯
 """
 
-import sys, os, re, json, time, base64, requests, random
+import sys, os, json, time, requests, random
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
@@ -49,9 +49,6 @@ def analyze_image_llava(image_path):
         print(f"    [警告] 画像ファイルが見つかりません: {abs_path}")
         return None
 
-    with open(abs_path, 'rb') as f:
-        img_b64 = base64.b64encode(f.read()).decode()
-
     prompt = """Analyze this racehorse photo and rate its physical condition on a scale of 1-10.
 
 Evaluate these aspects:
@@ -70,38 +67,70 @@ Respond ONLY in this exact JSON format:
 }"""
 
     try:
-        return _llm_analyze_image(abs_path, prompt)
+        # validator: スコア解析できるレスポンスのみ採用（不可なら次プロバイダーへ）
+        return _llm_analyze_image(abs_path, prompt,
+                                  validator=lambda txt: parse_llava_response(txt) is not None)
     except Exception as e:
         print(f"    [エラー] LLM分析失敗: {e}")
         return None
 
 # ── JSON抽出 ────────────────────────────────────────
+def _clamp_score(v):
+    """スコアを1〜10にクランプ。数値化できなければ None"""
+    try:
+        return min(10.0, max(1.0, float(v)))
+    except (TypeError, ValueError):
+        return None
+
 def parse_llava_response(raw):
-    """レスポンスからJSONを抽出してスコアを計算"""
+    """
+    レスポンスからJSONを抽出してスコアを計算。
+    必須キー(eyes/coat/muscle/vitality)が1つも取れなければ分析失敗としてNoneを返す
+    （= 偽の50.0点を生成しない）。
+    """
     if not raw:
         return None
 
-    # JSON部分を抽出
-    m = re.search(r'\{[^{}]+\}', raw, re.DOTALL)
-    if not m:
+    # マークダウン等を無視し、最初の { 〜 最後の } を抽出
+    start = raw.find('{')
+    end   = raw.rfind('}')
+    if start == -1 or end == -1 or end <= start:
+        print(f"[警告] JSONが見つかりません: {raw[:80]!r}")
         return None
+
     try:
-        data = json.loads(m.group())
-        eyes    = float(data.get('eyes', 5))
-        coat    = float(data.get('coat', 5))
-        muscle  = float(data.get('muscle', 5))
-        vitality= float(data.get('vitality', 5))
-        summary = data.get('summary', '')
-        # 40点満点 → 100点換算
-        avg = (eyes + coat + muscle + vitality) / 4.0
-        score = round(avg * 10, 1)
-        return {
-            'eyes': eyes, 'coat': coat, 'muscle': muscle, 'vitality': vitality,
-            'summary': summary, 'face_score': score
-        }
+        data = json.loads(raw[start:end + 1])
     except Exception as e:
         print(f"[警告] LLMレスポンスのJSON解析失敗: {e}")
         return None
+
+    if not isinstance(data, dict):
+        return None
+
+    # 各スコアを取得（取れたものだけ採用）
+    raw_scores = {k: _clamp_score(data.get(k))
+                  for k in ('eyes', 'coat', 'muscle', 'vitality')}
+    valid = {k: v for k, v in raw_scores.items() if v is not None}
+
+    # 1つも有効スコアが取れなければ失敗扱い
+    if not valid:
+        print(f"[警告] 有効なスコアキーがありません: {list(data.keys())}")
+        return None
+
+    # 欠落キーは有効スコアの平均で補完（極端な偏りを避ける）
+    fill = sum(valid.values()) / len(valid)
+    eyes     = raw_scores['eyes']     if raw_scores['eyes']     is not None else fill
+    coat     = raw_scores['coat']     if raw_scores['coat']     is not None else fill
+    muscle   = raw_scores['muscle']   if raw_scores['muscle']   is not None else fill
+    vitality = raw_scores['vitality'] if raw_scores['vitality'] is not None else fill
+    summary  = data.get('summary', '')
+
+    avg = (eyes + coat + muscle + vitality) / 4.0
+    score = round(avg * 10, 1)
+    return {
+        'eyes': eyes, 'coat': coat, 'muscle': muscle, 'vitality': vitality,
+        'summary': summary, 'face_score': score
+    }
 
 # ── コンディションからコメント生成（バリエーション豊富版）───
 EYES_HIGH = [
@@ -228,11 +257,6 @@ def build_face_comment(parsed, horse_name):
     else:
         muscle_phrase = random.choice(MUSCLE_LOW)
 
-    # 最も気になる点と最も褒めるべき点を前後に配置
-    scores_map = [('eyes', eyes), ('coat', coat), ('muscle', muscle), ('vitality', vitality)]
-    best = max(scores_map, key=lambda x: x[1])[0]
-    worst = min(scores_map, key=lambda x: x[1])[0]
-
     # フレーズ配列：ベスト項目 → その他 → 総合
     phrases = []
     order = ['eyes', 'coat', 'muscle']
@@ -289,14 +313,20 @@ def main():
 
                 raw = analyze_image_llava(image_path)
                 if raw is None:
-                    print("写真なし/分析失敗")
+                    # 全プロバイダー失敗（レート制限等）→ 記録せず次回再試行
+                    print("写真なし/分析失敗（次回再試行）")
                     continue
 
                 parsed = parse_llava_response(raw)
-                face_comment = build_face_comment(parsed, horse_name)
-                face_score   = parsed['face_score'] if parsed else None
+                if not parsed:
+                    # JSON解析失敗 → 記録せず次回再試行（偽スコアを残さない）
+                    print("JSON解析失敗（次回再試行）")
+                    continue
 
-                # DB更新
+                face_comment = build_face_comment(parsed, horse_name)
+                face_score   = parsed['face_score']
+
+                # DB更新（解析成功時のみ）
                 cur.execute("""
                     UPDATE stats_prediction
                     SET face_comment = %s, face_score = %s, face_analyzed_at = NOW()
@@ -304,10 +334,7 @@ def main():
                 """, (face_comment, face_score, row_id))
                 conn.commit()
 
-                if parsed:
-                    print(f"スコア{face_score}点 | {face_comment}")
-                else:
-                    print(f"(JSON解析失敗) {face_comment}")
+                print(f"スコア{face_score}点 | {face_comment}")
 
                 # llavaへの負荷軽減
                 time.sleep(0.5)

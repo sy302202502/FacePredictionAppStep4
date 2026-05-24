@@ -13,6 +13,7 @@ services:
     ports:
       - "${APP_PORT:-8081}:8081"
     environment:
+      TZ:                         Asia/Tokyo
       SPRING_DATASOURCE_URL:      jdbc:postgresql://${DB_HOST}:${DB_PORT:-5432}/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
@@ -43,6 +44,7 @@ services:
     # 何もしないが起動状態を維持（docker exec で実行するため）
     command: ["sleep", "infinity"]
     environment:
+      TZ:          Asia/Tokyo
       DB_HOST:     ${DB_HOST}
       DB_PORT:     ${DB_PORT:-5432}
       DB_NAME:     ${DB_NAME}

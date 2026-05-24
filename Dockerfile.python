@@ -1,9 +1,14 @@
 FROM python:3.12-slim
 WORKDIR /app
 
+# タイムゾーン（JST）— weekly_pipeline の datetime.now() を日本時間に揃える
+ENV TZ=Asia/Tokyo
+
 # 軽量化: キャッシュなしインストール
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc curl \
+    libpq-dev gcc curl tzdata \
+    && ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime \
+    && echo "Asia/Tokyo" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 COPY python/requirements.txt .

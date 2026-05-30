@@ -65,6 +65,7 @@ services:
       ANTHROPIC_API_KEY:     ${ANTHROPIC_API_KEY:-}
       PADDOCK_MODEL:         ${PADDOCK_MODEL:-claude-opus-4-6}
       LINE_NOTIFY_TOKEN:     ${LINE_NOTIFY_TOKEN:-}
+      DISCORD_WEBHOOK_URL:   ${DISCORD_WEBHOOK_URL:-}
     volumes:
       - uploads:/data/uploads
     networks:

@@ -58,6 +58,20 @@ def fetch_upcoming_grade_races(days=14):
             log(f"  [警告] {d.strftime('%Y%m%d')} の取得失敗: {e}")
     return results
 
+import requests as _requests
+DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
+
+def send_discord(content):
+    """Discord Webhook に通知を送信。URL未設定なら何もしない。"""
+    if not DISCORD_WEBHOOK_URL:
+        return
+    try:
+        _requests.post(DISCORD_WEBHOOK_URL,
+                       json={"content": content[:1900]},  # Discordの2000字制限対策
+                       timeout=10)
+    except Exception as e:
+        log(f"[警告] Discord通知失敗: {e}")
+
 NOISE_PATTERNS = [
     'NotOpenSSLWarning', 'urllib3', 'warnings.warn',
     'site-packages', 'LibreSSL',
@@ -238,5 +252,23 @@ def main():
 
     print(f"\nRESULT:{json.dumps({'success': True, 'done': done, 'total': len(results)})}", flush=True)
 
+    # Discord通知（成功/失敗サマリ）
+    today_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    icon = '✅' if fails == 0 else '⚠️'
+    lines = [f"{icon} **週次予想パイプライン完了** ({today_str})",
+             f"成功: {done}件 / 失敗: {fails}件"]
+    for r in results:
+        mark = '✅' if r['status'] == 'done' else f"❌ {r['status']}"
+        lines.append(f"{mark} {r['race']}")
+    lines.append("\nhttp://160.251.251.73:8081/predict-v2")
+    send_discord("\n".join(lines))
+
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        # 致命的失敗もDiscordに通知
+        import traceback
+        err = traceback.format_exc()
+        send_discord(f"🚨 **パイプライン異常終了**\n```\n{err[:1500]}\n```")
+        raise

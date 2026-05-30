@@ -293,17 +293,28 @@ def main():
     try:
         cur = conn.cursor()
         try:
-            # 対象レースの馬を取得
+            # 対象レースの馬を取得（未分析の馬のみ — API呼び出しの節約）
             cur.execute("""
                 SELECT id, horse_name, image_path, rank_position
                 FROM stats_prediction
-                WHERE race_name = %s AND image_path IS NOT NULL
+                WHERE race_name = %s
+                  AND image_path IS NOT NULL
+                  AND face_comment IS NULL
                 ORDER BY rank_position
             """, (race_name,))
             horses = cur.fetchall()
 
             if not horses:
-                print(f"❌ {race_name} の出走馬データがありません")
+                # 全頭分析済み（または出走馬データ自体なし）
+                cur.execute("""
+                    SELECT COUNT(*) FROM stats_prediction
+                    WHERE race_name = %s
+                """, (race_name,))
+                total = cur.fetchone()[0]
+                if total == 0:
+                    print(f"❌ {race_name} の出走馬データがありません")
+                else:
+                    print(f"✅ {race_name} は全頭分析済みのためスキップしました（{total}頭）")
                 return
 
             print(f"対象馬: {len(horses)}頭\n")

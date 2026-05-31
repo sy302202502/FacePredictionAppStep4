@@ -38,7 +38,7 @@ print("=" * 60)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 1. 統計予想
-print("\n[1/2] 統計予想を実行...")
+print("\n[1/3] 統計予想を実行...")
 r1 = subprocess.run(
     ['python3', os.path.join(script_dir, 'stats_predictor.py'), race_name],
     cwd=script_dir
@@ -47,8 +47,31 @@ if r1.returncode != 0:
     print(f"❌ 統計予想失敗 (returncode={r1.returncode})")
     sys.exit(1)
 
-# 2. 顔面分析
-print("\n[2/2] 顔面分析を実行...")
+# 2. image_path / jockey_name / horse_number を race_entry から反映
+print("\n[2/3] image_path 等を race_entry から反映...")
+conn2 = psycopg2.connect(
+    host=os.getenv('DB_HOST', 'localhost'), port=os.getenv('DB_PORT', '5432'),
+    dbname=os.getenv('DB_NAME', 'faceapp'), user=os.getenv('DB_USER', 'postgres'),
+    password=os.getenv('DB_PASSWORD', 'postgrestest')
+)
+cur2 = conn2.cursor()
+cur2.execute("""
+    UPDATE stats_prediction sp
+    SET image_path    = '/uploads/candidates/' || re.horse_id || '.jpg',
+        jockey_name   = re.jockey_name,
+        horse_number  = re.horse_number
+    FROM race_entry re
+    WHERE sp.race_name = re.race_name
+      AND sp.horse_name = re.horse_name
+      AND sp.race_name  = %s
+""", (race_name,))
+print(f"  → {cur2.rowcount}頭の情報を反映")
+conn2.commit()
+cur2.close()
+conn2.close()
+
+# 3. 顔面分析
+print("\n[3/3] 顔面分析を実行...")
 r2 = subprocess.run(
     ['python3', os.path.join(script_dir, 'face_analyzer_local.py'), race_name],
     cwd=script_dir

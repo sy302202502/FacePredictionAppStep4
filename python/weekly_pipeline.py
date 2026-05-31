@@ -182,6 +182,15 @@ def main():
         return
 
     log("")
+
+    # ── 0. 出馬表の最新同期（出走取消馬を予想から自動削除）──
+    log("─" * 50)
+    log("[0] 出馬表の最新同期（直前変更を反映）")
+    log("─" * 50)
+    ok_sync, _ = run_script('entry_fetcher.py', ['--sync'], '出馬表 同期')
+    if not ok_sync:
+        log("  ⚠️ 同期失敗（無視して続行）")
+
     results = []
     conn = get_conn()
 

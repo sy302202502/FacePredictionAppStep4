@@ -281,30 +281,35 @@ def sync_with_latest_shutuba():
             save_entries(conn, race_id, scraped_name or race_name,
                          race_date, '', venue, distance, surface, category, entries)
 
-            # race_specific_result から除外馬を削除 → 残馬を再ランク付け
+            # stats_prediction（現行）から除外馬を削除 → 残馬を再ランク付け
             if removed:
+                cur.execute("""
+                    DELETE FROM stats_prediction
+                    WHERE race_name = %s AND horse_name = ANY(%s)
+                """, (race_name, list(removed)))
+                deleted_sp = cur.rowcount
+                if deleted_sp > 0:
+                    print(f"  stats_prediction から {deleted_sp} 頭削除 → 再ランク付け")
+                    cur.execute("""
+                        UPDATE stats_prediction sp
+                        SET rank_position = sub.new_rank
+                        FROM (
+                            SELECT id,
+                                   ROW_NUMBER() OVER (ORDER BY score DESC NULLS LAST) AS new_rank
+                            FROM stats_prediction
+                            WHERE race_name = %s
+                        ) sub
+                        WHERE sp.id = sub.id AND sp.race_name = %s
+                    """, (race_name, race_name))
+                    conn.commit()
+                    print(f"  再ランク付け完了")
+
+                # 旧テーブル（race_specific_result）も互換のため削除
                 cur.execute("""
                     DELETE FROM race_specific_result
                     WHERE race_name = %s AND horse_name = ANY(%s)
                 """, (race_name, list(removed)))
-                deleted = cur.rowcount
-                if deleted > 0:
-                    print(f"  予想結果から {deleted} 頭削除 → 再ランク付け")
-                    cur.execute("""
-                        UPDATE race_specific_result r
-                        SET rank_position = sub.new_rank
-                        FROM (
-                            SELECT id,
-                                   ROW_NUMBER() OVER (ORDER BY score DESC) AS new_rank
-                            FROM race_specific_result
-                            WHERE race_name = %s
-                        ) sub
-                        WHERE r.id = sub.id AND r.race_name = %s
-                    """, (race_name, race_name))
-                    conn.commit()
-                    print(f"  再ランク付け完了")
-                else:
-                    print(f"  予想結果に該当馬なし（分析前の可能性）")
+                conn.commit()
 
             polite_sleep(2.0, 4.0)
 

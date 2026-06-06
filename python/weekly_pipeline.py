@@ -59,18 +59,41 @@ def fetch_upcoming_grade_races(days=14):
     return results
 
 import requests as _requests
+import fcntl as _fcntl
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
+LOCK_FILE = '/tmp/weekly_pipeline.lock'
 
 def send_discord(content):
-    """Discord Webhook に通知を送信。URL未設定なら何もしない。"""
+    """Discord Webhook に通知を送信。URL未設定なら何もしない。
+    送信失敗時は stderr にも明示出力し、cron 経由のメール/ログで検知できるようにする。"""
     if not DISCORD_WEBHOOK_URL:
         return
     try:
-        _requests.post(DISCORD_WEBHOOK_URL,
-                       json={"content": content[:1900]},  # Discordの2000字制限対策
-                       timeout=10)
+        resp = _requests.post(DISCORD_WEBHOOK_URL,
+                              json={"content": content[:1900]},
+                              timeout=10)
+        if resp.status_code >= 400:
+            msg = f"[ERROR] Discord通知HTTPエラー: status={resp.status_code} body={resp.text[:200]}"
+            print(msg, file=sys.stderr, flush=True)
+            log(msg)
     except Exception as e:
-        log(f"[警告] Discord通知失敗: {e}")
+        msg = f"[ERROR] Discord通知失敗: {e}"
+        print(msg, file=sys.stderr, flush=True)
+        log(msg)
+
+
+def acquire_pipeline_lock():
+    """同一パイプラインの並行実行を防ぐ排他ロックを取得。
+    既に別プロセスが実行中の場合は終了する（cron の二重起動対策）。"""
+    f = open(LOCK_FILE, 'w')
+    try:
+        _fcntl.flock(f, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        f.write(str(os.getpid()))
+        f.flush()
+        return f
+    except OSError:
+        print("[INFO] 別のパイプラインが実行中のため終了します", flush=True)
+        sys.exit(0)
 
 NOISE_PATTERNS = [
     'NotOpenSSLWarning', 'urllib3', 'warnings.warn',
@@ -161,6 +184,8 @@ def update_image_paths(conn, race_name):
         cur.close()
 
 def main():
+    # 並行実行を防ぐロック取得（cronの二重起動・前回完了前の再起動を防止）
+    _lock = acquire_pipeline_lock()
     dry_run = '--dry-run' in sys.argv
 
     log("=" * 60)
@@ -189,7 +214,12 @@ def main():
     log("─" * 50)
     ok_sync, _ = run_script('entry_fetcher.py', ['--sync'], '出馬表 同期')
     if not ok_sync:
-        log("  ⚠️ 同期失敗（無視して続行）")
+        log("  ⚠️ 同期失敗（取消馬の反映ができていない可能性）")
+        send_discord(
+            "⚠️ **出馬表同期失敗**\n"
+            "取消馬の反映ができていない可能性があります。\n"
+            "本日のレース予想は手動確認を推奨します。"
+        )
 
     results = []
     conn = get_conn()

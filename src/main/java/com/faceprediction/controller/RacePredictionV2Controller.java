@@ -17,9 +17,14 @@ import com.faceprediction.entity.RaceOdds;
 import com.faceprediction.entity.RaceSpecificResult;
 import com.faceprediction.repository.RaceOddsRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Controller
 @RequestMapping("/predict-v2")
 public class RacePredictionV2Controller {
+
+    private static final Logger log = LoggerFactory.getLogger(RacePredictionV2Controller.class);
 
     @Autowired private RaceOddsRepository oddsRepo;
     @Autowired private JdbcTemplate       jdbc;
@@ -53,6 +58,18 @@ public class RacePredictionV2Controller {
                 "WHERE sp.race_name = ? " +
                 "ORDER BY sp.rank_position ASC",
                 selected);
+
+            // 防御的検知: stats_prediction には予想があるのに JOIN 結果ゼロ件
+            // → race_entry が同期失敗等で空になっている兆候を即時検知
+            if (rows.isEmpty()) {
+                Integer rawCount = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM stats_prediction WHERE race_name = ?",
+                    Integer.class, selected);
+                if (rawCount != null && rawCount > 0) {
+                    log.warn("RACE_ENTRY MISMATCH: race={} has {} predictions but JOIN returned 0 rows. " +
+                             "Check race_entry sync status.", selected, rawCount);
+                }
+            }
 
             List<RaceSpecificResult> results = buildSpreadResults(rows);
             model.addAttribute("results", results);

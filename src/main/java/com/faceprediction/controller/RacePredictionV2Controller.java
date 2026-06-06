@@ -41,10 +41,15 @@ public class RacePredictionV2Controller {
 
         if (selected != null) {
             // 顔面スコア(主)＋統計スコア(差別化用)を取得
+            // INNER JOIN race_entry で「現出走表に居る馬」だけを対象にする
+            // = 出走取消馬は予想に表示されない
             List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT horse_name, image_path, face_comment, face_score, score, rank_position " +
-                "FROM stats_prediction WHERE race_name = ? " +
-                "ORDER BY rank_position ASC",
+                "SELECT sp.horse_name, sp.image_path, sp.face_comment, sp.face_score, sp.score, sp.rank_position " +
+                "FROM stats_prediction sp " +
+                "INNER JOIN race_entry re " +
+                "  ON re.race_name = sp.race_name AND re.horse_name = sp.horse_name " +
+                "WHERE sp.race_name = ? " +
+                "ORDER BY sp.rank_position ASC",
                 selected);
 
             List<RaceSpecificResult> results = buildSpreadResults(rows);

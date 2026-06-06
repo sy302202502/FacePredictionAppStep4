@@ -77,10 +77,14 @@ public class StatsPredictionController {
         model.addAttribute("selectedRace", selected);
 
         if (selected != null) {
+            // INNER JOIN race_entry で「現出走表に居る馬」だけを対象にする（出走取消馬を除外）
             List<Map<String, Object>> results = jdbc.queryForList(
-                "SELECT horse_name, horse_number, jockey_name, rank_position, score, score_detail, comment, " +
-                "image_path, face_comment, face_score " +
-                "FROM stats_prediction WHERE race_name = ? ORDER BY rank_position",
+                "SELECT sp.horse_name, sp.horse_number, sp.jockey_name, sp.rank_position, sp.score, " +
+                "sp.score_detail, sp.comment, sp.image_path, sp.face_comment, sp.face_score " +
+                "FROM stats_prediction sp " +
+                "INNER JOIN race_entry re " +
+                "  ON re.race_name = sp.race_name AND re.horse_name = sp.horse_name " +
+                "WHERE sp.race_name = ? ORDER BY sp.rank_position",
                 selected);
 
             // score_detail JSON → Map に変換

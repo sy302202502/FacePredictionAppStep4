@@ -830,6 +830,24 @@
             letter-spacing: 1px;
         }
 
+        .horse-number-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            height: 28px;
+            padding: 0 8px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #2a3a2a, #1a2a1a);
+            border: 1px solid var(--neon);
+            color: var(--neon);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 0 6px var(--neon-glow);
+        }
+
         /* 1位名：ゴールド (C) */
         .horse-card.rank-top1 .horse-name {
             color: var(--gold-light);
@@ -1288,6 +1306,8 @@
 
                 <div class="horse-info">
                     <div class="horse-name-row">
+                        <span th:if="${r.horseNumber != null}" class="horse-number-badge"
+                              th:text="${r.horseNumber + '番'}">1番</span>
                         <span class="horse-name" th:text="${r.horseName}">馬名</span>
                     </div>
                     <!-- オッズバッジ（レース当日のみ表示） -->

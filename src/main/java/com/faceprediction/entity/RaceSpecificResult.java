@@ -35,6 +35,13 @@ public class RaceSpecificResult {
     private String dataSource;
     private LocalDateTime createdAt;
 
+    // 表示用の馬番（DB列ではないため @Transient）
+    @javax.persistence.Transient
+    private Integer horseNumber;
+
+    public Integer getHorseNumber() { return horseNumber; }
+    public void setHorseNumber(Integer horseNumber) { this.horseNumber = horseNumber; }
+
     public RaceSpecificResult() {}
 
     @PrePersist

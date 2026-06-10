@@ -64,13 +64,20 @@ def ensure_stats_table(conn):
 # ----------------------------------------------------------------
 def get_entries(conn, race_name):
     cur = conn.cursor()
+    # 同名レースが複数開催分（別年・別会場）残っている場合に混ざらないよう、
+    # 最新の race_date の race_id に限定する
     cur.execute("""
         SELECT horse_name, horse_id, horse_number, jockey_name,
                distance, surface, race_date
         FROM race_entry
         WHERE race_name = %s
+          AND race_id = (
+              SELECT race_id FROM race_entry
+              WHERE race_name = %s
+              ORDER BY race_date DESC, race_id DESC LIMIT 1
+          )
         ORDER BY horse_number
-    """, (race_name,))
+    """, (race_name, race_name))
     rows = cur.fetchall()
     cur.close()
     return rows

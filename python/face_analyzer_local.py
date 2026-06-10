@@ -319,6 +319,7 @@ def main():
 
             print(f"対象馬: {len(horses)}頭\n")
 
+            success_count = 0
             for row_id, horse_name, image_path, rank in horses:
                 print(f"  {rank}位 {horse_name} ... ", end='', flush=True)
 
@@ -344,11 +345,19 @@ def main():
                     WHERE id = %s
                 """, (face_comment, face_score, row_id))
                 conn.commit()
+                success_count += 1
 
                 print(f"スコア{face_score}点 | {face_comment}")
 
                 # llavaへの負荷軽減
                 time.sleep(0.5)
+
+            if success_count == 0:
+                # 1頭も分析できなかった場合は失敗として終了
+                # （パイプライン側で face_failed と記録され、Discord通知に❌が出る）
+                print(f"\n❌ {race_name}: {len(horses)}頭中0頭しか分析できませんでした")
+                print(f"\nRESULT:{json.dumps({'success': False, 'race': race_name}, ensure_ascii=False)}")
+                sys.exit(1)
 
         finally:
             cur.close()

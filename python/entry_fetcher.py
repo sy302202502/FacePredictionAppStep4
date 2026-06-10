@@ -56,7 +56,8 @@ def fetch_upcoming_grade_races(query=None):
                 grade_span = li.find('span', class_=re.compile(r'Icon_GradeType\d'))
                 if not grade_span:
                     continue
-                a = li.find('a', href=re.compile(r'shutuba'))
+                # 当日はリンクが shutuba.html → result.html 等に変わるため race_id で拾う
+                a = li.find('a', href=re.compile(r'race_id=\d+'))
                 if not a:
                     continue
                 # レース名は ItemTitle span から取得
@@ -265,6 +266,15 @@ def sync_with_latest_shutuba():
 
             removed = db_names - shutuba_names  # 除外・取消馬
             added   = shutuba_names - db_names  # 直前追加馬（まれ）
+
+            # 安全ガード: 半数以上が「除外」と判定された場合はスクレイピング異常
+            # （netkeibaのHTML変更等で出馬表が部分的にしか取れなかった）の可能性が高い。
+            # 正常な馬まで大量削除しないようスキップして警告する。
+            if db_names and len(removed) > max(3, len(db_names) * 0.5):
+                print(f"  ⚠️ 除外判定が{len(removed)}/{len(db_names)}頭と異常に多いためスキップ"
+                      f"（スクレイピング失敗の可能性）")
+                polite_sleep(1.0, 2.0)
+                continue
 
             if not removed and not added:
                 print(f"  変更なし（{len(db_names)}頭）✓")

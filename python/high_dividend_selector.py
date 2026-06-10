@@ -205,7 +205,8 @@ def _fetch_races_from_netkeiba(target_date):
         soup = BeautifulSoup(resp.text, 'lxml')
 
         for li in soup.find_all('li', class_='RaceList_DataItem'):
-            a = li.find('a', href=re.compile(r'shutuba'))
+            # 当日はリンクが shutuba.html → result.html 等に変わるため race_id で拾う
+            a = li.find('a', href=re.compile(r'race_id=\d+'))
             if not a:
                 continue
             href = a.get('href', '')

@@ -41,7 +41,8 @@ def fetch_upcoming_grade_races(days=14):
             for li in soup.find_all('li', class_='RaceList_DataItem'):
                 if not li.find('span', class_=re.compile(r'Icon_GradeType\d')):
                     continue
-                a = li.find('a', href=re.compile(r'shutuba'))
+                # 当日はリンクが shutuba.html → result.html 等に変わるため race_id で拾う
+                a = li.find('a', href=re.compile(r'race_id=\d+'))
                 if not a:
                     continue
                 title_span = li.find('span', class_='ItemTitle')
@@ -56,7 +57,15 @@ def fetch_upcoming_grade_races(days=14):
                     })
         except Exception as e:
             log(f"  [警告] {d.strftime('%Y%m%d')} の取得失敗: {e}")
-    return results
+    # race_id で重複排除（リンク形式変更などで同一レースを二重に拾った場合の保険）
+    seen = set()
+    unique = []
+    for r in results:
+        if r['race_id'] in seen:
+            continue
+        seen.add(r['race_id'])
+        unique.append(r)
+    return unique
 
 import requests as _requests
 import fcntl as _fcntl
@@ -196,6 +205,11 @@ def main():
 
     if not races:
         log("❌ 対象レースが見つかりませんでした")
+        send_discord(
+            "⚠️ **週次パイプライン: 対象レース0件**\n"
+            "14日以内の重賞・OP・Lが1件も取得できませんでした。\n"
+            "netkeibaのHTML変更の可能性があります。要確認。"
+        )
         return
 
     log(f"\n対象レース: {len(races)}件")

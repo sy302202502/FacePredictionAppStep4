@@ -51,7 +51,7 @@ public class RacePredictionV2Controller {
             // race_entry の最新 horse_number を表示用に取得
             List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT sp.horse_name, sp.image_path, sp.face_comment, sp.face_score, sp.score, sp.rank_position, " +
-                "       re.horse_number " +
+                "       re.horse_number, re.post_position " +
                 "FROM stats_prediction sp " +
                 "INNER JOIN race_entry re " +
                 "  ON re.race_name = sp.race_name AND re.horse_name = sp.horse_name " +
@@ -112,6 +112,8 @@ public class RacePredictionV2Controller {
             r.setComment(toHeadlineFormat((String) row.get("face_comment")));
             Object hn = row.get("horse_number");
             if (hn != null) r.setHorseNumber(((Number) hn).intValue());
+            Object pp = row.get("post_position");
+            if (pp != null) r.setPostPosition(((Number) pp).intValue());
 
             Object fs = row.get("face_score");
             if (fs == null) {

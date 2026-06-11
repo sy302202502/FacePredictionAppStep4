@@ -848,6 +848,28 @@
             letter-spacing: 0.5px;
             box-shadow: 0 0 6px var(--neon-glow);
         }
+        /* 枠番バッジ（JRA枠色） */
+        .waku-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            height: 28px;
+            padding: 0 6px;
+            border-radius: 6px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+        .waku-1 { background: #ffffff; color: #111; }
+        .waku-2 { background: #1a1a1a; color: #fff; border-color: #555; }
+        .waku-3 { background: #d32f2f; color: #fff; }
+        .waku-4 { background: #1565c0; color: #fff; }
+        .waku-5 { background: #f9d51c; color: #111; }
+        .waku-6 { background: #2e7d32; color: #fff; }
+        .waku-7 { background: #ef6c00; color: #fff; }
+        .waku-8 { background: #f48fb1; color: #111; }
 
         /* 1位名：ゴールド (C) */
         .horse-card.rank-top1 .horse-name {
@@ -1307,6 +1329,9 @@
 
                 <div class="horse-info">
                     <div class="horse-name-row">
+                        <span th:if="${r.postPosition != null}" class="waku-badge"
+                              th:classappend="'waku-' + ${r.postPosition}"
+                              th:text="${r.postPosition}">1</span>
                         <span th:if="${r.horseNumber != null}" class="horse-number-badge"
                               th:text="${r.horseNumber + '番'}">1番</span>
                         <span class="horse-name" th:text="${r.horseName}">馬名</span>

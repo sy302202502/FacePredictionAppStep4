@@ -42,6 +42,13 @@ public class RaceSpecificResult {
     public Integer getHorseNumber() { return horseNumber; }
     public void setHorseNumber(Integer horseNumber) { this.horseNumber = horseNumber; }
 
+    // 表示用の枠番（DB列ではないため @Transient）
+    @javax.persistence.Transient
+    private Integer postPosition;
+
+    public Integer getPostPosition() { return postPosition; }
+    public void setPostPosition(Integer postPosition) { this.postPosition = postPosition; }
+
     public RaceSpecificResult() {}
 
     @PrePersist

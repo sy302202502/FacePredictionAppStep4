@@ -277,7 +277,38 @@ def sync_with_latest_shutuba():
                 continue
 
             if not removed and not added:
-                print(f"  変更なし（{len(db_names)}頭）✓")
+                # 馬の増減はなくても、枠順確定後に馬番が未反映のままのケースを更新する
+                # （枠順確定前に取得したレースは horse_number が NULL になっている）
+                cur.execute("""
+                    SELECT COUNT(*) FROM race_entry
+                    WHERE race_id = %s AND horse_number IS NULL
+                """, (race_id,))
+                null_count = cur.fetchone()[0]
+                scraped_nums = {e['horse_name']: e for e in entries
+                                if e.get('horse_number') is not None}
+                if null_count > 0 and scraped_nums:
+                    for name, e in scraped_nums.items():
+                        cur.execute("""
+                            UPDATE race_entry
+                            SET post_position = %s, horse_number = %s,
+                                jockey_name = COALESCE(NULLIF(%s, ''), jockey_name)
+                            WHERE race_id = %s AND horse_name = %s
+                        """, (e['post_position'], e['horse_number'],
+                              e['jockey_name'], race_id, name))
+                    # stats_prediction 側にも馬番・騎手を反映（表示用）
+                    cur.execute("""
+                        UPDATE stats_prediction sp
+                        SET horse_number = re.horse_number,
+                            jockey_name  = re.jockey_name
+                        FROM race_entry re
+                        WHERE re.race_id = %s
+                          AND sp.race_name = re.race_name
+                          AND sp.horse_name = re.horse_name
+                    """, (race_id,))
+                    conn.commit()
+                    print(f"  馬番を反映（{len(scraped_nums)}頭・枠順確定）✓")
+                else:
+                    print(f"  変更なし（{len(db_names)}頭）✓")
                 polite_sleep(1.0, 2.0)
                 continue
 

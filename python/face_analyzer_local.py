@@ -140,6 +140,12 @@ EYES_HIGH = [
     "眼光鋭く、周囲を圧倒するほどの気迫を放っている",
     "吸い込まれるような瞳の輝きに、底知れないポテンシャルを感じる",
     "視線が凛として定まり、心身の充実ぶりが伝わってくる",
+    "獲物を見据える猛禽のような眼差し。勝負どころを知り尽くした目だ",
+    "瞳に宿る静かな炎が、内に秘めた爆発力を物語っている",
+    "一点を射抜くような視線の強さ。レースへの集中力は申し分ない",
+    "黒目がちな瞳が爛々と輝き、生気がみなぎっている",
+    "目の奥に確かな知性と闘気が同居する、王者の風格を感じる眼差し",
+    "瞬きの少ない据わった目つきが、極限の集中状態を示している",
 ]
 EYES_MID = [
     "落ち着いた眼差しで冷静さをキープ、無駄なエネルギーを使っていない",
@@ -147,12 +153,21 @@ EYES_MID = [
     "程よいリラックス状態。返し馬でガラッと変わる期待もある",
     "物静かな目つきが意外な切れ味を示唆する。侮れない",
     "冷静な眼差しの奥に燻る闘争心。ここ一番での爆発力に期待",
+    "気負いのない自然体の表情。実戦モードへの切り替えに注目",
+    "涼しげな目元に余裕すら感じる。力を出し切れる精神状態か",
+    "ほどよい緊張感をたたえた瞳。気持ちの入り方は悪くない",
+    "淡々とした佇まいだが、目の芯には確かな光がある",
+    "感情を表に出さないポーカーフェイス。秘めた闘志に賭けたい",
 ]
 EYES_LOW = [
     "眼差しにやや覇気が感じられない。気持ちが乗りきっていないか",
     "目の輝きが今ひとつ。パドックでの気配を要チェック",
     "若干うつろな視線が気になる。状態面に疑問符がつく",
     "集中力の欠如が見受けられる。本番で巻き返せるか",
+    "目元に疲れの色がにじむ。間隔詰めの影響が出ていないか心配",
+    "どこか心ここにあらずの表情。気持ちのスイッチが入るかが鍵",
+    "視線が定まらず落ち着きを欠く。イレ込みすぎの懸念も",
+    "瞳の生気が乏しく、本来の気迫が影を潜めている",
 ]
 
 COAT_HIGH = [
@@ -161,18 +176,30 @@ COAT_HIGH = [
     "全身が照り輝くほどの毛艶。入念なケアの成果が一目で分かる",
     "鏡のように反射する毛並みは、最高潮のコンディションの証明",
     "光沢感抜群の被毛が、今が旬の状態であることを雄弁に物語る",
+    "ビロードのような手触りを思わせる極上の毛並み。万全の仕上げだ",
+    "陽光を浴びて黄金色に輝く馬体。これぞ勝負仕上げの艶",
+    "皮膚の薄さまで伝わる研ぎ澄まされた被毛。究極まで磨かれている",
+    "一頭だけ照明が当たっているかのような輝き。状態の良さは群を抜く",
+    "毛先まで栄養が行き届いた極上のコート。心身の充実が透けて見える",
 ]
 COAT_MID = [
     "毛並みは整っており、標準的な仕上がり",
     "コートは及第点。特段の心配はないが、もう一押し欲しい",
     "毛ヅヤは悪くない。維持調整がうまくいっている印象",
     "まとまった仕上がりで、急仕上げの気配はない",
+    "季節なりの毛艶は確保。平行線ながら安定したデキ",
+    "派手さはないが手入れの行き届いた毛並み。好調持続型か",
+    "被毛の状態は水準級。叩かれつつ上向く余地を残す",
+    "落ち着いた光沢の馬体。大きな減点材料は見当たらない",
 ]
 COAT_LOW = [
     "毛艶にくすみが見られ、仕上がりに課題が残る",
     "被毛の光沢がやや欠け、本来のポテンシャルを出し切れていない可能性",
     "コートのコンディションが今ひとつ。デキ落ちの懸念あり",
     "毛並みの物足りなさが状態の陰りを示唆している",
+    "冬毛の名残か、被毛にざらつきが見える。本調子まであと一息",
+    "毛色が冴えず、ピークを過ぎた感も。過信は禁物",
+    "艶を欠いた馬体が調整の難しさを物語る。割引が必要か",
 ]
 
 MUSCLE_HIGH = [
@@ -181,18 +208,30 @@ MUSCLE_HIGH = [
     "腹周りが絞れ、腰のラインが美しい。これが本来の姿だろう",
     "たくましい筋肉の張りが自信を体現しており、目を惹くフィジカルだ",
     "弾けんばかりの筋肉の充実度。力強い走りが期待できる",
+    "トモの筋肉が見事に発達し、爆発的な推進力を予感させる",
+    "胸前の厚みと首差しのバランスが絶妙。完成度の高い馬体だ",
+    "鋼のようにしなやかな筋肉が全身を覆う。アスリートの肉体美",
+    "余分な脂肪が削ぎ落とされ、筋骨隆々の臨戦体型に仕上がった",
+    "皮膚の下で躍動する筋肉のうねりが見える。パワーは申し分ない",
 ]
 MUSCLE_MID = [
     "体の張りはまずまずで、十分戦える体づくりができている",
     "筋肉量は標準的。この馬の能力があれば問題ない",
     "やや線は細いが、軽快さを活かした走りができる体型",
     "コンパクトにまとまった体型。小柄ながら瞬発力は秘めている",
+    "成長途上の馬体ながら、走りに必要な筋肉は備わっている",
+    "全体のバランスは良好。あとは実戦でどこまでやれるか",
+    "標準的な筋肉のつき方だが、柔らかさがあり伸びしろを感じる",
+    "可もなく不可もない馬体。展開ひとつで上位進出も",
 ]
 MUSCLE_LOW = [
     "やや細身で馬体の張りが物足りない。疲れが残っていないか",
     "筋肉の盛り上がりが今ひとつ。デキの維持が心配",
     "馬体重に見合った張りが感じられない。叩き台の可能性も",
     "絞れすぎた印象。調整不足か、それとも軽量化が狙いか",
+    "トモの寂しさが気になる。距離延長ならなおさら割引",
+    "腹回りに余裕があり、仕上がり途上の感は否めない",
+    "全体的に緩さの残る馬体。一度使ってからが本番か",
 ]
 
 # 総合一言（スコア帯×パターン）
@@ -202,6 +241,10 @@ OVERALL_PERFECT = [
     "パドックでも主役オーラ全開。今日のベストコンディション",
     "写真の時点でこの出来栄え。レース当日はさらに上積みも",
     "馬自身が「今日がピーク」と語っているような仕上がり",
+    "鬼の目にも狂いなし。この仕上がりは本物だ",
+    "心技体すべてが噛み合った会心のデキ。買い材料しかない",
+    "デビュー以来最高と言いたくなる充実ぶり。勝ち負け必至",
+    "陣営の本気がひしひしと伝わる渾身の仕上げ。勝負気配は最高潮",
 ]
 OVERALL_GOOD = [
     "全体的に好状態をキープ。本番での力発揮は十分できる",
@@ -209,6 +252,10 @@ OVERALL_GOOD = [
     "崩れた部分がなく、安定したパフォーマンスが期待できる",
     "好調期をしっかりつかんだ印象。凡走するイメージが湧かない",
     "バランスの取れた好状態。鞍上の腕次第でどこまでも",
+    "順調さがうかがえる馬体。能力を出し切れる態勢は整った",
+    "高値安定のコンディション。大崩れの心配は少ない",
+    "攻め駆けするタイプの好気配。馬券圏内は十分視野",
+    "じわじわと調子を上げてきた印象。ピークは今週末か",
 ]
 OVERALL_AVG = [
     "可もなく不可もなし。潜在能力が上回れば問題ない",
@@ -216,6 +263,9 @@ OVERALL_AVG = [
     "特別なプラスもなければ、大きなマイナスもない。能力比べ",
     "コンディションは中程度。調教内容との兼ね合いで判断を",
     "実力馬なら多少のデキ落ちは関係ない。底力に期待",
+    "標準的な気配。人気の盲点になるなら妙味はある",
+    "良くも悪くも平行線。相手なりに走れるタイプなら",
+    "目立った上積みは見えないが、地力で足りるかどうか",
 ]
 OVERALL_POOR = [
     "心配な点が目立つ。今回は様子見が無難か",
@@ -223,11 +273,33 @@ OVERALL_POOR = [
     "万全でない状態での出走ならば、過度な期待は禁物",
     "叩き台として使い、次走での変身に期待したい",
     "状態面でのマイナスが大きい。一発逆転を狙うなら次回",
+    "本調子には程遠い気配。見送りが賢明かもしれない",
+    "良化の兆しが見えず厳しい評価に。巻き返しは次走以降",
+    "気配・馬体ともに低調。今回は静観して次を待ちたい",
 ]
 
-def build_face_comment(parsed, horse_name):
+class PhrasePicker:
+    """レース内でフレーズが重複しないよう、シャッフル済みプールから順に取り出す。
+    プールを使い切った場合のみ再シャッフルして再利用する。"""
+    def __init__(self):
+        self._pools = {}
+
+    def pick(self, options):
+        key = id(options)
+        pool = self._pools.get(key)
+        if not pool:
+            pool = options[:]
+            random.shuffle(pool)
+            self._pools[key] = pool
+        return pool.pop()
+
+
+def build_face_comment(parsed, horse_name, picker=None, horse_number=None):
     if not parsed:
         return "写真からの分析データなし"
+
+    if picker is None:
+        picker = PhrasePicker()
 
     score    = parsed['face_score']
     eyes     = parsed['eyes']
@@ -235,27 +307,27 @@ def build_face_comment(parsed, horse_name):
     muscle   = parsed['muscle']
     vitality = parsed['vitality']
 
-    # 各項目の評価フレーズをランダムに選択
+    # 各項目の評価フレーズを重複なしプールから選択
     if eyes >= 8.5:
-        eye_phrase = random.choice(EYES_HIGH)
+        eye_phrase = picker.pick(EYES_HIGH)
     elif eyes >= 6.5:
-        eye_phrase = random.choice(EYES_MID)
+        eye_phrase = picker.pick(EYES_MID)
     else:
-        eye_phrase = random.choice(EYES_LOW)
+        eye_phrase = picker.pick(EYES_LOW)
 
     if coat >= 8.5:
-        coat_phrase = random.choice(COAT_HIGH)
+        coat_phrase = picker.pick(COAT_HIGH)
     elif coat >= 6.5:
-        coat_phrase = random.choice(COAT_MID)
+        coat_phrase = picker.pick(COAT_MID)
     else:
-        coat_phrase = random.choice(COAT_LOW)
+        coat_phrase = picker.pick(COAT_LOW)
 
     if muscle >= 8.5:
-        muscle_phrase = random.choice(MUSCLE_HIGH)
+        muscle_phrase = picker.pick(MUSCLE_HIGH)
     elif muscle >= 6.5:
-        muscle_phrase = random.choice(MUSCLE_MID)
+        muscle_phrase = picker.pick(MUSCLE_MID)
     else:
-        muscle_phrase = random.choice(MUSCLE_LOW)
+        muscle_phrase = picker.pick(MUSCLE_LOW)
 
     # フレーズ配列：ベスト項目 → その他 → 総合
     phrases = []
@@ -278,7 +350,11 @@ def build_face_comment(parsed, horse_name):
 
     # 2〜3フレーズ＋総合でコメント生成（長くなりすぎないよう上位2項目を採用）
     body = "。".join(phrases[:2])
-    return f"{body}。{overall}"
+    comment = f"{body}。{overall}"
+    # 馬番が分かる場合はコメント先頭に付ける（例:【3番】...）
+    if horse_number is not None:
+        comment = f"【{int(horse_number)}番】{comment}"
+    return comment
 
 # ── メイン ──────────────────────────────────────────
 def main():
@@ -295,7 +371,7 @@ def main():
         try:
             # 対象レースの馬を取得（未分析の馬のみ — API呼び出しの節約）
             cur.execute("""
-                SELECT id, horse_name, image_path, rank_position
+                SELECT id, horse_name, image_path, rank_position, horse_number
                 FROM stats_prediction
                 WHERE race_name = %s
                   AND image_path IS NOT NULL
@@ -320,7 +396,8 @@ def main():
             print(f"対象馬: {len(horses)}頭\n")
 
             success_count = 0
-            for row_id, horse_name, image_path, rank in horses:
+            picker = PhrasePicker()  # レース内でコメントが重複しないよう共有
+            for row_id, horse_name, image_path, rank, horse_number in horses:
                 print(f"  {rank}位 {horse_name} ... ", end='', flush=True)
 
                 raw = analyze_image_llava(image_path)
@@ -335,7 +412,8 @@ def main():
                     print("JSON解析失敗（次回再試行）")
                     continue
 
-                face_comment = build_face_comment(parsed, horse_name)
+                face_comment = build_face_comment(parsed, horse_name,
+                                                  picker=picker, horse_number=horse_number)
                 face_score   = parsed['face_score']
 
                 # DB更新（解析成功時のみ）

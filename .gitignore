@@ -42,3 +42,4 @@ Thumbs.db
 # ── Claude Code ───────────────────────────────────────────────
 .claude/
 
+.netkeiba_cookies.pkl

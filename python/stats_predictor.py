@@ -62,34 +62,144 @@ def ensure_stats_table(conn):
     cur.close()
 
 # ----------------------------------------------------------------
-# 調教評価（netkeiba 追い切りページ・評価ランクは無料で閲覧可）
+# 調教評価（netkeiba 追い切りページ）
+#   評価ランク(S/A〜E): 無料で閲覧可
+#   追い切りタイム: プレミアムログイン時のみ閲覧可（取れなければランクのみで採点）
 # ----------------------------------------------------------------
-TRAINING_PT = {'S': 15.0, 'A': 13.0, 'B': 10.0, 'C': 6.0, 'D': 3.0, 'E': 1.0}
-TRAINING_DEFAULT = 7.0  # 評価なし（地方・海外・データ未掲載）は中立
+import pickle as _pickle
+import requests as _nk_requests
 
-def fetch_oikiri_ranks(race_id):
-    """追い切りページから {馬名: 評価ランク(S/A〜E)} を取得。失敗時は空dict。"""
-    ranks = {}
-    if not race_id:
-        return ranks
+# ランク基礎点（最大9pt）＋タイム加点（最大6pt）= 調教15pt
+TRAINING_RANK_PT = {'S': 9.0, 'A': 8.0, 'B': 6.0, 'C': 4.0, 'D': 2.0, 'E': 1.0}
+TRAINING_RANK_DEFAULT = 4.5  # ランク不明時の基礎点
+TRAINING_DEFAULT = 7.0       # 調教データが一切ない場合の中立点
+
+NETKEIBA_ID = os.getenv('NETKEIBA_LOGIN_ID', '').strip()
+NETKEIBA_PW = os.getenv('NETKEIBA_PASSWORD', '').strip()
+_COOKIE_FILE = os.path.join(os.path.dirname(__file__), '../.netkeiba_cookies.pkl')
+
+def _notify_discord(msg):
+    url = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
+    if not url:
+        return
     try:
-        url = f"https://race.netkeiba.com/race/oikiri.html?race_id={race_id}"
-        resp = fetch_with_retry(url, timeout=15, min_sleep=1.0, max_sleep=2.0)
-        resp.encoding = 'EUC-JP'
-        soup = BeautifulSoup(resp.text, 'lxml')
-        for row in soup.find_all('tr', class_=re.compile(r'OikiriDataHead')):
-            link = row.find('a', href=re.compile(r'/horse/'))
-            if not link:
-                continue
-            name = link.get_text(strip=True)
-            rank_td = row.find('td', class_=re.compile(r'^Rank_'))
-            if rank_td:
-                rank = rank_td.get_text(strip=True).upper()
-                if rank in TRAINING_PT:
-                    ranks[name] = rank
+        _nk_requests.post(url, json={"content": msg[:1900]}, timeout=10)
+    except Exception:
+        pass
+
+def _netkeiba_session():
+    """Cookie永続化付きセッションを返す（未ログインでも可）"""
+    s = _nk_requests.Session()
+    s.headers.update(HEADERS)
+    try:
+        if os.path.exists(_COOKIE_FILE):
+            with open(_COOKIE_FILE, 'rb') as f:
+                s.cookies.update(_pickle.load(f))
+    except Exception:
+        pass
+    return s
+
+def _netkeiba_login(s):
+    """プレミアムログイン。成功時 True。失敗は Discord に警告。"""
+    if not NETKEIBA_ID or not NETKEIBA_PW:
+        return False
+    try:
+        r = s.post('https://regist.netkeiba.com/account/', data={
+            'pid': 'login', 'action': 'auth', 'return_url2': '', 'mem_tp': '',
+            'login_id': NETKEIBA_ID, 'pswd': NETKEIBA_PW,
+        }, timeout=15)
+        ok = any(c.name == 'nkauth' for c in s.cookies)
+        if ok:
+            with open(_COOKIE_FILE, 'wb') as f:
+                _pickle.dump(s.cookies, f)
+        else:
+            print("  [警告] netkeibaログイン失敗（認証情報を確認してください）")
+            _notify_discord("⚠️ **netkeibaログイン失敗**\n調教タイムなしのランク評価のみで採点を続行します。")
+        return ok
     except Exception as e:
-        print(f"  [警告] 調教評価の取得失敗: {e}")
-    return ranks
+        print(f"  [警告] netkeibaログイン例外: {e}")
+        return False
+
+def _parse_time_pt(cumuls):
+    """累計タイム列（例 [72.4, 56.6, 41.2, 12.9]）から加点(0〜6)を計算。
+    1F（末尾）の鋭さ + 4F（48〜62秒帯の値）の速さ。コース差はゆるい閾値で吸収。"""
+    if not cumuls:
+        return 0.0
+    pt = 0.0
+    f1 = cumuls[-1]
+    if   f1 <= 12.0: pt += 3.0
+    elif f1 <= 12.5: pt += 2.0
+    elif f1 <= 13.0: pt += 1.0
+    f4 = next((v for v in cumuls if 45.0 <= v <= 62.0), None)
+    if f4 is not None:
+        if   f4 <= 52.0: pt += 3.0
+        elif f4 <= 54.0: pt += 2.0
+        elif f4 <= 56.0: pt += 1.0
+    return pt
+
+def _parse_oikiri_page(html_text):
+    """追い切りページHTMLから {馬名: {'rank': str|None, 'time_pt': float}} を作る。
+    ログイン時（馬名行+タイム行の2行構成）と未ログイン時（1行構成）の両方に対応。"""
+    soup = BeautifulSoup(html_text, 'lxml')
+    data = {}
+    current = None
+    for row in soup.find_all('tr', class_=re.compile(r'OikiriDataHead')):
+        info = row.find('td', class_=re.compile(r'Horse_Info'))
+        if info:
+            a = info.find('a', href=re.compile(r'/horse/'))
+            if a:
+                current = a.get_text(strip=True)
+        rank_td = row.find('td', class_=re.compile(r'^Rank_'))
+        if rank_td is None or current is None:
+            continue
+        if current in data:
+            continue  # 最初のタイム行（最新追い切り）のみ採用
+        rank = rank_td.get_text(strip=True).upper()
+        # 累計タイム: 「56.6 (15.4)」形式の括弧外の値のみ
+        cumuls = [float(m.group(1)) for m in
+                  re.finditer(r'(\d{2}\.\d)\s*\(', row.get_text(' ', strip=True))]
+        data[current] = {
+            'rank': rank if rank in TRAINING_RANK_PT else None,
+            'time_pt': _parse_time_pt(cumuls),
+            'has_time': bool(cumuls),
+        }
+    return data
+
+def fetch_oikiri_data(race_id):
+    """追い切りページから調教データを取得。プレミアムログインでタイムも取得。
+    返り値: {馬名: {'rank':, 'time_pt':, 'has_time':}}（失敗時は空dict）"""
+    if not race_id:
+        return {}
+    url = f"https://race.netkeiba.com/race/oikiri.html?race_id={race_id}"
+    try:
+        s = _netkeiba_session()
+        r = s.get(url, timeout=15)
+        r.encoding = 'EUC-JP'
+        data = _parse_oikiri_page(r.text)
+        # タイムが1頭も取れていない＝未ログインの可能性 → ログインして再取得
+        if data and not any(v['has_time'] for v in data.values()) and NETKEIBA_ID:
+            if _netkeiba_login(s):
+                r = s.get(url, timeout=15)
+                r.encoding = 'EUC-JP'
+                data2 = _parse_oikiri_page(r.text)
+                if data2:
+                    data = data2
+        return data
+    except Exception as e:
+        print(f"  [警告] 調教データの取得失敗: {e}")
+        return {}
+
+def calc_training_pt(t):
+    """調教15pt = ランク基礎点(〜9) + タイム加点(〜6)。データなしは中立7pt。"""
+    if not t:
+        return TRAINING_DEFAULT, "評価なし"
+    rank_pt = TRAINING_RANK_PT.get(t.get('rank'), TRAINING_RANK_DEFAULT)
+    time_pt = t.get('time_pt', 0.0)
+    desc = f"追い切り{t['rank'] or '?'}評価"
+    if t.get('has_time'):
+        desc += f"＋タイム加点{time_pt:.0f}"
+    pt = min(15.0, rank_pt + time_pt)
+    return pt, desc
 
 # ----------------------------------------------------------------
 # 血統適性（父・母父の代表的な適性分類）
@@ -277,10 +387,10 @@ def fetch_horse_results(horse_id, horse_name):
 # スコア計算
 # ----------------------------------------------------------------
 def calc_score(results, target_distance, target_surface,
-               training_rank=None, blood=None):
+               training=None, blood=None):
     """
     0〜100点のスコアと詳細コメントを返す
-    training_rank: 追い切り評価 'S'/'A'〜'E' or None
+    training: fetch_oikiri_data() の1頭分 dict or None
     blood: (父, 母父) or None
     """
     detail = {}
@@ -350,12 +460,8 @@ def calc_score(results, target_distance, target_surface,
         detail['稍重適性'] = f"稍重以上 {len(all_wet)}走 {wet_wins}勝 → {wet_pt:.0f}pt"
 
     # ── 6. 調教評価 (15pt) ──────────────────────────
-    if training_rank in TRAINING_PT:
-        train_pt = TRAINING_PT[training_rank]
-        detail['調教評価'] = f"追い切り{training_rank}評価 → {train_pt:.0f}pt"
-    else:
-        train_pt = TRAINING_DEFAULT
-        detail['調教評価'] = f"評価なし → {train_pt:.0f}pt"
+    train_pt, train_desc = calc_training_pt(training)
+    detail['調教評価'] = f"{train_desc} → {train_pt:.1f}pt"
     score += train_pt
 
     # ── 7. 血統適性 (10pt) ──────────────────────────
@@ -448,9 +554,10 @@ def main():
     print(f"出走馬: {len(entries)}頭\n")
 
     # 調教評価をレース単位で一括取得（1リクエスト）
-    oikiri_ranks = fetch_oikiri_ranks(race_id)
-    if oikiri_ranks:
-        print(f"調教評価: {len(oikiri_ranks)}頭分取得\n")
+    oikiri = fetch_oikiri_data(race_id)
+    if oikiri:
+        n_time = sum(1 for v in oikiri.values() if v.get('has_time'))
+        print(f"調教評価: {len(oikiri)}頭分取得（うちタイム付き {n_time}頭）\n")
     else:
         print("調教評価: 取得なし（中立扱い）\n")
 
@@ -468,7 +575,7 @@ def main():
         results = fetch_horse_results(horse_id, horse_name)
         blood   = fetch_blood(horse_id)
         score, detail, comment = calc_score(results, target_distance or 2000, target_surface or '芝',
-                                            training_rank=oikiri_ranks.get(horse_name),
+                                            training=oikiri.get(horse_name),
                                             blood=blood)
         print(f"    スコア: {score:.1f}点 | {comment}")
         scored.append({

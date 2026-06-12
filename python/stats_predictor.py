@@ -410,6 +410,7 @@ def build_comment(results, dist, surf, detail):
 def main():
     race_name = sys.argv[1] if len(sys.argv) > 1 else '大阪杯'
     dry_run   = '--dry-run' in sys.argv
+    update_mode = '--update' in sys.argv  # 顔面データを保持してスコアのみ再評価
 
     # race_id（数字のみ）が渡された場合はレース名に解決する（VNCの日本語化け対策）
     if race_name.isdigit():
@@ -494,23 +495,47 @@ def main():
         # DB保存
         cur = conn.cursor()
         try:
-            cur.execute("DELETE FROM stats_prediction WHERE race_name = %s", (race_name,))
-            for i, h in enumerate(scored, 1):
-                cur.execute("""
-                    INSERT INTO stats_prediction
-                        (race_name, horse_name, horse_id, rank_position, score, score_detail, comment)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s)
-                """, (
-                    race_name, h['horse_name'], h['horse_id'], i,
-                    h['score'], json.dumps(h['detail'], ensure_ascii=False), h['comment']
-                ))
-            conn.commit()
+            if update_mode:
+                # 更新モード: 顔面分析データ（face_*）を保持したままスコアのみ更新。
+                # 直前再評価（最新の調教評価の反映）用。
+                updated = inserted = 0
+                for i, h in enumerate(scored, 1):
+                    cur.execute("""
+                        UPDATE stats_prediction
+                        SET rank_position = %s, score = %s, score_detail = %s, comment = %s
+                        WHERE race_name = %s AND horse_name = %s
+                    """, (i, h['score'], json.dumps(h['detail'], ensure_ascii=False),
+                          h['comment'], race_name, h['horse_name']))
+                    if cur.rowcount > 0:
+                        updated += cur.rowcount
+                    else:
+                        cur.execute("""
+                            INSERT INTO stats_prediction
+                                (race_name, horse_name, horse_id, rank_position, score, score_detail, comment)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s)
+                        """, (race_name, h['horse_name'], h['horse_id'], i,
+                              h['score'], json.dumps(h['detail'], ensure_ascii=False), h['comment']))
+                        inserted += 1
+                conn.commit()
+                print(f"\n✅ {race_name} のスコアを再評価しました（更新{updated}頭・追加{inserted}頭、顔面データ保持）")
+            else:
+                cur.execute("DELETE FROM stats_prediction WHERE race_name = %s", (race_name,))
+                for i, h in enumerate(scored, 1):
+                    cur.execute("""
+                        INSERT INTO stats_prediction
+                            (race_name, horse_name, horse_id, rank_position, score, score_detail, comment)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    """, (
+                        race_name, h['horse_name'], h['horse_id'], i,
+                        h['score'], json.dumps(h['detail'], ensure_ascii=False), h['comment']
+                    ))
+                conn.commit()
+                print(f"\n✅ {race_name} の統計予想をDBに保存しました")
         except Exception:
             conn.rollback()
             raise
         finally:
             cur.close()
-        print(f"\n✅ {race_name} の統計予想をDBに保存しました")
         print(f"   → /stats-predict?raceName={race_name} で確認")
 
     conn.close()

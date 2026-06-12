@@ -39,8 +39,12 @@ def fetch_upcoming_grade_races(days=14):
             resp.encoding = 'utf-8'
             soup = BeautifulSoup(resp.text, 'lxml')
             for li in soup.find_all('li', class_='RaceList_DataItem'):
-                if not li.find('span', class_=re.compile(r'Icon_GradeType\d')):
+                grade_span = li.find('span', class_=re.compile(r'Icon_GradeType\d'))
+                if not grade_span:
                     continue
+                # グレード番号（1=G1, 2=G2, 3=G3, その他=OP/L等）
+                gm = re.search(r'Icon_GradeType(\d+)', ' '.join(grade_span.get('class', [])))
+                grade_no = int(gm.group(1)) if gm else 99
                 # 当日はリンクが shutuba.html → result.html 等に変わるため race_id で拾う
                 a = li.find('a', href=re.compile(r'race_id=\d+'))
                 if not a:
@@ -54,6 +58,7 @@ def fetch_upcoming_grade_races(days=14):
                         'race_id': m.group(1),
                         'race_name': race_name,
                         'race_date': d.date(),
+                        'grade_no': grade_no,
                     })
         except Exception as e:
             log(f"  [警告] {d.strftime('%Y%m%d')} の取得失敗: {e}")
@@ -212,9 +217,16 @@ def main():
         )
         return
 
-    log(f"\n対象レース: {len(races)}件")
+    # 優先度順にソート: G1 → G2 → G3 → その他（同優先度は開催日が近い順）
+    # 万馬券チャレンジ対象や多頭数レースは「直前再評価」の選定で別途優遇する
+    GRADE_PRIORITY = {1: 0, 2: 1, 3: 2}
+    races.sort(key=lambda r: (GRADE_PRIORITY.get(r.get('grade_no', 99), 3), r['race_date']))
+
+    GRADE_LABEL = {1: 'G1', 2: 'G2', 3: 'G3'}
+    log(f"\n対象レース: {len(races)}件（G1→G2→G3→その他の優先度順）")
     for r in races:
-        log(f"  {r['race_date']} {r['race_name']} ({r['race_id']})")
+        label = GRADE_LABEL.get(r.get('grade_no', 99), 'OP/L')
+        log(f"  [{label}] {r['race_date']} {r['race_name']} ({r['race_id']})")
 
     if dry_run:
         log("\n[dry-run] ここで終了します")
@@ -238,10 +250,15 @@ def main():
     results = []
     conn = get_conn()
 
+    # 直前再評価の上限（1回の実行で再評価するレース数。負荷とBAN回避のため）
+    REEVAL_LIMIT = 6
+    reeval_count = 0
+
     try:
       for i, race in enumerate(races, 1):
         race_name = race['race_name']
         race_id   = race['race_id']
+        grade_no  = race.get('grade_no', 99)
 
         log(f"\n{'─'*50}")
         log(f"[{i}/{len(races)}] {race['race_date']} {race_name}")
@@ -261,10 +278,37 @@ def main():
                 results.append({'race': race_name, 'status': 'entry_failed'})
                 continue
 
-        # 2. 統計予想（既に存在する場合はスキップ）
+        # 2. 統計予想（既に存在する場合はスキップ。ただし直前レースは再評価）
         if already_has_stats(conn, race_name):
-            log(f"  → 統計予想: スキップ（DB既存）")
-            ok2 = True
+            # ── 直前再評価 ──
+            # レース前日〜当日は最終追い切り・枠順が確定しているため、
+            # 優先度の高いレースだけスコアを再評価する（顔面データは保持）。
+            # 優先度: G1/G2/G3 は無条件、その他は多頭数（14頭以上 = 高配当狙い目）のみ。
+            # ※ 万馬券チャレンジ対象レースは多頭数OPが中心のため後者でカバーされる。
+            days_to_race = (race['race_date'] - datetime.now().date()).days
+            is_imminent  = 0 <= days_to_race <= 1
+            if is_imminent and reeval_count < REEVAL_LIMIT:
+                if grade_no in (1, 2, 3):
+                    needs_reeval = True
+                else:
+                    cur_n = conn.cursor()
+                    cur_n.execute("SELECT COUNT(*) FROM race_entry WHERE race_id = %s", (race_id,))
+                    needs_reeval = cur_n.fetchone()[0] >= 14
+                    cur_n.close()
+                if needs_reeval:
+                    log(f"  → 統計予想: 直前再評価（最新の調教評価を反映）")
+                    ok2, _ = run_script('stats_predictor.py', [race_name, '--update'],
+                                        '統計予想（再評価）')
+                    reeval_count += 1
+                    if not ok2:
+                        log(f"  ⚠️ 再評価失敗（既存スコアを維持）")
+                    ok2 = True  # 失敗しても既存予想があるので続行
+                else:
+                    log(f"  → 統計予想: スキップ（DB既存）")
+                    ok2 = True
+            else:
+                log(f"  → 統計予想: スキップ（DB既存）")
+                ok2 = True
         else:
             ok2, _ = run_script('stats_predictor.py', [race_name], '統計予想')
             if not ok2:

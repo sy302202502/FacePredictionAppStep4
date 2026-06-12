@@ -411,6 +411,19 @@ def main():
     race_name = sys.argv[1] if len(sys.argv) > 1 else '大阪杯'
     dry_run   = '--dry-run' in sys.argv
 
+    # race_id（数字のみ）が渡された場合はレース名に解決する（VNCの日本語化け対策）
+    if race_name.isdigit():
+        conn0 = get_conn()
+        cur0 = conn0.cursor()
+        cur0.execute("SELECT race_name FROM race_entry WHERE race_id = %s LIMIT 1", (race_name,))
+        row0 = cur0.fetchone()
+        cur0.close(); conn0.close()
+        if not row0:
+            print(f"❌ race_id={race_name} のデータが race_entry にありません")
+            return
+        race_name = row0[0]
+        print(f"race_id から解決: {race_name}")
+
     print(f"{'='*60}")
     print(f"  統計ベース予想（APIなし）: {race_name}")
     print(f"{'='*60}\n")

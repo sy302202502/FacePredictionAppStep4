@@ -64,7 +64,8 @@ cur2.execute("""
     WHERE sp.race_name = re.race_name
       AND sp.horse_name = re.horse_name
       AND sp.race_name  = %s
-""", (race_name,))
+      AND re.race_id = %s
+""", (race_name, race_id))
 print(f"  → {cur2.rowcount}頭の情報を反映")
 conn2.commit()
 cur2.close()

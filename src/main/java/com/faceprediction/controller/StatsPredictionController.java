@@ -84,6 +84,9 @@ public class StatsPredictionController {
                 "FROM stats_prediction sp " +
                 "INNER JOIN race_entry re " +
                 "  ON re.race_name = sp.race_name AND re.horse_name = sp.horse_name " +
+                // 同名レースの過去開催分（別年）とJOINして二重表示にならないよう最新開催に限定
+                " AND re.race_id = (SELECT race_id FROM race_entry WHERE race_name = sp.race_name " +
+                "                   ORDER BY race_date DESC, race_id DESC LIMIT 1) " +
                 "WHERE sp.race_name = ? ORDER BY sp.rank_position",
                 selected);
 

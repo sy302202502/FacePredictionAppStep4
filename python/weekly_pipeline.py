@@ -190,6 +190,9 @@ def update_image_paths(conn, race_name):
             WHERE sp.race_name = re.race_name
               AND sp.horse_name = re.horse_name
               AND sp.race_name  = %s
+              -- 同名レースの過去開催分から古い馬番・騎手を拾わないよう最新開催に限定
+              AND re.race_id = (SELECT race_id FROM race_entry WHERE race_name = sp.race_name
+                                ORDER BY race_date DESC, race_id DESC LIMIT 1)
         """, (race_name,))
         updated = cur.rowcount
         conn.commit()

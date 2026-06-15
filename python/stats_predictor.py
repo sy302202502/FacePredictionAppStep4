@@ -34,7 +34,9 @@ def get_conn():
     return psycopg2.connect(
         host=os.getenv('DB_HOST','localhost'), port=os.getenv('DB_PORT','5432'),
         dbname=os.getenv('DB_NAME','faceapp'), user=os.getenv('DB_USER','postgres'),
-        password=os.getenv('DB_PASSWORD','postgrestest')
+        password=os.getenv('DB_PASSWORD','postgrestest'),
+        connect_timeout=int(os.getenv('PGCONNECT_TIMEOUT', '15')),
+        options='-c statement_timeout=60000'
     )
 
 def ensure_stats_table(conn):

@@ -114,8 +114,14 @@ NOISE_PATTERNS = [
     'site-packages', 'LibreSSL',
 ]
 
+# サブスクリプト1本あたりの最大実行時間（秒）。
+# これを超えたら強制終了して次へ進む（1ステップのハングで全体が止まるのを防ぐ）。
+SCRIPT_TIMEOUT = int(os.getenv('PIPELINE_SCRIPT_TIMEOUT', '900'))  # 15分
+
 def run_script(script_name, args, desc):
-    """サブスクリプトを実行し、ログを逐次出力"""
+    """サブスクリプトを実行し、ログを逐次出力。
+    SCRIPT_TIMEOUT を超えたら強制終了して失敗扱いで戻る（ハング対策）。"""
+    import threading
     cmd = [PYTHON, os.path.join(SCRIPT_DIR, script_name)] + args
     log(f"  → {desc} 開始")
     env = os.environ.copy()
@@ -125,16 +131,35 @@ def run_script(script_name, args, desc):
         text=True, bufsize=1, env=env,
         cwd=os.path.dirname(SCRIPT_DIR)
     )
+
+    # タイムアウト監視: 期限超過でプロセスツリーを強制終了する
+    timed_out = {'flag': False}
+    def _killer():
+        timed_out['flag'] = True
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    timer = threading.Timer(SCRIPT_TIMEOUT, _killer)
+    timer.start()
+
     output_lines = []
-    for line in proc.stdout:
-        line = line.rstrip()
-        if not line:
-            continue
-        if any(p in line for p in NOISE_PATTERNS):
-            continue
-        print(f"      {line}", flush=True)
-        output_lines.append(line)
-    proc.wait()
+    try:
+        for line in proc.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            if any(p in line for p in NOISE_PATTERNS):
+                continue
+            print(f"      {line}", flush=True)
+            output_lines.append(line)
+        proc.wait()
+    finally:
+        timer.cancel()
+
+    if timed_out['flag']:
+        log(f"  ⛔ {desc} が {SCRIPT_TIMEOUT}秒を超過したため強制終了しました（ハング検知）")
+        return False, output_lines
     success = proc.returncode == 0
     log(f"  → {desc} {'完了 ✅' if success else '失敗 ❌'}")
     return success, output_lines
@@ -143,7 +168,10 @@ def get_conn():
     return psycopg2.connect(
         host=os.getenv('DB_HOST','localhost'), port=os.getenv('DB_PORT','5432'),
         dbname=os.getenv('DB_NAME','faceapp'), user=os.getenv('DB_USER','postgres'),
-        password=os.getenv('DB_PASSWORD') or sys.exit('[エラー] DB_PASSWORD 環境変数が設定されていません')
+        password=os.getenv('DB_PASSWORD') or sys.exit('[エラー] DB_PASSWORD 環境変数が設定されていません'),
+        connect_timeout=int(os.getenv('PGCONNECT_TIMEOUT', '15')),
+        # 1クエリが60秒を超えたら中断（停滞したコネクションでの無限待ちを防ぐ）
+        options='-c statement_timeout=60000'
     )
 
 def already_has_entries(conn, race_id):
@@ -325,20 +353,64 @@ def main():
             log(f"  → image_path 更新: {updated}頭")
 
         # 4. 顔面分析（全馬完了済みならスキップ）
+        is_graded = grade_no in (1, 2, 3)
         if face_analysis_done(conn, race_name):
             log(f"  → 顔面分析: スキップ（全馬完了済み）")
             ok3 = True
         else:
             ok3, _ = run_script('face_analyzer_local.py', [race_name], '顔面分析（llava）')
+            # G1〜G3は最重要。失敗 or 未完了なら即時もう一度だけ再試行する。
+            if is_graded and not face_analysis_done(conn, race_name):
+                log(f"  ⚠️ [重賞] {race_name} の顔面分析が未完了 → 即時リトライ")
+                polite_sleep(3.0, 5.0)
+                ok3, _ = run_script('face_analyzer_local.py', [race_name], '顔面分析リトライ（重賞）')
 
         results.append({
             'race': race_name,
+            'race_id': race_id,
+            'grade_no': grade_no,
             'status': 'done' if ok3 else 'face_failed',
         })
 
         polite_sleep(2.0, 4.0)
     finally:
         conn.close()
+
+    # ── 重賞（G1〜G3）の完了を明示検証 ──
+    # 一般サマリでは見落とすため、重賞だけはDBで実完了を確認し、
+    # 未完了があれば専用の強い警告をDiscordへ送る（G1欠落の再発防止）。
+    graded_problems = []
+    vconn = get_conn()
+    try:
+        for r in results:
+            if r.get('grade_no') not in (1, 2, 3):
+                continue
+            vcur = vconn.cursor()
+            vcur.execute("""
+                SELECT
+                    (SELECT COUNT(*) FROM race_entry WHERE race_id = %s) AS heads,
+                    (SELECT COUNT(*) FROM stats_prediction sp
+                     INNER JOIN race_entry re ON re.race_name = sp.race_name
+                       AND re.horse_name = sp.horse_name AND re.race_id = %s
+                     WHERE sp.face_comment IS NOT NULL) AS face_done
+            """, (r['race_id'], r['race_id']))
+            heads, face_done = vcur.fetchone()
+            vcur.close()
+            label = {1: 'G1', 2: 'G2', 3: 'G3'}[r['grade_no']]
+            if heads == 0 or face_done < heads:
+                graded_problems.append(f"{label} {r['race']}: 出走{heads}頭 / 顔面分析{face_done}頭")
+                log(f"  ⛔ [重賞未完了] {label} {r['race']} 出走{heads} 顔面{face_done}")
+            else:
+                log(f"  ✅ [重賞OK] {label} {r['race']} {face_done}/{heads}頭")
+    finally:
+        vconn.close()
+
+    if graded_problems:
+        send_discord(
+            "🚨 **【重要】重賞レースの予想が未完了です** 🚨\n"
+            + "\n".join(f"・{p}" for p in graded_problems)
+            + "\n\n手動で `predict_by_race_id.py <race_id>` を実行してください。"
+        )
 
     log(f"\n{'='*60}")
     log("  週次パイプライン 完了")

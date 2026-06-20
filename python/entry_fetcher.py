@@ -14,7 +14,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from constants import HEADERS, fetch_with_retry, polite_sleep
+from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 UPLOAD_DIR = os.environ.get('UPLOAD_DIR_CANDIDATES', os.path.join(os.path.dirname(__file__), '../uploads/candidates'))
@@ -78,8 +78,7 @@ def fetch_shutuba_entries(race_id):
     """出馬表ページから出走馬リストを取得"""
     url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
     resp = fetch_with_retry(url, timeout=15, min_sleep=1.5, max_sleep=3.0)
-    resp.encoding = 'EUC-JP'
-    soup = BeautifulSoup(resp.text, 'lxml')
+    soup = BeautifulSoup(decode_netkeiba(resp), 'lxml')
 
     # 距離・馬場を取得
     distance, surface, grade, venue = None, '芝', '', ''

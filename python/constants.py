@@ -19,6 +19,30 @@ def polite_sleep(min_sec=1.0, max_sec=2.5):
     time.sleep(random.uniform(min_sec, max_sec))
 
 
+def decode_netkeiba(resp):
+    """netkeibaのレスポンスを正しい文字コードでデコードして本文(str)を返す。
+    netkeibaはドメイン/ページごとに UTF-8 と EUC-JP が混在し、随時移行されるため、
+    HTTPヘッダ → meta charset → chardet自動判定 の順で確実なエンコーディングを選ぶ。
+    （ハードコードのEUC-JP固定が原因で UTF-8 移行後に馬名が文字化けした不具合への恒久対策）"""
+    import re as _re
+    enc = None
+    # 1. HTTPヘッダの charset（requestsが既にセットしていれば優先。ただしデフォルトのISO-8859-1は無視）
+    ct = resp.headers.get('Content-Type', '')
+    m = _re.search(r'charset=([\w-]+)', ct, _re.I)
+    if m:
+        enc = m.group(1)
+    # 2. HTMLの meta charset
+    if not enc:
+        m = _re.search(rb'charset=["\']?([\w-]+)', resp.content[:3000], _re.I)
+        if m:
+            enc = m.group(1).decode('ascii', 'ignore')
+    # 3. それでも不明なら chardet 自動判定
+    if not enc:
+        enc = resp.apparent_encoding or 'utf-8'
+    resp.encoding = enc
+    return resp.text
+
+
 def fetch_with_retry(url, headers=None, timeout=15, retries=3, min_sleep=1.0, max_sleep=2.5):
     """リトライ付きHTTP GETリクエスト。失敗時は指数バックオフで再試行する。"""
     if headers is None:

@@ -23,7 +23,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
-from constants import HEADERS, fetch_with_retry, polite_sleep
+from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -176,14 +176,12 @@ def fetch_oikiri_data(race_id):
     try:
         s = _netkeiba_session()
         r = s.get(url, timeout=15)
-        r.encoding = 'EUC-JP'
-        data = _parse_oikiri_page(r.text)
+        data = _parse_oikiri_page(decode_netkeiba(r))
         # タイムが1頭も取れていない＝未ログインの可能性 → ログインして再取得
         if data and not any(v['has_time'] for v in data.values()) and NETKEIBA_ID:
             if _netkeiba_login(s):
                 r = s.get(url, timeout=15)
-                r.encoding = 'EUC-JP'
-                data2 = _parse_oikiri_page(r.text)
+                data2 = _parse_oikiri_page(decode_netkeiba(r))
                 if data2:
                     data = data2
         return data
@@ -280,7 +278,7 @@ def fetch_blood(horse_id):
     try:
         url = f"https://db.netkeiba.com/horse/ped/{horse_id}/"
         resp = fetch_with_retry(url, timeout=15, min_sleep=1.0, max_sleep=2.0)
-        text = resp.content.decode('EUC-JP', errors='replace')
+        text = decode_netkeiba(resp)
         soup = BeautifulSoup(text, 'lxml')
         table = soup.find('table', class_=re.compile(r'blood_table'))
         if not table:
@@ -353,7 +351,7 @@ def fetch_horse_results(horse_id, horse_name):
     url = f'https://db.netkeiba.com/horse/result/{horse_id}/'
     try:
         r = fetch_with_retry(url, timeout=15, min_sleep=1.5, max_sleep=3.0)
-        text = r.content.decode('EUC-JP', errors='replace')
+        text = decode_netkeiba(r)
         soup = BeautifulSoup(text, 'lxml')
         table = soup.find('table', class_='db_h_race_results')
         if not table:

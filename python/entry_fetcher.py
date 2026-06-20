@@ -14,7 +14,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba
+from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, is_garbled
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 UPLOAD_DIR = os.environ.get('UPLOAD_DIR_CANDIDATES', os.path.join(os.path.dirname(__file__), '../uploads/candidates'))
@@ -135,7 +135,30 @@ def fetch_shutuba_entries(race_id):
             print(f"[警告] 出走馬行のパース失敗: {e}")
             continue
 
+    # ── 文字化けガード ──
+    # 万一エンコーディング判定をすり抜けて馬名が化けた場合、
+    # 化けたデータをDBに保存せず空で返す（＝予想に化け名を絶対出さない）。
+    garbled = [e['horse_name'] for e in entries if is_garbled(e['horse_name'])]
+    if garbled:
+        msg = (f"⚠️ 出馬表の文字化けを検知（race_id={race_id}）: "
+               f"{len(garbled)}/{len(entries)}頭 例:{garbled[:3]} → 保存を中止")
+        print(f"  [文字化けガード] {msg}")
+        try:
+            _notify_discord_garble(msg)
+        except Exception:
+            pass
+        return [], distance, surface, race_name, venue
+
     return entries, distance, surface, race_name, venue
+
+
+def _notify_discord_garble(msg):
+    """文字化け検知時のDiscord通知（webhook未設定なら何もしない）"""
+    import os, requests as _rq
+    url = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
+    if not url:
+        return
+    _rq.post(url, json={"content": "🚨 **出馬表の文字化け検知**\n" + msg[:1800]}, timeout=10)
 
 def get_horse_photo_no(horse_id):
     """馬詳細ページからshow_photo.phpのno番号を取得"""

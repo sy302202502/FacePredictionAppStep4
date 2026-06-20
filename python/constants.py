@@ -43,6 +43,28 @@ def decode_netkeiba(resp):
     return resp.text
 
 
+def is_garbled(text):
+    """文字化けを検知する。Trueなら化けている可能性が高い。
+    馬名・レース名の保存前チェック用。化けた文字（置換文字・私用領域・
+    ラテン拡張の連続）が日本語テキストに混入していないかを見る。"""
+    if not text:
+        return False
+    # 置換文字（デコード失敗の証拠）
+    if '�' in text or '�' == text or '\x00' in text:
+        return True
+    bad = 0
+    for c in text:
+        o = ord(c)
+        # 私用領域（EUC-JP→UTF-8誤変換でよく出る）
+        if 0xE000 <= o <= 0xF8FF:
+            bad += 1
+        # ラテン1補助・拡張（日本語名に本来出ない範囲）
+        elif 0x0080 <= o <= 0x024F:
+            bad += 1
+    # 2文字以上の不正文字、または全体の3割超が不正なら化け判定
+    return bad >= 2 or (bad > 0 and bad / len(text) > 0.3)
+
+
 def fetch_with_retry(url, headers=None, timeout=15, retries=3, min_sleep=1.0, max_sleep=2.5):
     """リトライ付きHTTP GETリクエスト。失敗時は指数バックオフで再試行する。"""
     if headers is None:

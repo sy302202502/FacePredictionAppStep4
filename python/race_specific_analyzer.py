@@ -31,6 +31,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from collections import Counter
 from dotenv import load_dotenv
+from constants import decode_netkeiba
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -1075,8 +1076,7 @@ def fetch_runner_weights(race_id):
     try:
         url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
-        soup = BeautifulSoup(resp.text, 'lxml')
+        soup = BeautifulSoup(decode_netkeiba(resp), 'lxml')
         table = soup.find('table', class_='Shutuba_Table')
         if not table:
             return weights

@@ -287,6 +287,10 @@ def main():
 
     try:
       for i, race in enumerate(races, 1):
+       # ── レース単位のエラー隔離 ──
+       # 1レースで予期せぬ例外が出ても、ループ全体を止めず次のレースへ進む。
+       # （1レースのDB一時エラー等で重賞検証・Discord通知がスキップされる事故を防ぐ）
+       try:
         race_name = race['race_name']
         race_id   = race['race_id']
         grade_no  = race.get('grade_no', 99)
@@ -373,6 +377,24 @@ def main():
         })
 
         polite_sleep(2.0, 4.0)
+       except Exception as e:
+        # このレースの処理で予期せぬ例外。記録して次のレースへ続行する。
+        log(f"  ⛔ {race.get('race_name','?')} の処理中に例外: {e}")
+        results.append({
+            'race': race.get('race_name', '?'),
+            'race_id': race.get('race_id'),
+            'grade_no': race.get('grade_no', 99),
+            'status': 'exception',
+        })
+        # DB接続が壊れた可能性に備えて作り直す
+        try:
+            conn.close()
+        except Exception:
+            pass
+        try:
+            conn = get_conn()
+        except Exception:
+            pass
     finally:
         conn.close()
 

@@ -20,6 +20,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, date
 from dotenv import load_dotenv
+from constants import decode_netkeiba
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -282,8 +283,7 @@ def fetch_odds_info(race_id):
     html_url = f"https://race.netkeiba.com/odds/index.html?race_id={race_id}&type=b1"
     try:
         resp = session.get(html_url, timeout=15)
-        resp.encoding = 'EUC-JP'
-        soup = BeautifulSoup(resp.text, 'lxml')
+        soup = BeautifulSoup(decode_netkeiba(resp), 'lxml')
         table = soup.find('table', class_='RaceOdds_HorseList_Table')
         if table:
             for row in table.find_all('tr')[1:]:
@@ -302,8 +302,7 @@ def fetch_odds_info(race_id):
         shutuba_url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
         try:
             resp2 = session.get(shutuba_url, timeout=15)
-            resp2.encoding = 'EUC-JP'
-            soup2 = BeautifulSoup(resp2.text, 'lxml')
+            soup2 = BeautifulSoup(decode_netkeiba(resp2), 'lxml')
             shutuba_table = soup2.find('table', class_='Shutuba_Table')
             if shutuba_table:
                 for row in shutuba_table.find_all('tr', class_=re.compile(r'HorseList')):
@@ -471,8 +470,7 @@ def fetch_shutuba_entries(race_id):
     url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
-        soup = BeautifulSoup(resp.text, 'lxml')
+        soup = BeautifulSoup(decode_netkeiba(resp), 'lxml')
     except Exception as e:
         return [], None, '芝', '', ''
 

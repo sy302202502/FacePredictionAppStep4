@@ -77,6 +77,20 @@ import fcntl as _fcntl
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
 LOCK_FILE = '/tmp/weekly_pipeline.lock'
 
+# デッドマンズスイッチ（起動しなかったことの検知）。
+# healthchecks.io のチェックURLを .env の HEALTHCHECK_URL に設定すると有効化。
+# 期限（例:毎朝9時+猶予）までに /success ping が来なければ外部から通知が飛ぶ。
+HEALTHCHECK_URL = os.getenv('HEALTHCHECK_URL', '').strip()
+
+def healthcheck_ping(suffix=''):
+    """healthchecks.io へ ping。suffix='/start'|'/fail'|''（成功）。URL未設定なら何もしない。"""
+    if not HEALTHCHECK_URL:
+        return
+    try:
+        _requests.get(HEALTHCHECK_URL.rstrip('/') + suffix, timeout=10)
+    except Exception as e:
+        print(f"[警告] healthcheck ping失敗({suffix}): {e}", file=sys.stderr, flush=True)
+
 def send_discord(content):
     """Discord Webhook に通知を送信。URL未設定なら何もしない。
     送信失敗時は stderr にも明示出力し、cron 経由のメール/ログで検知できるようにする。"""
@@ -237,6 +251,9 @@ def main():
     log("  週次重賞予想パイプライン 開始")
     log("=" * 60)
 
+    if not dry_run:
+        healthcheck_ping('/start')  # 起動を外部監視に通知（来なければ「起動失敗」と判定される）
+
     races = fetch_upcoming_grade_races(days=14)
 
     if not races:
@@ -246,6 +263,7 @@ def main():
             "14日以内の重賞・OP・Lが1件も取得できませんでした。\n"
             "netkeibaのHTML変更の可能性があります。要確認。"
         )
+        healthcheck_ping('/fail')  # 異常終了として外部監視にも通知
         return
 
     # 優先度順にソート: G1 → G2 → G3 → その他（同優先度は開催日が近い順）
@@ -456,6 +474,9 @@ def main():
         lines.append(f"{mark} {r['race']}")
     lines.append("\nhttp://160.251.251.73:8081/predict-v2")
     send_discord("\n".join(lines))
+
+    # デッドマンズスイッチ: 重賞未完了があれば /fail（外部監視も赤にする）、無ければ成功ping。
+    healthcheck_ping('/fail' if graded_problems else '')
 
 if __name__ == '__main__':
     try:

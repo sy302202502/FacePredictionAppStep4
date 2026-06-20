@@ -69,6 +69,7 @@ services:
       NETKEIBA_LOGIN_ID:     ${NETKEIBA_LOGIN_ID:-}
       NETKEIBA_PASSWORD:     ${NETKEIBA_PASSWORD:-}
       PGCONNECT_TIMEOUT:     ${PGCONNECT_TIMEOUT:-15}
+      HEALTHCHECK_URL:       ${HEALTHCHECK_URL:-}
     volumes:
       - uploads:/data/uploads
     networks:

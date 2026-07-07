@@ -35,6 +35,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
             .authorizeRequests()
                 // 静的リソース・公開ページは認証不要
                 .antMatchers("/css/**", "/js/**", "/images/**", "/uploads/**").permitAll()
+                // Docker healthcheck が認証なしで叩くため公開（詳細情報は show-details=when_authorized で保護）
+                .antMatchers("/actuator/health").permitAll()
                 .antMatchers("/", "/stats-predict", "/weekly", "/predict-v2",
                              "/calendar", "/horse", "/horse/**",
                              "/high-dividend", "/accuracy").permitAll()

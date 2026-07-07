@@ -300,7 +300,8 @@
             const btn   = document.getElementById('raceAnalyzerBtn');
             btn.disabled = true;
 
-            const key = 'race_' + hashCode(raceName);
+            // サーバー側(ScriptController)は Math.abs(raceName.hashCode()) をキーにするため符号を揃える
+            const key = 'race_' + Math.abs(hashCode(raceName));
             const body = `raceName=${encodeURIComponent(raceName)}&years=${years}&supplement=${supp}`;
             fetch('/script/race-analyzer', {
                 method: 'POST',

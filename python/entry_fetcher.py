@@ -361,6 +361,8 @@ def sync_with_latest_shutuba():
                                    ROW_NUMBER() OVER (ORDER BY score DESC NULLS LAST) AS new_rank
                             FROM stats_prediction
                             WHERE race_name = %s
+                              -- 同名レースの過去年の残存行を順位計算に混ぜない
+                              AND created_at > NOW() - INTERVAL '45 days'
                         ) sub
                         WHERE sp.id = sub.id AND sp.race_name = %s
                     """, (race_name, race_name))

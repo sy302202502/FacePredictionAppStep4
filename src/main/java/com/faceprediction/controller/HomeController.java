@@ -67,7 +67,8 @@ public class HomeController {
         double winHitRate = totalRaces > 0 ? Math.round(winHits * 1000.0 / totalRaces) / 10.0 : 0.0;
 
         model.addAttribute("analyzedWinners",  oldAnalyzedWinners);
-        model.addAttribute("analyzedLosers",   oldAnalyzedLosers + newAnalyzed);
+        model.addAttribute("analyzedLosers",   oldAnalyzedLosers);
+        model.addAttribute("newAnalyzed",      newAnalyzed);
         model.addAttribute("totalAnalyzed",    totalAnalyzed);
         model.addAttribute("totalPredictions", totalPredictions);
         model.addAttribute("totalEntries",     totalEntries);

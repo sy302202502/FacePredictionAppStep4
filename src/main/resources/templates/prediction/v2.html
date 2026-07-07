@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
     <meta charset="UTF-8">
@@ -1197,8 +1197,8 @@
             </div>
         </div>
 
-        <!-- 新規分析パネル -->
-        <div class="glass-card">
+        <!-- 新規分析パネル（実行APIは管理者専用のため、未ログイン時は非表示） -->
+        <div class="glass-card" sec:authorize="isAuthenticated()">
             <div class="run-panel-head">🔮 NEW RACE ANALYSIS</div>
             <div class="form-row">
                 <div>
@@ -1415,13 +1415,23 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body
+            }).then(resp => {
+                if (!resp.ok) {
+                    clearInterval(interval);
+                    pw.style.display = 'none';
+                    if (_es) { _es.close(); _es = null; }
+                    showToast(resp.status === 401 || resp.status === 403
+                        ? '🔒 管理者ログインが必要です'
+                        : '🚨 ERROR: HTTP ' + resp.status);
+                }
             }).catch(err => {
                 clearInterval(interval);
                 pw.style.display = 'none';
                 showToast('🚨 ERROR: ' + err.message);
             });
 
-            const key = 'race_' + hashCode(raceName);
+            // サーバー側(ScriptController)は Math.abs(raceName.hashCode()) をキーにするため符号を揃える
+            const key = 'race_' + Math.abs(hashCode(raceName));
             if (_es) { _es.close(); _es = null; }
 
             setTimeout(() => {

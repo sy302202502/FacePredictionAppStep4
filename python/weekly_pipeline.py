@@ -198,10 +198,17 @@ def already_has_entries(conn, race_id):
         cur.close()
 
 def already_has_stats(conn, race_name):
-    """stats_prediction に既にデータがあるか"""
+    """stats_prediction に既にデータがあるか。
+    重賞・OP は毎年同名で開催されるため、昨年以前の残存データを「予想済み」と
+    誤判定しないよう直近45日以内に作成された行だけを有効とみなす。
+    （古い行は stats_predictor の全再生成時に DELETE で一掃される）"""
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM stats_prediction WHERE race_name = %s", (race_name,))
+        cur.execute("""
+            SELECT COUNT(*) FROM stats_prediction
+            WHERE race_name = %s
+              AND created_at > NOW() - INTERVAL '45 days'
+        """, (race_name,))
         return cur.fetchone()[0] > 0
     finally:
         cur.close()

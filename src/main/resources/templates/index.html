@@ -257,8 +257,8 @@
         <div class="page-header">
             <div class="hero-area">
                 <div class="page-title">競馬顔面予想システム</div>
-                <div class="page-subtitle">KEIBA FACE PREDICTION SYSTEM — POWERED BY CLAUDE VISION AI</div>
-                <p class="hero-sub">Claude Vision AI で競走馬の顔を分析し、過去の勝ち馬との類似度から優勝候補TOP5を予想します</p>
+                <div class="page-subtitle">KEIBA FACE PREDICTION SYSTEM — POWERED BY VISION AI</div>
+                <p class="hero-sub">Vision AI（Groq / Gemini / llava）で競走馬の顔面コンディションを分析し、統計スコアと合わせて有力馬を予想します</p>
             </div>
         </div>
 
@@ -270,7 +270,7 @@
                     <div class="stat-item">
                         <div class="stat-num" th:text="${totalAnalyzed}">0</div>
                         <div class="stat-lbl">顔分析済み</div>
-                        <div class="stat-sub" th:text="'勝ち馬 ' + ${analyzedWinners} + ' / 負け馬 ' + ${analyzedLosers}"></div>
+                        <div class="stat-sub" th:text="'現行 ' + ${newAnalyzed} + '頭 / 旧: 勝ち馬 ' + ${analyzedWinners} + '・負け馬 ' + ${analyzedLosers}"></div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-num" th:text="${totalPredictions}">0</div>

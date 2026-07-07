@@ -37,6 +37,10 @@ public class ScriptController {
 
     @GetMapping
     public String showScriptPage(Model model) {
+        // python3 が無い環境（本番appコンテナ）では実行専用ページを開かせない
+        if (!com.faceprediction.config.ScriptExecAdvice.isPythonAvailable()) {
+            return "redirect:/";
+        }
         model.addAttribute("scraperRunning",  running.getOrDefault("scraper", false));
         model.addAttribute("analyzerRunning", running.getOrDefault("analyzer", false));
         return "script/index";

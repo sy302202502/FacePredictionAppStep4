@@ -61,6 +61,10 @@ public class PaddockAnalysisController {
     // 見せるフォーム
     @GetMapping
     public String showForm(Model model) {
+        // python3 が無い環境（本番appコンテナ）ではパドック分析を開かせない
+        if (!com.faceprediction.config.ScriptExecAdvice.isPythonAvailable()) {
+            return "redirect:/";
+        }
         List<String> raceNames = jdbc.queryForList(
             "SELECT race_name FROM stats_prediction GROUP BY race_name ORDER BY MAX(created_at) DESC",
             String.class);

@@ -298,7 +298,8 @@
         <div class="hd-badge">🎯 HIGH DIVIDEND</div>
     </div>
 
-    <!-- 厳選ボタンエリア -->
+    <!-- 厳選ボタンエリア（python3が使えない環境=本番appコンテナでは非表示。cronが自動実行） -->
+    <div th:if="${scriptExecAvailable}">
     <div class="section-heading">RACE SELECTION</div>
     <div class="glass-card">
         <div class="glass-card-inner">
@@ -307,6 +308,7 @@
             </button>
             <div id="log-panel"></div>
         </div>
+    </div>
     </div>
 
     <!-- 厳選結果エリア -->

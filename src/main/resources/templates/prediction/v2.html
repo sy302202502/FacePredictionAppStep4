@@ -1197,8 +1197,8 @@
             </div>
         </div>
 
-        <!-- 新規分析パネル（実行APIは管理者専用のため、未ログイン時は非表示） -->
-        <div class="glass-card" sec:authorize="isAuthenticated()">
+        <!-- 新規分析パネル（実行APIは管理者専用のため未ログイン時は非表示。python3が無い環境でも非表示） -->
+        <div class="glass-card" sec:authorize="isAuthenticated()" th:if="${scriptExecAvailable}">
             <div class="run-panel-head">🔮 NEW RACE ANALYSIS</div>
             <div class="form-row">
                 <div>

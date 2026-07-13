@@ -198,6 +198,7 @@ def setup():
             horse_number INTEGER,         -- 馬番
             jockey_name VARCHAR(100),
             image_path VARCHAR(500),
+            sex VARCHAR(2),               -- 性別（deploy/schema.sql と一致させる）
             fetched_at TIMESTAMP DEFAULT NOW()
         )
     """)

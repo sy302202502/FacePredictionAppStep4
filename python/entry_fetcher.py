@@ -232,8 +232,23 @@ def ensure_schema(conn):
         return
     cur = conn.cursor()
     try:
-        cur.execute("ALTER TABLE race_entry ADD COLUMN IF NOT EXISTS sex VARCHAR(2)")
-        conn.commit()
+        # 【重要】まず存在確認（ACCESS SHARE のみ）。ALTER TABLE は IF NOT EXISTS でも
+        # ACCESS EXCLUSIVE ロックを取るため、他セッションが race_entry を読んでいる
+        # だけで 60 秒ブロック→statement timeout で失敗する（2026-07-13 の
+        # 全レース取得失敗の一因）。sex 列は導入済みなので通常運転で DDL は不要。
+        cur.execute("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'race_entry' AND column_name = 'sex'
+        """)
+        exists = cur.fetchone() is not None
+        conn.rollback()  # SELECT の暗黙トランザクションを閉じる（ロックを持ち越さない）
+        if not exists:
+            # 初回セットアップ・旧DBのみ。ロック待ちで固まらないよう 5 秒で諦める
+            # （失敗しても致命ではない: sex 列が無いだけなら INSERT 側でエラーになり検知できる）。
+            cur.execute("SET lock_timeout = '5s'")
+            cur.execute("ALTER TABLE race_entry ADD COLUMN IF NOT EXISTS sex VARCHAR(2)")
+            cur.execute("SET lock_timeout = 0")
+            conn.commit()
         _schema_ensured = True
     except Exception:
         conn.rollback()
@@ -292,6 +307,11 @@ def sync_with_latest_shutuba():
             ORDER BY race_date, race_name
         """, (today, today + timedelta(days=1)))
         races = cur.fetchall()
+        # SELECT で開いた暗黙トランザクションをここで閉じる。
+        # この後は netkeiba へのネットワーク取得（数十秒〜数分）が続くため、
+        # 開いたままだと race_entry の ACCESS SHARE ロックを持ち続け、
+        # 他プロセスの DDL や排他処理をブロックする（idle in transaction の温床）。
+        conn.rollback()
 
         if not races:
             print("同期対象のレースがありません（本日〜翌日）。")

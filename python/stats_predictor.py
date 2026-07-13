@@ -527,7 +527,8 @@ def main():
         cur0.close(); conn0.close()
         if not row0:
             print(f"❌ race_id={race_name} のデータが race_entry にありません")
-            return
+            print('RESULT:{"success": false, "reason": "race_id not found"}')
+            sys.exit(1)  # 偽成功防止: 該当なしは失敗として呼び出し元に伝える
         race_name = row0[0]
         print(f"race_id から解決: {race_name}")
 

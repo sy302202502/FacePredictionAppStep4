@@ -193,17 +193,26 @@ public class StatsPredictionController {
                 pb.directory(new java.io.File(pythonScriptDir));
                 Process proc = pb.start();
 
+                boolean resultFailed = false;
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         if (!line.startsWith("RESULT:")) {
                             sendLog(key, line);
+                        } else if (line.contains("\"success\": false") || line.contains("\"success\":false")) {
+                            // スクリプトが明示した失敗はUIにも失敗として伝える
+                            resultFailed = true;
                         }
                     }
                 }
-                proc.waitFor();
-                sendLog(key, "=== 完了 ===");
+                int exitCode = proc.waitFor();
+                // 終了コード・RESULTを評価（従来は無視して常に「=== 完了 ===」の偽成功だった）
+                if (exitCode != 0 || resultFailed) {
+                    sendLog(key, "❌ 処理は失敗で終了しました (exit=" + exitCode + ")。上のログを確認してください。");
+                } else {
+                    sendLog(key, "=== 完了 ===");
+                }
             } catch (Exception e) {
                 sendLog(key, "[エラー] " + e.getMessage());
             } finally {

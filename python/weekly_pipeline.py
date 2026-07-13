@@ -179,7 +179,7 @@ def run_script(script_name, args, desc):
     return success, output_lines
 
 def get_conn():
-    return psycopg2.connect(
+    conn = psycopg2.connect(
         host=os.getenv('DB_HOST','localhost'), port=os.getenv('DB_PORT','5432'),
         dbname=os.getenv('DB_NAME','faceapp'), user=os.getenv('DB_USER','postgres'),
         password=os.getenv('DB_PASSWORD') or sys.exit('[エラー] DB_PASSWORD 環境変数が設定されていません'),
@@ -187,6 +187,14 @@ def get_conn():
         # 1クエリが60秒を超えたら中断（停滞したコネクションでの無限待ちを防ぐ）
         options='-c statement_timeout=60000'
     )
+    # 【重要】autocommit にする。psycopg2 は既定で最初の SELECT から暗黙トランザクションを
+    # 開き、commit/rollback まで race_entry 等の ACCESS SHARE ロックを保持し続ける。
+    # 本パイプラインは親として SELECT 直後に entry_fetcher 等の子プロセスを起動するため、
+    # 子の DDL（ALTER TABLE）が親自身のロックに 60 秒ブロックされ statement timeout で
+    # 全レース失敗する「自己ブロック」が起きていた（2026-07-13 全20レース失敗の根本原因）。
+    # 本モジュールのクエリは全て単文なので autocommit で問題ない。
+    conn.autocommit = True
+    return conn
 
 def already_has_entries(conn, race_id):
     """race_entry に既にデータがあるか"""
@@ -482,7 +490,10 @@ def main():
         icon = '✅' if r['status'] == 'done' else '❌'
         log(f"  {icon} {r['race']}")
 
-    print(f"\nRESULT:{json.dumps({'success': True, 'done': done, 'total': len(results)})}", flush=True)
+    # success は「失敗レースなし かつ 重賞未完了なし」のときだけ true。
+    # （従来は True 固定で、全滅の朝でも Web UI に成功と表示される偽成功バグだった）
+    overall_success = (fails == 0 and not graded_problems)
+    print(f"\nRESULT:{json.dumps({'success': overall_success, 'done': done, 'fails': fails, 'total': len(results)})}", flush=True)
 
     # Discord通知（成功/失敗サマリ）
     today_str = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -495,8 +506,9 @@ def main():
     lines.append("\nhttp://160.251.251.73:8081/predict-v2")
     send_discord("\n".join(lines))
 
-    # デッドマンズスイッチ: 重賞未完了があれば /fail（外部監視も赤にする）、無ければ成功ping。
-    healthcheck_ping('/fail' if graded_problems else '')
+    # デッドマンズスイッチ: 重賞未完了 or 失敗レースありなら /fail（外部監視も赤にする）。
+    # （従来は重賞のみ判定で、非重賞全滅でも成功pingを打つ矛盾があった）
+    healthcheck_ping('/fail' if (graded_problems or fails > 0) else '')
 
     # cron/ラッパが失敗を検知できるよう、重賞未完了や失敗レースありなら非0終了。
     # （__main__ の except は Exception のみ捕捉するため SystemExit は誤って

@@ -155,7 +155,20 @@ public class WeeklyController {
                         }
                     }
                 }
-                proc.waitFor();
+                int exitCode = proc.waitFor();
+                // 終了コードを評価して失敗をUIに伝える。
+                // （従来は無視しており、パイプラインが exit 1 で失敗しても
+                //   画面上は正常終了に見える偽成功だった）
+                if (exitCode != 0) {
+                    String failMsg = "❌ パイプラインは失敗で終了しました (exit=" + exitCode + ")。ログを確認してください。";
+                    List<String> logList = logs.get(key);
+                    if (logList != null && logList.size() < MAX_LOG_LINES) logList.add(failMsg);
+                    SseEmitter em = emitters.get(key);
+                    if (em != null) {
+                        try { em.send(SseEmitter.event().data(failMsg)); }
+                        catch (Exception e) { log.warn("SSE失敗通知送信失敗: {}", e.getMessage()); }
+                    }
+                }
             } catch (Exception e) {
                 List<String> l = logs.get(key);
                 if (l != null) l.add("エラー: " + e.getMessage());

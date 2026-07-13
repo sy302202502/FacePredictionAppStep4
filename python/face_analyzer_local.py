@@ -451,6 +451,15 @@ def main():
                 print(f"\nRESULT:{json.dumps({'success': False, 'race': race_name}, ensure_ascii=False)}")
                 sys.exit(1)
 
+            if success_count < len(horses):
+                # 部分成功も「未完了」として正直に失敗を返す（偽成功防止）。
+                # 未分析馬は face_comment IS NULL のまま残るため翌run で自動再試行される。
+                # 重賞はDB検証+Discord警告で既に同じ扱いのため、全レースで基準を統一。
+                remaining = len(horses) - success_count
+                print(f"\n⚠️ {race_name}: {success_count}/{len(horses)}頭のみ分析成功（残り{remaining}頭は次回再試行）")
+                print(f"\nRESULT:{json.dumps({'success': False, 'race': race_name, 'reason': 'partial', 'analyzed': success_count, 'remaining': remaining}, ensure_ascii=False)}")
+                sys.exit(1)
+
         finally:
             cur.close()
     finally:

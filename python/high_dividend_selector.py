@@ -746,6 +746,8 @@ def main():
     cmd = ['python3', analyzer_path, final_race_name, '7']
     print(f"  → {' '.join(cmd)}")
 
+    import threading
+    analyzer_ok = False
     try:
         proc = subprocess.Popen(
             cmd,
@@ -754,14 +756,38 @@ def main():
             text=True,
             bufsize=1,
         )
-        for line in proc.stdout:
-            print(line, end='', flush=True)
-        proc.wait()
+        # ハングガード: 15分を超えたら強制終了（1ステップの停止で全体が固まるのを防ぐ）
+        timed_out = {'flag': False}
+        def _kill():
+            timed_out['flag'] = True
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        timer = threading.Timer(900, _kill)
+        timer.start()
+        try:
+            for line in proc.stdout:
+                print(line, end='', flush=True)
+            proc.wait()
+        finally:
+            timer.cancel()
+        if timed_out['flag']:
+            print("  [エラー] 顔面分析が15分を超過したため強制終了しました（ハング検知）")
+        else:
+            # 完了マーカーの有無ではなく実際の終了コードで成否を判定する
+            analyzer_ok = (proc.returncode == 0)
     except Exception as e:
         print(f"  [エラー] 顔面分析の起動に失敗しました: {e}")
 
-    print("=== 厳選完了 ===")
+    # 選定(save_selection)自体は上で完了済みなので SELECTED_RACE は常に出力する
     print(f"SELECTED_RACE:{final_race_name}")
+    if analyzer_ok:
+        print("=== 厳選完了 ===")
+    else:
+        # 顔面分析が失敗/未完了のまま「厳選完了」と偽らない。非0終了で上位に伝える。
+        print("=== 厳選: 顔面分析が未完了/失敗 ===")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

@@ -61,8 +61,8 @@ cur2.execute("""
         jockey_name   = re.jockey_name,
         horse_number  = re.horse_number
     FROM race_entry re
-    WHERE sp.race_name = re.race_name
-      AND sp.horse_name = re.horse_name
+    -- horse_name は表記揺れ・文字化けで不一致になりうるため horse_id で突合
+    WHERE sp.horse_id = re.horse_id
       AND sp.race_name  = %s
       AND re.race_id = %s
 """, (race_name, race_id))

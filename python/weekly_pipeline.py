@@ -213,21 +213,33 @@ def already_has_stats(conn, race_name):
     finally:
         cur.close()
 
-def face_analysis_done(conn, race_name):
-    """全馬の顔面分析が完了しているか"""
+def face_analysis_done(conn, race_name, race_id):
+    """当該 race_id の出走全馬の顔面分析が完了しているか。
+    「このレース(race_name)の予想行で顔面済み、かつ現出走表(race_id)に居る馬」を数える。
+    - race_name のみだと同名別開催や取消馬の残存行を巻き込み誤って完了判定する。
+    - horse_id 単独JOINだと、同一馬が別レースで分析済みの行を過大カウントし、
+      このレースが未分析でも「完了」と誤判定する（別形の偽完了バグ）。
+    → race_name（このレースの予想）で絞りつつ、horse_id が現出走表に含まれるかで
+      取消馬を除外する。末尾の重賞検証クエリと同一基準にしてズレを無くす。"""
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT COUNT(*), COUNT(face_comment)
-            FROM stats_prediction WHERE race_name = %s
-        """, (race_name,))
-        total, done = cur.fetchone()
-        return total > 0 and total == done
+            SELECT
+                (SELECT COUNT(*) FROM race_entry WHERE race_id = %s),
+                (SELECT COUNT(*) FROM stats_prediction sp
+                 WHERE sp.race_name = %s
+                   AND sp.face_comment IS NOT NULL
+                   AND sp.horse_id IN (SELECT horse_id FROM race_entry WHERE race_id = %s))
+        """, (race_id, race_name, race_id))
+        heads, done = cur.fetchone()
+        return heads > 0 and done >= heads
     finally:
         cur.close()
 
-def update_image_paths(conn, race_name):
-    """stats_predictionのimage_path等をrace_entryからJOINして更新"""
+def update_image_paths(conn, race_name, race_id):
+    """stats_predictionのimage_path等をrace_entryからJOINして更新。
+    race_entry.race_name は scraped_name で保存され得るため、突合は race_name に
+    依存せず race_id + horse_id で行う（predict_by_race_id.py と同一基準）。"""
     cur = conn.cursor()
     try:
         cur.execute("""
@@ -236,13 +248,12 @@ def update_image_paths(conn, race_name):
                 jockey_name   = re.jockey_name,
                 horse_number  = re.horse_number
             FROM race_entry re
-            WHERE sp.race_name = re.race_name
-              AND sp.horse_name = re.horse_name
-              AND sp.race_name  = %s
-              -- 同名レースの過去開催分から古い馬番・騎手を拾わないよう最新開催に限定
-              AND re.race_id = (SELECT race_id FROM race_entry WHERE race_name = sp.race_name
-                                ORDER BY race_date DESC, race_id DESC LIMIT 1)
-        """, (race_name,))
+            -- horse_name は表記揺れ・文字化けが起きうるため horse_id で突合。
+            -- 対象開催は race_id で直接固定（同名過去開催の混入も防ぐ）。
+            WHERE sp.horse_id = re.horse_id
+              AND sp.race_name = %s
+              AND re.race_id   = %s
+        """, (race_name, race_id))
         updated = cur.rowcount
         conn.commit()
         return updated
@@ -271,7 +282,7 @@ def main():
             "netkeibaのHTML変更の可能性があります。要確認。"
         )
         healthcheck_ping('/fail')  # 異常終了として外部監視にも通知
-        return
+        sys.exit(1)                # cron/ラッパも失敗を検知できるよう非0終了
 
     # 優先度順にソート: G1 → G2 → G3 → その他（同優先度は開催日が近い順）
     # 万馬券チャレンジ対象や多頭数レースは「直前再評価」の選定で別途優遇する
@@ -377,19 +388,19 @@ def main():
                 continue
 
         # 3. image_path 更新
-        updated = update_image_paths(conn, race_name)
+        updated = update_image_paths(conn, race_name, race_id)
         if updated > 0:
             log(f"  → image_path 更新: {updated}頭")
 
         # 4. 顔面分析（全馬完了済みならスキップ）
         is_graded = grade_no in (1, 2, 3)
-        if face_analysis_done(conn, race_name):
+        if face_analysis_done(conn, race_name, race_id):
             log(f"  → 顔面分析: スキップ（全馬完了済み）")
             ok3 = True
         else:
             ok3, _ = run_script('face_analyzer_local.py', [race_name], '顔面分析（llava）')
             # G1〜G3は最重要。失敗 or 未完了なら即時もう一度だけ再試行する。
-            if is_graded and not face_analysis_done(conn, race_name):
+            if is_graded and not face_analysis_done(conn, race_name, race_id):
                 log(f"  ⚠️ [重賞] {race_name} の顔面分析が未完了 → 即時リトライ")
                 polite_sleep(3.0, 5.0)
                 ok3, _ = run_script('face_analyzer_local.py', [race_name], '顔面分析リトライ（重賞）')
@@ -433,14 +444,16 @@ def main():
             if r.get('grade_no') not in (1, 2, 3):
                 continue
             vcur = vconn.cursor()
+            # face_analysis_done() と同一基準（このレースの予想 × 現出走表の馬）。
+            # horse_name 依存を排し、かつ他レースで分析済みの同一馬を過大カウントしない。
             vcur.execute("""
                 SELECT
                     (SELECT COUNT(*) FROM race_entry WHERE race_id = %s) AS heads,
                     (SELECT COUNT(*) FROM stats_prediction sp
-                     INNER JOIN race_entry re ON re.race_name = sp.race_name
-                       AND re.horse_name = sp.horse_name AND re.race_id = %s
-                     WHERE sp.face_comment IS NOT NULL) AS face_done
-            """, (r['race_id'], r['race_id']))
+                     WHERE sp.race_name = %s
+                       AND sp.face_comment IS NOT NULL
+                       AND sp.horse_id IN (SELECT horse_id FROM race_entry WHERE race_id = %s)) AS face_done
+            """, (r['race_id'], r['race'], r['race_id']))
             heads, face_done = vcur.fetchone()
             vcur.close()
             label = {1: 'G1', 2: 'G2', 3: 'G3'}[r['grade_no']]
@@ -484,6 +497,12 @@ def main():
 
     # デッドマンズスイッチ: 重賞未完了があれば /fail（外部監視も赤にする）、無ければ成功ping。
     healthcheck_ping('/fail' if graded_problems else '')
+
+    # cron/ラッパが失敗を検知できるよう、重賞未完了や失敗レースありなら非0終了。
+    # （__main__ の except は Exception のみ捕捉するため SystemExit は誤って
+    #   「異常終了」通知を出さずにそのまま終了コードへ反映される）
+    if graded_problems or fails > 0:
+        sys.exit(1)
 
 if __name__ == '__main__':
     try:

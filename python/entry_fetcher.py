@@ -28,7 +28,11 @@ def get_conn():
     return psycopg2.connect(
         host=os.getenv('DB_HOST', 'localhost'), port=os.getenv('DB_PORT', '5432'),
         dbname=os.getenv('DB_NAME', 'faceapp'), user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD') or sys.exit('[エラー] DB_PASSWORD 環境変数が設定されていません')
+        password=os.getenv('DB_PASSWORD') or sys.exit('[エラー] DB_PASSWORD 環境変数が設定されていません'),
+        # 他モジュール（weekly_pipeline/stats_predictor/face_analyzer_local）と統一。
+        # 停滞したコネクションでの無限待ちを防ぐ（1クエリ60秒で中断）。
+        connect_timeout=int(os.getenv('PGCONNECT_TIMEOUT', '15')),
+        options='-c statement_timeout=60000'
     )
 
 def classify_race(distance, surface):
@@ -216,17 +220,42 @@ def download_image(horse_id, horse_name):
             pass
     return None
 
-def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, surface, category, entries):
+_schema_ensured = False
+
+def ensure_schema(conn):
+    """sex カラム等のスキーマ補完を1プロセス1回だけ実行（独立した短いトランザクション）。
+    従来は save_entries 内で毎回 ALTER TABLE していたため、後続の画像DL（数分）を含む
+    トランザクションが race_entry に ACCESS EXCLUSIVE ロックを長時間保持し、
+    Web表示や他処理の race_entry 参照をブロックする原因になっていた。"""
+    global _schema_ensured
+    if _schema_ensured:
+        return
     cur = conn.cursor()
     try:
-        # 既存のエントリを削除して入れ直す（同一トランザクション内）
+        cur.execute("ALTER TABLE race_entry ADD COLUMN IF NOT EXISTS sex VARCHAR(2)")
+        conn.commit()
+        _schema_ensured = True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, surface, category, entries):
+    ensure_schema(conn)
+
+    # 画像DL（外部ネットワークI/O）はトランザクションの外で先に済ませる。
+    # DELETE〜COMMIT の間に数分かかるDLを挟むと、その間ずっと race_entry の
+    # 行ロックとコネクションを保持し（idle in transaction）、競合・切断の温床になる。
+    for e in entries:
+        e['image_path'] = (download_image(e['horse_id'], e['horse_name'])
+                           if e['horse_id'] else None)
+
+    cur = conn.cursor()
+    try:
+        # 既存のエントリを削除して入れ直す（画像は取得済みなので短いトランザクション）
         cur.execute("DELETE FROM race_entry WHERE race_id = %s", (race_id,))
-        # sex カラムが無ければ追加（後方互換）
-        cur.execute("""
-            ALTER TABLE race_entry ADD COLUMN IF NOT EXISTS sex VARCHAR(2)
-        """)
         for e in entries:
-            img = download_image(e['horse_id'], e['horse_name']) if e['horse_id'] else None
             cur.execute("""
                 INSERT INTO race_entry
                     (race_id, race_name, race_date, race_category, grade, venue,
@@ -235,8 +264,8 @@ def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, su
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (race_id, race_name, race_date, category, grade, venue,
                   distance, surface, e['horse_name'], e['horse_id'],
-                  e['post_position'], e['horse_number'], e['jockey_name'], img,
-                  e.get('sex')))
+                  e['post_position'], e['horse_number'], e['jockey_name'],
+                  e['image_path'], e.get('sex')))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -325,7 +354,8 @@ def sync_with_latest_shutuba():
                         FROM race_entry re
                         WHERE re.race_id = %s
                           AND sp.race_name = re.race_name
-                          AND sp.horse_name = re.horse_name
+                          -- 表記揺れ・文字化けに強い horse_id で突合
+                          AND sp.horse_id = re.horse_id
                     """, (race_id,))
                     conn.commit()
                     print(f"  馬番を反映（{len(scraped_nums)}頭・枠順確定）✓")

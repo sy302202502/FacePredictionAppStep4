@@ -540,10 +540,15 @@ def main():
 
     entries = get_entries(conn, race_name)
     if not entries:
+        # 出走馬0件で return(exit 0) すると、呼び出し元のパイプラインが
+        # 「統計予想成功」と誤認し、後段の顔面分析まで空振りする。
+        # 実態は失敗なので非0終了で明示する（例: entry_fetcher が scraped_name で
+        # 保存し race_name と完全一致しない場合など）。
         print(f"❌ {race_name} の出走馬データがDBにありません")
         print("  先に出走馬取得を実行してください")
+        print(f"  RESULT:{json.dumps({'success': False, 'race': race_name, 'reason': 'no entries'}, ensure_ascii=False)}")
         conn.close()
-        return
+        sys.exit(1)
 
     # 距離・馬場を取得
     target_distance = entries[0][4] or 2000

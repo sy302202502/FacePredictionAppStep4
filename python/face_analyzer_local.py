@@ -383,16 +383,28 @@ def main():
             horses = cur.fetchall()
 
             if not horses:
-                # 全頭分析済み（または出走馬データ自体なし）
+                # 分析対象が0頭。ただし「全頭分析済み」と「画像未設定で分析不能」を
+                # 区別する。後者を成功扱いにすると、1頭も分析していないのに
+                # パイプラインが ✅done と記録してしまう（顔面0頭バグの温床）。
                 cur.execute("""
-                    SELECT COUNT(*) FROM stats_prediction
+                    SELECT COUNT(*),
+                           COUNT(face_comment),
+                           COUNT(*) FILTER (WHERE face_comment IS NULL AND image_path IS NULL)
+                    FROM stats_prediction
                     WHERE race_name = %s
                 """, (race_name,))
-                total = cur.fetchone()[0]
+                total, analyzed, missing_img = cur.fetchone()
                 if total == 0:
                     print(f"❌ {race_name} の出走馬データがありません")
-                else:
-                    print(f"✅ {race_name} は全頭分析済みのためスキップしました（{total}頭）")
+                    print(f"\nRESULT:{json.dumps({'success': False, 'race': race_name, 'reason': 'no entries'}, ensure_ascii=False)}")
+                    sys.exit(1)
+                if missing_img > 0:
+                    # image_path 未設定＝顔写真に紐付けできず分析不能。未完了として失敗終了。
+                    # （image_path は weekly_pipeline / predict_by_race_id が horse_id で反映する）
+                    print(f"❌ {race_name}: {missing_img}頭の image_path が未設定で分析できません（未完了）")
+                    print(f"\nRESULT:{json.dumps({'success': False, 'race': race_name, 'reason': 'missing image_path'}, ensure_ascii=False)}")
+                    sys.exit(1)
+                print(f"✅ {race_name} は全頭分析済みのためスキップしました（{analyzed}/{total}頭）")
                 return
 
             print(f"対象馬: {len(horses)}頭\n")

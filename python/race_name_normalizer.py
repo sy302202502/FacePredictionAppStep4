@@ -18,6 +18,9 @@ entry_fetcher保存後にレース名の切り詰めを自動修正するスク�
   python3 python/race_name_normalizer.py --apply --date 2026-05-17
 """
 
+# PEP 604 型注釈(str | None)を Python 3.9 でも import 可能にする
+from __future__ import annotations
+
 import os
 import sys
 import psycopg2

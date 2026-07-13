@@ -20,6 +20,11 @@ LLM呼び出し抽象化レイヤー
   OPENROUTER_MODEL    = meta-llama/llama-3.2-11b-vision-instruct (openrouter のみ)
 """
 
+# `str | None` 等の PEP 604 型注釈を Python 3.9 でも import 可能にする。
+# （ローカルMacの launchd は /usr/bin/python3 = 3.9 で実行されるため、
+#   これが無いと import 時 TypeError で顔面分析が全滅する）
+from __future__ import annotations
+
 import os
 import json
 import time

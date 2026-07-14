@@ -1,11 +1,13 @@
-anthropic>=0.25.0
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-psycopg2-binary>=2.9.0
-Pillow>=10.0.0
-python-dotenv>=1.0.0
-lxml>=4.9.0
-reportlab>=4.0.0
+# 各依存にメジャーバージョン上限を設定（再ビルド時に破壊的メジャー更新を
+# 勝手に取り込まないため。上限を上げる時は動作確認とセットで）
+anthropic>=0.25.0,<1
+requests>=2.31.0,<3
+beautifulsoup4>=4.12.0,<5
+psycopg2-binary>=2.9.0,<3
+Pillow>=10.0.0,<12
+python-dotenv>=1.0.0,<2
+lxml>=4.9.0,<7
+reportlab>=4.0.0,<5
 # LLM API クライアント（groq / gemini / openrouter 利用時）
-groq>=0.9.0
-google-generativeai>=0.7.0
+groq>=0.9.0,<1
+google-generativeai>=0.7.0,<1

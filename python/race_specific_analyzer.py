@@ -1760,14 +1760,18 @@ def main():
     # ----------------------------------------------------------------
     print(f"\n[Step6] {race_name} の出走馬を取得...")
     cur = conn.cursor()
+    # ILIKE は表記揺れ(「小倉記念」vs「小倉記念(GIII)」)吸収のため残すが、
+    # 複数開催(別年・同名)の馬が混ざらないよう最新開催の race_id 1件に固定する
     # sexカラムが存在しない場合のフォールバック
     try:
         cur.execute("""
             SELECT horse_name, horse_id, image_path, race_id, sex
             FROM race_entry
             WHERE race_name ILIKE %s
+              AND race_id = (SELECT race_id FROM race_entry WHERE race_name ILIKE %s
+                             ORDER BY race_date DESC, race_id DESC LIMIT 1)
             ORDER BY horse_number
-        """, (f"%{race_name}%",))
+        """, (f"%{race_name}%", f"%{race_name}%"))
         entry_rows = cur.fetchall()
     except Exception:
         conn.rollback()
@@ -1775,8 +1779,10 @@ def main():
             SELECT horse_name, horse_id, image_path, race_id
             FROM race_entry
             WHERE race_name ILIKE %s
+              AND race_id = (SELECT race_id FROM race_entry WHERE race_name ILIKE %s
+                             ORDER BY race_date DESC, race_id DESC LIMIT 1)
             ORDER BY horse_number
-        """, (f"%{race_name}%",))
+        """, (f"%{race_name}%", f"%{race_name}%"))
         entry_rows = [(r[0], r[1], r[2], r[3], None) for r in cur.fetchall()]
     cur.close()
 

@@ -1,38 +1,32 @@
 # ============================================================
-# ConoHa VPS用 cron設定（タイムゾーン: JST）
-# 設定: crontab /opt/faceprediction/deploy/conoha_crontab.txt
-# 確認: crontab -l
+# VPS 本番 crontab（正本）— 2026-07-15 現行フローに一本化
+#
+# 【運用ルール】この1ファイルが cron 定義の唯一の正本。
+#   反映手順: git pull → `crontab /opt/faceprediction/deploy/conoha_crontab.txt`
+#   確認:     `crontab -l` がこのファイルと一致していること
+#   ※ 反映前に `crontab -l` を控えておくこと（差分があれば要判断）
+#
+# 旧フロー（conoha_pipeline.sh の weekly/odds/results/quick）は
+# weekly_pipeline.py 日次実行体制へ移行済みのため削除。
 # ============================================================
-
-# 環境変数
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# ── 金曜朝：今週末の準備（エントリー・オッズ・万馬券・予想） ──
-0 8 * * 5  /opt/faceprediction/deploy/conoha_pipeline.sh weekly
+# ── 週次予想パイプライン（毎朝9時: 出馬表→統計予想→顔面分析→重賞検証）──
+0 9 * * * cd /opt/faceprediction && docker compose exec -T python python3 python/weekly_pipeline.py >> logs/weekly_cron.log 2>&1
 
-# ── 土曜：レース当日オッズ更新（朝〜夕方まで2時間おき） ──
-0  9 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
-0 11 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
-0 13 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
-0 15 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+# ── レース当日の出馬表同期（土日 11/13/15時: 取消馬の除外・馬番確定）──
+0 11,13,15 * * 6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/entry_fetcher.py --sync >> logs/sync_cron.log 2>&1
 
-# ── 日曜：レース当日オッズ更新（朝〜夕方まで2時間おき） ──
-0  9 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
-0 11 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
-0 13 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
-0 15 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh odds
+# ── 的中記録の自動取得（土日夜 + 毎朝10時: 未記録分のみ処理・冪等）──
+0 18,22 * * 6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/result_auto_fetcher.py >> logs/results_cron.log 2>&1
+0 10 * * * cd /opt/faceprediction && docker compose exec -T python python3 python/result_auto_fetcher.py >> logs/results_cron.log 2>&1
 
-# ── 土日午後・夜：レース結果取得（複数回試行で取りこぼし防止） ──
-0 17 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
-0 19 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
-0 22 * * 6  /opt/faceprediction/deploy/conoha_pipeline.sh results
-0 17 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh results
-0 19 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh results
-0 22 * * 0  /opt/faceprediction/deploy/conoha_pipeline.sh results
+# ── 本番DBの日次バックアップ（4時: 14日保持・空ダンプ検知付き）──
+0 4 * * * /opt/faceprediction/deploy/vps_backup.sh >> /opt/faceprediction/logs/backup.log 2>&1
 
-# ── 平日：オッズ更新（金曜以外） ──
-0 12 * * 1-4  /opt/faceprediction/deploy/conoha_pipeline.sh quick
+# ── uploads の古い画像GC（月曜5時: race_specific=180日/paddock=30日）──
+0 5 * * 1 cd /opt/faceprediction && docker compose exec -T python python3 python/cleanup_uploads.py --apply >> logs/cleanup.log 2>&1
 
-# ── 毎日深夜：古いログ削除（30日以前） ──
-0 3 * * *  find /opt/faceprediction/logs -name "conoha_*.log" -mtime +30 -delete
+# ── 古いcronログ削除（毎日3時: 30日以前）──
+0 3 * * * find /opt/faceprediction/logs -name "*_cron.log*" -mtime +30 -delete

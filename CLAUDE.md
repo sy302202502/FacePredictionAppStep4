@@ -57,17 +57,19 @@ FacePredictionAppStep4/
 
 ---
 
-## DB体制（重要・2026-07-14統一）
+## DB体制（重要・2026-07-14確定）
 
-- **本番DBは VPS 内の Docker コンテナ `faceprediction-db`（postgres:16）ただ一つ**。
-  VPSのWeb表示・cronパイプライン・的中記録はすべてこのDBで完結する。
-- ローカルMacの `.env` は **Supabase** を向くが、これは**開発・検証用サンドボックス**。
-  本番表示には一切使われない。ローカルの常駐ジョブ（launchd）は2026-07-14に全廃済み
-  （plistは `launchd/` に保全。復活させないこと）。
-- **スキーマ変更は必ず本番（VPSコンテナDB）に適用する**。移行スクリプトは
-  `docker compose exec python python3 python/<script>.py --apply` で実行。
-  Supabase側は開発に使うときだけ合わせればよい。
-- 本番DBのバックアップ: `deploy/vps_backup.sh` を cron で日次実行（backups/ に14日分保持）。
+- **本番DBは Supabase ただ一つ**（VPS の `.env` が `DB_HOST=aws-1-ap-northeast-1.pooler.supabase.com` /
+  `DB_NAME=postgres` を指す）。VPSのWeb表示・cronパイプライン・的中記録はすべてここで完結する。
+- ローカルMacの `.env` は **Mac内 local postgres（localhost:5432/faceapp）** を向く。
+  これは**開発・検証用サンドボックス**で、本番表示には一切使われない。
+  ローカルの常駐ジョブ（launchd）は2026-07-14に全廃済み（plistは `launchd/` に保全。復活させないこと）。
+- VPS内の `faceprediction-db` コンテナは**空で未使用**（歴史的残骸）。停止してよい。
+- **スキーマ変更は必ず本番（VPS経由でSupabase）に適用する**。移行スクリプトは VPS で
+  `docker compose exec python python3 python/<script>.py --apply` を実行。
+  ローカルsandbox側は開発に使うときだけ合わせればよい。
+- 本番DBのバックアップ: `deploy/vps_backup.sh` を cron で日次実行
+  （pythonコンテナ経由で DB_HOST の実体をpg_dump。backups/ に14日分保持）。
 
 ## DBテーブル構成（PostgreSQL: faceapp）
 

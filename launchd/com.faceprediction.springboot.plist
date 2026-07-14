@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.faceprediction.springboot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/shibayuya/git/FacePredictionAppStep4/start.sh</string>
+    </array>
+
+    <!-- ログイン後に自動起動 -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- クラッシュ時に自動再起動 -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- PostgreSQL の起動を待つため30秒遅延 -->
+    <key>StartInterval</key>
+    <integer>0</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/shibayuya/git/FacePredictionAppStep4/logs/launchd_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/shibayuya/git/FacePredictionAppStep4/logs/launchd_stderr.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/shibayuya/git/FacePredictionAppStep4</string>
+</dict>
+</plist>

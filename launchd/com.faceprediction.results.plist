@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.faceprediction.results</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>cd /Users/shibayuya/git/FacePredictionAppStep4 &amp;&amp; python3 python/result_auto_fetcher.py &gt;&gt; logs/results_$(date +\%Y\%m\%d).log 2&gt;&amp;1</string>
+    </array>
+    <!-- 土曜・日曜の18時に実行（最終レース後） -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key>
+            <integer>6</integer>
+            <key>Hour</key>
+            <integer>18</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>0</integer>
+            <key>Hour</key>
+            <integer>18</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- 念のため翌日朝9時にも再実行（取得もれカバー） -->
+        <dict>
+            <key>Weekday</key>
+            <integer>0</integer>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>1</integer>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/shibayuya/git/FacePredictionAppStep4</string>
+    <key>StandardOutPath</key>
+    <string>/Users/shibayuya/git/FacePredictionAppStep4/logs/results_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/shibayuya/git/FacePredictionAppStep4/logs/results_stderr.log</string>
+</dict>
+</plist>

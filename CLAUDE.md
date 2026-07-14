@@ -57,6 +57,18 @@ FacePredictionAppStep4/
 
 ---
 
+## DB体制（重要・2026-07-14統一）
+
+- **本番DBは VPS 内の Docker コンテナ `faceprediction-db`（postgres:16）ただ一つ**。
+  VPSのWeb表示・cronパイプライン・的中記録はすべてこのDBで完結する。
+- ローカルMacの `.env` は **Supabase** を向くが、これは**開発・検証用サンドボックス**。
+  本番表示には一切使われない。ローカルの常駐ジョブ（launchd）は2026-07-14に全廃済み
+  （plistは `launchd/` に保全。復活させないこと）。
+- **スキーマ変更は必ず本番（VPSコンテナDB）に適用する**。移行スクリプトは
+  `docker compose exec python python3 python/<script>.py --apply` で実行。
+  Supabase側は開発に使うときだけ合わせればよい。
+- 本番DBのバックアップ: `deploy/vps_backup.sh` を cron で日次実行（backups/ に14日分保持）。
+
 ## DBテーブル構成（PostgreSQL: faceapp）
 
 | テーブル | 役割 |

@@ -20,6 +20,14 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+# ログの簡易ローテーション（logback設定を迂回した直接追記のため、ここで肥大を防ぐ。
+# 10MB超なら1世代だけ退避。過去に109MBまで肥大した実績あり）
+for f in springboot.log startup.log; do
+    if [ -f "$LOG_DIR/$f" ] && [ "$(stat -f%z "$LOG_DIR/$f" 2>/dev/null || echo 0)" -gt 10485760 ]; then
+        mv "$LOG_DIR/$f" "$LOG_DIR/$f.1"
+    fi
+done
+
 # Spring Boot 起動（JVMヒープ上限512MBに固定）
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Spring Boot 起動開始..." >> "$LOG_DIR/startup.log"
 cd "$APP_DIR"

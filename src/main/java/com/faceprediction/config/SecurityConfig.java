@@ -1,5 +1,9 @@
 package com.faceprediction.config;
 
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
@@ -11,10 +15,12 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 @EnableWebSecurity
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
     @Value("${app.username:admin}")
     private String username;
 
-    @Value("${app.password}")
+    @Value("${app.password:}")
     private String password;
 
     @Override
@@ -56,9 +62,17 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Override
     protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        // 既知のデフォルトPWをコードに残さない。APP_PASSWORD 未設定時は起動ごとの
+        // ランダムPWにフォールバック（アプリは起動し続けるが、既知PWでのログインは不可能になる）。
+        String effectivePassword = password;
+        if (effectivePassword == null || effectivePassword.isBlank()) {
+            effectivePassword = UUID.randomUUID().toString();
+            log.warn("APP_PASSWORD が未設定のため、この起動限りのランダムパスワードを生成しました。"
+                    + "管理機能を使うには .env に APP_PASSWORD を設定して再起動してください。");
+        }
         auth.inMemoryAuthentication()
             .withUser(username)
-            .password("{noop}" + password)
+            .password("{noop}" + effectivePassword)
             .roles("ADMIN");
     }
 }

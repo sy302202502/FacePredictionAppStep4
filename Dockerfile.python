@@ -5,8 +5,9 @@ WORKDIR /app
 ENV TZ=Asia/Tokyo
 
 # 軽量化: キャッシュなしインストール
+# postgresql-client は deploy/vps_backup.sh が本番DBを pg_dump するために必要
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc curl tzdata \
+    libpq-dev gcc curl tzdata postgresql-client \
     && ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime \
     && echo "Asia/Tokyo" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*

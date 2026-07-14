@@ -205,51 +205,60 @@ def already_has_entries(conn, race_id):
     finally:
         cur.close()
 
-def already_has_stats(conn, race_name):
-    """stats_prediction に既にデータがあるか。
-    重賞・OP は毎年同名で開催されるため、昨年以前の残存データを「予想済み」と
-    誤判定しないよう直近45日以内に作成された行だけを有効とみなす。
-    （古い行は stats_predictor の全再生成時に DELETE で一掃される）"""
+def already_has_stats(conn, race_id):
+    """stats_prediction に当該開催(race_id)のデータが既にあるか。
+    race_id 基準なので年またぎ同名レースの残存データを誤って「予想済み」と
+    判定しない（従来の race_name+45日ヒューリスティックを構造的に置換）。"""
     cur = conn.cursor()
     try:
-        cur.execute("""
-            SELECT COUNT(*) FROM stats_prediction
-            WHERE race_name = %s
-              AND created_at > NOW() - INTERVAL '45 days'
-        """, (race_name,))
+        cur.execute("SELECT COUNT(*) FROM stats_prediction WHERE race_id = %s", (race_id,))
         return cur.fetchone()[0] > 0
     finally:
         cur.close()
 
-def face_analysis_done(conn, race_name, race_id):
+def face_analysis_done(conn, race_id):
     """当該 race_id の出走全馬の顔面分析が完了しているか。
-    「このレース(race_name)の予想行で顔面済み、かつ現出走表(race_id)に居る馬」を数える。
-    - race_name のみだと同名別開催や取消馬の残存行を巻き込み誤って完了判定する。
-    - horse_id 単独JOINだと、同一馬が別レースで分析済みの行を過大カウントし、
-      このレースが未分析でも「完了」と誤判定する（別形の偽完了バグ）。
-    → race_name（このレースの予想）で絞りつつ、horse_id が現出走表に含まれるかで
-      取消馬を除外する。末尾の重賞検証クエリと同一基準にしてズレを無くす。"""
+    予想行(stats_prediction)・出走表(race_entry)とも race_id で直接突合する。
+    出走表に residual な取消馬が居ても、分母は現出走表(race_entry)なのでずれない。
+    末尾の重賞検証クエリと同一基準にしてズレを無くす。"""
     cur = conn.cursor()
     try:
         cur.execute("""
             SELECT
                 (SELECT COUNT(*) FROM race_entry WHERE race_id = %s),
                 (SELECT COUNT(*) FROM stats_prediction sp
-                 WHERE sp.race_name = %s
+                 WHERE sp.race_id = %s
                    AND sp.face_comment IS NOT NULL
                    AND sp.horse_id IN (SELECT horse_id FROM race_entry WHERE race_id = %s))
-        """, (race_id, race_name, race_id))
+        """, (race_id, race_id, race_id))
         heads, done = cur.fetchone()
         return heads > 0 and done >= heads
     finally:
         cur.close()
 
-def update_image_paths(conn, race_name, race_id):
+def update_image_paths(conn, race_id):
     """stats_predictionのimage_path等をrace_entryからJOINして更新。
-    race_entry.race_name は scraped_name で保存され得るため、突合は race_name に
-    依存せず race_id + horse_id で行う（predict_by_race_id.py と同一基準）。"""
+    突合は race_id + horse_id（predict_by_race_id.py と同一基準）。
+    旧コードが残した race_id NULL の行もここで自己修復（backfill）する。"""
     cur = conn.cursor()
     try:
+        # 自己修復: race_id 未付与の行に補完（旧コード・手動スクリプト由来の保険）。
+        # 同じ馬が45日内に別レースへ出るケースの誤付替えを防ぐため race_name も一致条件にし、
+        # (race_id, horse_id) が既に存在する場合は部分UNIQUE衝突を避けてスキップする。
+        cur.execute("""
+            UPDATE stats_prediction sp
+            SET race_id = re.race_id
+            FROM race_entry re
+            WHERE sp.race_id IS NULL
+              AND sp.horse_id  = re.horse_id
+              AND sp.race_name = re.race_name
+              AND re.race_id = %s
+              AND sp.created_at > NOW() - INTERVAL '45 days'
+              AND NOT EXISTS (
+                  SELECT 1 FROM stats_prediction sp2
+                  WHERE sp2.race_id = re.race_id AND sp2.horse_id = sp.horse_id
+              )
+        """, (race_id,))
         cur.execute("""
             UPDATE stats_prediction sp
             SET image_path    = '/uploads/candidates/' || re.horse_id || '.jpg',
@@ -259,9 +268,9 @@ def update_image_paths(conn, race_name, race_id):
             -- horse_name は表記揺れ・文字化けが起きうるため horse_id で突合。
             -- 対象開催は race_id で直接固定（同名過去開催の混入も防ぐ）。
             WHERE sp.horse_id = re.horse_id
-              AND sp.race_name = %s
-              AND re.race_id   = %s
-        """, (race_name, race_id))
+              AND sp.race_id  = %s
+              AND re.race_id  = %s
+        """, (race_id, race_id))
         updated = cur.rowcount
         conn.commit()
         return updated
@@ -358,7 +367,7 @@ def main():
                 continue
 
         # 2. 統計予想（既に存在する場合はスキップ。ただし直前レースは再評価）
-        if already_has_stats(conn, race_name):
+        if already_has_stats(conn, race_id):
             # ── 直前再評価 ──
             # レース前日〜当日は最終追い切り・枠順が確定しているため、
             # 優先度の高いレースだけスコアを再評価する（顔面データは保持）。
@@ -396,22 +405,22 @@ def main():
                 continue
 
         # 3. image_path 更新
-        updated = update_image_paths(conn, race_name, race_id)
+        updated = update_image_paths(conn, race_id)
         if updated > 0:
             log(f"  → image_path 更新: {updated}頭")
 
         # 4. 顔面分析（全馬完了済みならスキップ）
         is_graded = grade_no in (1, 2, 3)
-        if face_analysis_done(conn, race_name, race_id):
+        if face_analysis_done(conn, race_id):
             log(f"  → 顔面分析: スキップ（全馬完了済み）")
             ok3 = True
         else:
-            ok3, _ = run_script('face_analyzer_local.py', [race_name], '顔面分析（llava）')
+            ok3, _ = run_script('face_analyzer_local.py', [race_name, race_id], '顔面分析（llava）')
             # G1〜G3は最重要。失敗 or 未完了なら即時もう一度だけ再試行する。
-            if is_graded and not face_analysis_done(conn, race_name, race_id):
+            if is_graded and not face_analysis_done(conn, race_id):
                 log(f"  ⚠️ [重賞] {race_name} の顔面分析が未完了 → 即時リトライ")
                 polite_sleep(3.0, 5.0)
-                ok3, _ = run_script('face_analyzer_local.py', [race_name], '顔面分析リトライ（重賞）')
+                ok3, _ = run_script('face_analyzer_local.py', [race_name, race_id], '顔面分析リトライ（重賞）')
 
         results.append({
             'race': race_name,
@@ -452,16 +461,15 @@ def main():
             if r.get('grade_no') not in (1, 2, 3):
                 continue
             vcur = vconn.cursor()
-            # face_analysis_done() と同一基準（このレースの予想 × 現出走表の馬）。
-            # horse_name 依存を排し、かつ他レースで分析済みの同一馬を過大カウントしない。
+            # face_analysis_done() と同一基準（race_id 直接突合）。
             vcur.execute("""
                 SELECT
                     (SELECT COUNT(*) FROM race_entry WHERE race_id = %s) AS heads,
                     (SELECT COUNT(*) FROM stats_prediction sp
-                     WHERE sp.race_name = %s
+                     WHERE sp.race_id = %s
                        AND sp.face_comment IS NOT NULL
                        AND sp.horse_id IN (SELECT horse_id FROM race_entry WHERE race_id = %s)) AS face_done
-            """, (r['race_id'], r['race'], r['race_id']))
+            """, (r['race_id'], r['race_id'], r['race_id']))
             heads, face_done = vcur.fetchone()
             vcur.close()
             label = {1: 'G1', 2: 'G2', 3: 'G3'}[r['grade_no']]

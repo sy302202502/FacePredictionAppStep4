@@ -93,7 +93,8 @@ public class AccuracyController {
         // ── 新システム（顔面傾向分析）統計 ───────────────
         try {
             List<Map<String, Object>> v2Stats = jdbc.queryForList(
-                "SELECT COUNT(DISTINCT race_name) AS total_races," +
+                // 同名別年の開催を別レースとして数える（race_id優先、無ければrace_name）
+                "SELECT COUNT(DISTINCT COALESCE(race_id, race_name)) AS total_races," +
                 " SUM(CASE WHEN hit=TRUE THEN 1 ELSE 0 END) AS win_hits," +
                 " SUM(CASE WHEN top5_hit=TRUE THEN 1 ELSE 0 END) AS top5_hits" +
                 " FROM race_specific_accuracy WHERE predicted_rank = 1");
@@ -124,10 +125,14 @@ public class AccuracyController {
                 "SELECT sp.race_name, COUNT(*) AS horse_count," +
                 " MIN(sp.created_at)::date AS predicted_on" +
                 " FROM stats_prediction sp" +
-                " WHERE NOT EXISTS (" +
-                "   SELECT 1 FROM race_specific_accuracy rsa" +
-                "   WHERE rsa.race_name = sp.race_name" +
-                " )" +
+                // 記録済み判定は race_id 基準（同名別開催を「記録済み」と誤認しない）。
+                // race_id 未付与(旧コード由来のNULL)は race_name で暫定判定して漏らさない
+                " WHERE (sp.race_id IS NOT NULL" +
+                "        AND NOT EXISTS (SELECT 1 FROM race_specific_accuracy rsa" +
+                "                        WHERE rsa.race_id = sp.race_id))" +
+                "    OR (sp.race_id IS NULL" +
+                "        AND NOT EXISTS (SELECT 1 FROM race_specific_accuracy rsa" +
+                "                        WHERE rsa.race_name = sp.race_name))" +
                 " GROUP BY sp.race_name" +
                 " ORDER BY MIN(sp.created_at) DESC");
             model.addAttribute("v2PendingRaces", v2Pending);
@@ -228,12 +233,27 @@ public class AccuracyController {
         }
 
         try {
-            // 予想データ取得（現行システム: stats_prediction）
-            List<Map<String, Object>> predictions = jdbc.queryForList(
-                "SELECT horse_name, rank_position, score" +
-                " FROM stats_prediction WHERE race_name = ?" +
-                " ORDER BY rank_position",
-                raceName);
+            // 開催を一意に特定（同名の過去開催の予想・記録を巻き込まない）
+            List<String> raceIds = jdbc.queryForList(
+                "SELECT race_id FROM race_entry WHERE race_name = ?" +
+                " ORDER BY race_date DESC, race_id DESC LIMIT 1",
+                String.class, raceName);
+            final String raceId = raceIds.isEmpty() ? null : raceIds.get(0);
+
+            // 予想データ取得（現行システム: stats_prediction）。
+            // race_id 未付与(旧コード由来のNULL)の予想も手動記録できるようフォールバック込み
+            List<Map<String, Object>> predictions = (raceId != null)
+                ? jdbc.queryForList(
+                    "SELECT horse_name, rank_position, score" +
+                    " FROM stats_prediction" +
+                    " WHERE race_id = ? OR (race_name = ? AND race_id IS NULL)" +
+                    " ORDER BY rank_position",
+                    raceId, raceName)
+                : jdbc.queryForList(
+                    "SELECT horse_name, rank_position, score" +
+                    " FROM stats_prediction WHERE race_name = ?" +
+                    " ORDER BY rank_position",
+                    raceName);
 
             if (predictions.isEmpty()) {
                 ra.addFlashAttribute("error", "予想データが見つかりません: " + raceName);
@@ -252,13 +272,20 @@ public class AccuracyController {
                            || (!second_.isEmpty() && top5Names.contains(second_))
                            || (!third_.isEmpty() && top5Names.contains(third_));
 
-            // 既存レコードを削除して上書き
-            jdbc.update("DELETE FROM race_specific_accuracy WHERE race_name = ?", raceName);
+            // 既存レコードを削除して上書き（race_id が分かる場合はその開催のみ削除。
+            // race_name 一括削除だと同名の過去開催の記録まで消してしまう）
+            if (raceId != null) {
+                jdbc.update("DELETE FROM race_specific_accuracy" +
+                            " WHERE race_id = ? OR (race_name = ? AND race_id IS NULL)",
+                            raceId, raceName);
+            } else {
+                jdbc.update("DELETE FROM race_specific_accuracy WHERE race_name = ?", raceName);
+            }
 
             jdbc.batchUpdate(
                 "INSERT INTO race_specific_accuracy" +
-                " (race_name, horse_name, predicted_rank, actual_rank, hit, top5_hit, score, data_source, recorded_at)" +
-                " VALUES (?,?,?,?,?,?,?,?,NOW())",
+                " (race_id, race_name, horse_name, predicted_rank, actual_rank, hit, top5_hit, score, data_source, recorded_at)" +
+                " VALUES (?,?,?,?,?,?,?,?,?,NOW())",
                 predictions,
                 predictions.size(),
                 (ps, p) -> {
@@ -270,14 +297,15 @@ public class AccuracyController {
                     if (horseName.equals(first_))                             actualRank = 1;
                     else if (!second_.isEmpty() && horseName.equals(second_)) actualRank = 2;
                     else if (!third_.isEmpty()  && horseName.equals(third_))  actualRank = 3;
-                    ps.setString(1, raceName);
-                    ps.setString(2, horseName);
-                    ps.setInt(3, predRank);
-                    if (actualRank != null) ps.setInt(4, actualRank); else ps.setNull(4, java.sql.Types.INTEGER);
-                    ps.setBoolean(5, hit1st && predRank == 1);
-                    if (predRank <= 5) ps.setBoolean(6, top5Hit); else ps.setNull(6, java.sql.Types.BOOLEAN);
-                    if (score != null) ps.setDouble(7, score); else ps.setNull(7, java.sql.Types.DOUBLE);
-                    ps.setString(8, dataSrc);
+                    if (raceId != null) ps.setString(1, raceId); else ps.setNull(1, java.sql.Types.VARCHAR);
+                    ps.setString(2, raceName);
+                    ps.setString(3, horseName);
+                    ps.setInt(4, predRank);
+                    if (actualRank != null) ps.setInt(5, actualRank); else ps.setNull(5, java.sql.Types.INTEGER);
+                    ps.setBoolean(6, hit1st && predRank == 1);
+                    if (predRank <= 5) ps.setBoolean(7, top5Hit); else ps.setNull(7, java.sql.Types.BOOLEAN);
+                    if (score != null) ps.setDouble(8, score); else ps.setNull(8, java.sql.Types.DOUBLE);
+                    ps.setString(9, dataSrc);
                 });
 
             String msg = raceName + " 記録完了 — 1位的中: " + (hit1st ? "✅ HIT" : "✗ MISS")

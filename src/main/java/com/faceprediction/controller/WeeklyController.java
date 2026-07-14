@@ -55,7 +55,8 @@ public class WeeklyController {
             "  COUNT(DISTINCT CASE WHEN sp.face_comment IS NOT NULL THEN sp.horse_name END) AS face_done," +
             "  MAX(sp.created_at) AS updated_at" +
             " FROM stats_prediction sp" +
-            " LEFT JOIN race_entry re ON sp.race_name = re.race_name" +
+            // race_name JOINだと同名の過去開催×全頭に行が膨らむため、IDで厳密に突合
+            " LEFT JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id" +
             " GROUP BY sp.race_name" +
             " ORDER BY MIN(re.race_date) DESC NULLS LAST, MAX(sp.created_at) DESC");
 
@@ -70,7 +71,11 @@ public class WeeklyController {
                 "SELECT horse_name, horse_number, jockey_name," +
                 " rank_position, score, comment," +
                 " image_path, face_comment, face_score" +
-                " FROM stats_prediction WHERE race_name = ?" +
+                " FROM stats_prediction sp WHERE sp.race_name = ?" +
+                // 同名の過去開催（別年）の行を混ぜない。race_id 未付与(旧コード由来)は表示を許容
+                " AND (sp.race_id IS NULL OR sp.race_id =" +
+                "      (SELECT race_id FROM race_entry WHERE race_name = sp.race_name" +
+                "       ORDER BY race_date DESC, race_id DESC LIMIT 1))" +
                 " ORDER BY rank_position",
                 raceName);
         }

@@ -44,6 +44,7 @@ def ensure_stats_table(conn):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS stats_prediction (
             id           SERIAL PRIMARY KEY,
+            race_id      VARCHAR(20),
             race_name    VARCHAR(200),
             horse_name   VARCHAR(100),
             horse_id     VARCHAR(20),
@@ -323,22 +324,33 @@ def classify_target(distance, surface):
 # ----------------------------------------------------------------
 # 出走馬を取得
 # ----------------------------------------------------------------
-def get_entries(conn, race_name):
+def get_entries(conn, race_name, race_id=None):
     cur = conn.cursor()
-    # 同名レースが複数開催分（別年・別会場）残っている場合に混ざらないよう、
-    # 最新の race_date の race_id に限定する
-    cur.execute("""
-        SELECT horse_name, horse_id, horse_number, jockey_name,
-               distance, surface, race_date, race_id
-        FROM race_entry
-        WHERE race_name = %s
-          AND race_id = (
-              SELECT race_id FROM race_entry
-              WHERE race_name = %s
-              ORDER BY race_date DESC, race_id DESC LIMIT 1
-          )
-        ORDER BY horse_number
-    """, (race_name, race_name))
+    if race_id:
+        # race_id 指定時はその開催をそのまま使う（同名の最新開催に付け替えない。
+        # predict_by_race_id 等から特定開催を明示された場合の正確性を保証）
+        cur.execute("""
+            SELECT horse_name, horse_id, horse_number, jockey_name,
+                   distance, surface, race_date, race_id
+            FROM race_entry
+            WHERE race_id = %s
+            ORDER BY horse_number
+        """, (race_id,))
+    else:
+        # 同名レースが複数開催分（別年・別会場）残っている場合に混ざらないよう、
+        # 最新の race_date の race_id に限定する
+        cur.execute("""
+            SELECT horse_name, horse_id, horse_number, jockey_name,
+                   distance, surface, race_date, race_id
+            FROM race_entry
+            WHERE race_name = %s
+              AND race_id = (
+                  SELECT race_id FROM race_entry
+                  WHERE race_name = %s
+                  ORDER BY race_date DESC, race_id DESC LIMIT 1
+              )
+            ORDER BY horse_number
+        """, (race_name, race_name))
     rows = cur.fetchall()
     cur.close()
     return rows
@@ -518,8 +530,12 @@ def main():
     dry_run   = '--dry-run' in sys.argv
     update_mode = '--update' in sys.argv  # 顔面データを保持してスコアのみ再評価
 
-    # race_id（数字のみ）が渡された場合はレース名に解決する（VNCの日本語化け対策）
+    # race_id（数字のみ）が渡された場合はレース名に解決する（VNCの日本語化け対策）。
+    # 解決後も race_id を保持し、出走表取得までその開催に固定する
+    # （同名の最新開催に付け替えると、指定と異なる開催を予想してしまう）
+    requested_race_id = None
     if race_name.isdigit():
+        requested_race_id = race_name
         conn0 = get_conn()
         cur0 = conn0.cursor()
         cur0.execute("SELECT race_name FROM race_entry WHERE race_id = %s LIMIT 1", (race_name,))
@@ -539,7 +555,7 @@ def main():
     conn = get_conn()
     ensure_stats_table(conn)
 
-    entries = get_entries(conn, race_name)
+    entries = get_entries(conn, race_name, requested_race_id)
     if not entries:
         # 出走馬0件で return(exit 0) すると、呼び出し元のパイプラインが
         # 「統計予想成功」と誤認し、後段の顔面分析まで空振りする。
@@ -611,35 +627,50 @@ def main():
             if update_mode:
                 # 更新モード: 顔面分析データ（face_*）を保持したままスコアのみ更新。
                 # 直前再評価（最新の調教評価の反映）用。
+                # 突合は race_id + horse_id（horse_name は表記揺れ・重複の温床のため使わない）
                 updated = inserted = 0
                 for i, h in enumerate(scored, 1):
-                    cur.execute("""
-                        UPDATE stats_prediction
-                        SET rank_position = %s, score = %s, score_detail = %s, comment = %s
-                        WHERE race_name = %s AND horse_name = %s
-                    """, (i, h['score'], json.dumps(h['detail'], ensure_ascii=False),
-                          h['comment'], race_name, h['horse_name']))
+                    if h['horse_id']:
+                        cur.execute("""
+                            UPDATE stats_prediction
+                            SET rank_position = %s, score = %s, score_detail = %s, comment = %s
+                            WHERE race_id = %s AND horse_id = %s
+                        """, (i, h['score'], json.dumps(h['detail'], ensure_ascii=False),
+                              h['comment'], race_id, h['horse_id']))
+                    else:
+                        # horse_id 不明馬（成績データなし）のみ名前で突合
+                        cur.execute("""
+                            UPDATE stats_prediction
+                            SET rank_position = %s, score = %s, score_detail = %s, comment = %s
+                            WHERE race_id = %s AND horse_name = %s
+                        """, (i, h['score'], json.dumps(h['detail'], ensure_ascii=False),
+                              h['comment'], race_id, h['horse_name']))
                     if cur.rowcount > 0:
                         updated += cur.rowcount
                     else:
                         cur.execute("""
                             INSERT INTO stats_prediction
-                                (race_name, horse_name, horse_id, rank_position, score, score_detail, comment)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s)
-                        """, (race_name, h['horse_name'], h['horse_id'], i,
+                                (race_id, race_name, horse_name, horse_id, rank_position, score, score_detail, comment)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                        """, (race_id, race_name, h['horse_name'], h['horse_id'], i,
                               h['score'], json.dumps(h['detail'], ensure_ascii=False), h['comment']))
                         inserted += 1
                 conn.commit()
                 print(f"\n✅ {race_name} のスコアを再評価しました（更新{updated}頭・追加{inserted}頭、顔面データ保持）")
             else:
-                cur.execute("DELETE FROM stats_prediction WHERE race_name = %s", (race_name,))
+                # この開催(race_id)の行を入れ替える。過去年の同名開催(別race_id)には触れない。
+                # race_id 未付与の古い残骸（backfill未解決）も同名なら一掃する。
+                cur.execute("""
+                    DELETE FROM stats_prediction
+                    WHERE race_id = %s OR (race_name = %s AND race_id IS NULL)
+                """, (race_id, race_name))
                 for i, h in enumerate(scored, 1):
                     cur.execute("""
                         INSERT INTO stats_prediction
-                            (race_name, horse_name, horse_id, rank_position, score, score_detail, comment)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                            (race_id, race_name, horse_name, horse_id, rank_position, score, score_detail, comment)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                     """, (
-                        race_name, h['horse_name'], h['horse_id'], i,
+                        race_id, race_name, h['horse_name'], h['horse_id'], i,
                         h['score'], json.dumps(h['detail'], ensure_ascii=False), h['comment']
                     ))
                 conn.commit()

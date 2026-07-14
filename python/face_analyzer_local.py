@@ -361,38 +361,47 @@ def build_face_comment(parsed, horse_name, picker=None, horse_number=None):
 # ── メイン ──────────────────────────────────────────
 def main():
     race_name = sys.argv[1] if len(sys.argv) > 1 else '大阪杯'
+    # 第2引数に race_id（推奨）。指定時は開催を一意に特定できるため、
+    # 年またぎ同名レースの残存行を誤って対象にしない。
+    race_id = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].isdigit() else None
 
     print(f"{'='*60}")
-    print(f"  llava顔面分析: {race_name}")
+    print(f"  llava顔面分析: {race_name}" + (f" (race_id={race_id})" if race_id else ''))
     print(f"  モデル: {_llm_provider()}")
     print(f"{'='*60}\n")
+
+    # 突合条件: race_id があれば race_id、なければ従来どおり race_name（手動実行互換）
+    if race_id:
+        cond, cond_arg = "race_id = %s", race_id
+    else:
+        cond, cond_arg = "race_name = %s", race_name
 
     conn = get_conn()
     try:
         cur = conn.cursor()
         try:
             # 対象レースの馬を取得（未分析の馬のみ — API呼び出しの節約）
-            cur.execute("""
+            cur.execute(f"""
                 SELECT id, horse_name, image_path, rank_position, horse_number
                 FROM stats_prediction
-                WHERE race_name = %s
+                WHERE {cond}
                   AND image_path IS NOT NULL
                   AND face_comment IS NULL
                 ORDER BY rank_position
-            """, (race_name,))
+            """, (cond_arg,))
             horses = cur.fetchall()
 
             if not horses:
                 # 分析対象が0頭。ただし「全頭分析済み」と「画像未設定で分析不能」を
                 # 区別する。後者を成功扱いにすると、1頭も分析していないのに
                 # パイプラインが ✅done と記録してしまう（顔面0頭バグの温床）。
-                cur.execute("""
+                cur.execute(f"""
                     SELECT COUNT(*),
                            COUNT(face_comment),
                            COUNT(*) FILTER (WHERE face_comment IS NULL AND image_path IS NULL)
                     FROM stats_prediction
-                    WHERE race_name = %s
-                """, (race_name,))
+                    WHERE {cond}
+                """, (cond_arg,))
                 total, analyzed, missing_img = cur.fetchone()
                 if total == 0:
                     print(f"❌ {race_name} の出走馬データがありません")

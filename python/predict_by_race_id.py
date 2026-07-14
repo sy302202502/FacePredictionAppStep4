@@ -37,10 +37,10 @@ print("=" * 60)
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# 1. 統計予想
+# 1. 統計予想（race_id を渡す: stats_predictor 側で開催を一意特定できる）
 print("\n[1/3] 統計予想を実行...")
 r1 = subprocess.run(
-    ['python3', os.path.join(script_dir, 'stats_predictor.py'), race_name],
+    ['python3', os.path.join(script_dir, 'stats_predictor.py'), race_id],
     cwd=script_dir
 )
 if r1.returncode != 0:
@@ -55,6 +55,22 @@ conn2 = psycopg2.connect(
     password=os.getenv('DB_PASSWORD', 'postgrestest')
 )
 cur2 = conn2.cursor()
+# 旧コード等が race_id なしで残した行を自己修復してから反映。
+# race_name 一致を必須にし、既存 (race_id, horse_id) がある行はUNIQUE衝突回避でスキップ
+cur2.execute("""
+    UPDATE stats_prediction sp
+    SET race_id = re.race_id
+    FROM race_entry re
+    WHERE sp.race_id IS NULL
+      AND sp.horse_id  = re.horse_id
+      AND sp.race_name = re.race_name
+      AND re.race_id = %s
+      AND sp.created_at > NOW() - INTERVAL '45 days'
+      AND NOT EXISTS (
+          SELECT 1 FROM stats_prediction sp2
+          WHERE sp2.race_id = re.race_id AND sp2.horse_id = sp.horse_id
+      )
+""", (race_id,))
 cur2.execute("""
     UPDATE stats_prediction sp
     SET image_path    = '/uploads/candidates/' || re.horse_id || '.jpg',
@@ -63,9 +79,9 @@ cur2.execute("""
     FROM race_entry re
     -- horse_name は表記揺れ・文字化けで不一致になりうるため horse_id で突合
     WHERE sp.horse_id = re.horse_id
-      AND sp.race_name  = %s
-      AND re.race_id = %s
-""", (race_name, race_id))
+      AND sp.race_id  = %s
+      AND re.race_id  = %s
+""", (race_id, race_id))
 print(f"  → {cur2.rowcount}頭の情報を反映")
 conn2.commit()
 cur2.close()
@@ -74,7 +90,7 @@ conn2.close()
 # 3. 顔面分析
 print("\n[3/3] 顔面分析を実行...")
 r2 = subprocess.run(
-    ['python3', os.path.join(script_dir, 'face_analyzer_local.py'), race_name],
+    ['python3', os.path.join(script_dir, 'face_analyzer_local.py'), race_name, race_id],
     cwd=script_dir
 )
 if r2.returncode != 0:

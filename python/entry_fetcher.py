@@ -373,8 +373,8 @@ def sync_with_latest_shutuba():
                             jockey_name  = re.jockey_name
                         FROM race_entry re
                         WHERE re.race_id = %s
-                          AND sp.race_name = re.race_name
-                          -- 表記揺れ・文字化けに強い horse_id で突合
+                          -- 開催・馬とも ID で突合（race_name/horse_name は表記揺れの温床）
+                          AND sp.race_id  = re.race_id
                           AND sp.horse_id = re.horse_id
                     """, (race_id,))
                     conn.commit()
@@ -396,10 +396,15 @@ def sync_with_latest_shutuba():
 
             # stats_prediction（現行）から除外馬を削除 → 残馬を再ランク付け
             if removed:
+                # 開催は race_id で特定（過去年の同名開催の行を誤って消さない）。
+                # 旧コード由来の race_id NULL 行（直近分のみ）も同名なら対象にする
                 cur.execute("""
                     DELETE FROM stats_prediction
-                    WHERE race_name = %s AND horse_name = ANY(%s)
-                """, (race_name, list(removed)))
+                    WHERE (race_id = %s
+                           OR (race_name = %s AND race_id IS NULL
+                               AND created_at > NOW() - INTERVAL '45 days'))
+                      AND horse_name = ANY(%s)
+                """, (race_id, race_name, list(removed)))
                 deleted_sp = cur.rowcount
                 if deleted_sp > 0:
                     print(f"  stats_prediction から {deleted_sp} 頭削除 → 再ランク付け")
@@ -410,12 +415,10 @@ def sync_with_latest_shutuba():
                             SELECT id,
                                    ROW_NUMBER() OVER (ORDER BY score DESC NULLS LAST) AS new_rank
                             FROM stats_prediction
-                            WHERE race_name = %s
-                              -- 同名レースの過去年の残存行を順位計算に混ぜない
-                              AND created_at > NOW() - INTERVAL '45 days'
+                            WHERE race_id = %s
                         ) sub
-                        WHERE sp.id = sub.id AND sp.race_name = %s
-                    """, (race_name, race_name))
+                        WHERE sp.id = sub.id AND sp.race_id = %s
+                    """, (race_id, race_id))
                     conn.commit()
                     print(f"  再ランク付け完了")
 

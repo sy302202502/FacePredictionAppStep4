@@ -43,6 +43,7 @@ def ensure_tables(conn):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS race_specific_accuracy (
             id SERIAL PRIMARY KEY,
+            race_id VARCHAR(20),
             race_name VARCHAR(200),
             horse_name VARCHAR(100),
             predicted_rank INTEGER,
@@ -316,6 +317,69 @@ def record_old_system(conn, race_name, actual_results):
     cur.close()
     return count
 
+def find_unrecorded_stats(conn):
+    """現行システム(stats_prediction)の予想があり、開催日を過ぎていて、
+    まだ的中記録(data_source='stats')がないレースを race_id 基準で列挙する。
+    race_id 突合なので年またぎ同名レースを誤って「記録済み」と判定しない。"""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT sp.race_id, MIN(re.race_name), MIN(re.race_date)
+        FROM stats_prediction sp
+        JOIN race_entry re ON re.race_id = sp.race_id
+        WHERE sp.race_id IS NOT NULL
+          AND re.race_date < CURRENT_DATE
+          AND NOT EXISTS (
+              SELECT 1 FROM race_specific_accuracy rsa
+              WHERE rsa.race_id = sp.race_id AND rsa.data_source = 'stats'
+          )
+        GROUP BY sp.race_id
+        ORDER BY MIN(re.race_date) DESC
+        LIMIT 30
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+def record_stats_system(conn, race_id, race_name, actual_results):
+    """stats_prediction(現行システム) → race_specific_accuracy に data_source='stats' で記録。
+    予想の取得・既存記録の置換とも race_id 基準（同名別開催の誤記録・二重計上を防ぐ）。"""
+    if not actual_results:
+        return 0
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT horse_name, rank_position, score
+        FROM stats_prediction
+        WHERE race_id = %s
+        ORDER BY rank_position
+    """, (race_id,))
+    predictions = cur.fetchall()
+    if not predictions:
+        cur.close()
+        return 0
+
+    top5_names    = [p[0] for p in predictions[:5]]
+    actual_winner = next((name for name, rank in actual_results.items() if rank == 1), None)
+    top5_hit      = actual_winner in top5_names if actual_winner else False
+    hit_1st       = (predictions[0][0] == actual_winner) if actual_winner else False
+
+    # 再実行時は同一開催の既存記録を置き換える（二重計上防止）
+    cur.execute("""
+        DELETE FROM race_specific_accuracy
+        WHERE race_id = %s AND data_source = 'stats'
+    """, (race_id,))
+    for horse_name, pred_rank, score in predictions:
+        actual_rank = actual_results.get(horse_name)
+        cur.execute("""
+            INSERT INTO race_specific_accuracy
+                (race_id, race_name, horse_name, predicted_rank, actual_rank,
+                 hit, top5_hit, score, data_source, recorded_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'stats',NOW())
+        """, (race_id, race_name, horse_name, pred_rank, actual_rank,
+              hit_1st and pred_rank == 1, top5_hit, score))
+    conn.commit()
+    cur.close()
+    return len(predictions)
+
 def record_new_system(conn, race_name, actual_results):
     """race_specific_result → race_specific_accuracy に記録"""
     if not actual_results:
@@ -376,9 +440,9 @@ def show_report(conn):
         print(f"\n  【旧システム予想】")
         print(f"  記録済み: {total}レース  1位的中:{wh}回({wh/total*100:.1f}%)  TOP5:{t5h}回({t5h/total*100:.1f}%)")
 
-    # 新システム
+    # 新システム（同名別年の開催を別レースとして数える: race_id優先）
     cur.execute("""
-        SELECT COUNT(DISTINCT race_name),
+        SELECT COUNT(DISTINCT COALESCE(race_id, race_name)),
                SUM(CASE WHEN hit=TRUE THEN 1 ELSE 0 END),
                SUM(CASE WHEN top5_hit=TRUE THEN 1 ELSE 0 END)
         FROM race_specific_accuracy
@@ -455,6 +519,27 @@ def main():
             winner = next((n for n, r in actual.items() if r == 1), '不明')
             print(f"    実際の1着: {winner}")
             n = record_new_system(conn, race_name, actual)
+            print(f"    → {n}件記録完了")
+            time.sleep(1.5)
+
+        # 現行システム（stats_prediction）の的中記録。
+        # race_id が予想時点で確定しているため、検索も記録も race_id 直指定。
+        stats_races = find_unrecorded_stats(conn)
+        print(f"\n現行システム(stats)未記録: {len(stats_races)}レース")
+
+        for race_id, race_name, race_date in stats_races:
+            print(f"\n  [{race_name}] {race_date} (race_id={race_id})")
+            if dry_run:
+                print(f"    [dry-run]")
+                continue
+            actual = scrape_actual_results(race_id)
+            if not actual:
+                print(f"    [スキップ] 結果取得失敗")
+                time.sleep(1)
+                continue
+            winner = next((n for n, r in actual.items() if r == 1), '不明')
+            print(f"    実際の1着: {winner}  ({len(actual)}頭分取得)")
+            n = record_stats_system(conn, race_id, race_name, actual)
             print(f"    → {n}件記録完了")
             time.sleep(1.5)
 

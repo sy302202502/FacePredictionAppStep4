@@ -82,12 +82,15 @@ public class StatsPredictionController {
                 "SELECT sp.horse_name, sp.horse_number, sp.jockey_name, sp.rank_position, sp.score, " +
                 "sp.score_detail, sp.comment, sp.image_path, sp.face_comment, sp.face_score " +
                 "FROM stats_prediction sp " +
+                // 馬は ID で厳密突合。開催は「この race_name の最新開催」に固定し、
+                // 予想行側は race_id 一致 or 未付与(旧コード由来のNULL)を許容する
                 "INNER JOIN race_entry re " +
-                "  ON re.race_name = sp.race_name AND re.horse_name = sp.horse_name " +
-                // 同名レースの過去開催分（別年）とJOINして二重表示にならないよう最新開催に限定
+                "  ON re.horse_id = sp.horse_id " +
                 " AND re.race_id = (SELECT race_id FROM race_entry WHERE race_name = sp.race_name " +
                 "                   ORDER BY race_date DESC, race_id DESC LIMIT 1) " +
-                "WHERE sp.race_name = ? ORDER BY sp.rank_position",
+                "WHERE sp.race_name = ? " +
+                "  AND (sp.race_id = re.race_id OR sp.race_id IS NULL) " +
+                "ORDER BY sp.rank_position",
                 selected);
 
             // score_detail JSON → Map に変換

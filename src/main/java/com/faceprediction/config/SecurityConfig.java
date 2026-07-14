@@ -27,7 +27,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
      *  HTMLフォームは th:action でCSRFトークンが自動付与されるため除外不要。 */
     private static final String[] XHR_ONLY_ENDPOINTS = {
         "/paddock/analyze",
-        "/script/odds-fetch", "/script/race-analyzer",
+        // /script 配下のPOSTは全てページ内 fetch(runScript等) から呼ばれる
+        "/script/**",
         "/stats-predict/run", "/stats-predict/run-face",
         "/weekly/run-pipeline"
         // /high-dividend/run-stream は GET(SSE) のため CSRF 対象外（除外不要）

@@ -152,9 +152,9 @@
         <!-- 操作バー -->
         <div class="action-bar">
             <span class="action-bar-text">出走馬を最新情報に更新してからカレンダーに反映されます</span>
-            <form method="post" th:action="@{/script/entries}" style="display:inline; margin:0;">
-                <button type="submit" class="btn btn-fire">REFRESH ENTRIES</button>
-            </form>
+            <!-- /script/** は XHRヘッダ必須(CSRF対策)のため fetch で呼ぶ -->
+            <button type="button" class="btn btn-fire"
+                    onclick="fetch('/script/entries', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(){ location.href='/script?started=entries'; })">REFRESH ENTRIES</button>
             <a href="/calendar" class="btn btn-muted">RELOAD</a>
         </div>
 

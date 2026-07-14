@@ -341,7 +341,9 @@
             const btn = document.getElementById(key + 'Btn');
             btn.disabled = true;
 
-            let url = '/script/' + key;
+            // キーは result_fetch / weight_learn 形式だがURLはハイフン区切り
+            // （従来は変換が無く /script/result_fetch へ404を投げてボタンが無反応だった）
+            let url = '/script/' + key.replace(/_/g, '-');
             let body = '';
             if (key === 'scraper') {
                 const y = document.getElementById('scraperYears').value;

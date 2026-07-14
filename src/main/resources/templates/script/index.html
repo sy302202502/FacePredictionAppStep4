@@ -287,7 +287,7 @@
             if (raceName) body = 'raceName=' + encodeURIComponent(raceName);
             fetch('/script/odds-fetch', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
                 body: body
             }).then(() => { openLog(key); updateBadge(key, true); });
         }
@@ -305,7 +305,7 @@
             const body = `raceName=${encodeURIComponent(raceName)}&years=${years}&supplement=${supp}`;
             fetch('/script/race-analyzer', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
                 body: body
             }).then(() => {
                 openLog(key);
@@ -353,7 +353,7 @@
 
             fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
                 body: body
             }).then(r => {
                 if (r.redirected || r.ok) {

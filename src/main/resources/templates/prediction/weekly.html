@@ -493,7 +493,7 @@ function runPipeline() {
     logPanel.style.display = 'block';
     logPanel.innerHTML = '';
 
-    fetch('/weekly/run-pipeline', { method: 'POST' })
+    fetch('/weekly/run-pipeline', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json())
         .then(data => {
             if (data.error) { addLog(data.error, 'log-err'); resetBtn(); return; }

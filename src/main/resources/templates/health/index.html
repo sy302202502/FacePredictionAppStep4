@@ -280,15 +280,6 @@
                 </div>
 
                 <div class="check-row">
-                    <span class="check-label">LINE Notify トークン</span>
-                    <div class="check-value">
-                        <span th:if="${lineTokenSet}"     class="badge badge-ok">✓ 設定済み</span>
-                        <span th:unless="${lineTokenSet}" class="badge badge-warn">△ 未設定</span>
-                        <span th:unless="${lineTokenSet}" class="check-info">（任意）</span>
-                    </div>
-                </div>
-
-                <div class="check-row">
                     <span class="check-label">Pythonスクリプトフォルダ</span>
                     <div class="check-value">
                         <span th:if="${scriptDirOk}"     class="badge badge-ok">✓ 存在する</span>

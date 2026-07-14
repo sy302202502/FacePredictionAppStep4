@@ -262,7 +262,7 @@
         <div class="section-heading">AUTO FETCH</div>
         <div class="glass-card">
             <div class="glass-card-inner">
-                <form method="post" action="/entry/fetch" class="fetch-bar">
+                <form method="post" th:action="@{/entry/fetch}" class="fetch-bar">
                     <div class="form-group">
                         <label class="form-label">レース名で絞り込み（省略可）</label>
                         <input type="text" name="query" placeholder="例: 日本ダービー" style="width: 200px;">

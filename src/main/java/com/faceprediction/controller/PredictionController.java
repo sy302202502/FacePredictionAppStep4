@@ -139,36 +139,5 @@ public class PredictionController {
         }
     }
 
-    // LINE通知（/prediction/notify?raceName=xxx）
-    @PostMapping("/notify")
-    public String sendLineNotify(
-            @RequestParam String raceName,
-            RedirectAttributes ra) {
-
-        String scriptPath = pythonScriptDir + File.separator + "notifier.py";
-        try {
-            ProcessBuilder pb = new ProcessBuilder("python3", scriptPath, "send", raceName);
-            pb.environment().put("PYTHONIOENCODING", "utf-8");
-            pb.redirectErrorStream(true);
-            pb.directory(new java.io.File(pythonScriptDir));
-            Process proc = pb.start();
-
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) sb.append(line).append("\n");
-            }
-            int exit = proc.waitFor();
-            if (exit == 0) {
-                ra.addFlashAttribute("notifySuccess", "LINE通知を送信しました ✅");
-            } else {
-                ra.addFlashAttribute("notifyError", "LINE送信失敗: " + sb.toString().trim());
-            }
-        } catch (Exception e) {
-            log.error("LINE通知送信中に例外が発生しました raceName={}", raceName, e);
-            ra.addFlashAttribute("notifyError", "LINE通知の送信に失敗しました");
-        }
-        return "redirect:/predict-v2?raceName=" + URLEncoder.encode(raceName, StandardCharsets.UTF_8);
-    }
+    // LINE通知エンドポイントは削除済み（LINE Notifyは2025-03サービス終了。通知はDiscordへ移行済み）
 }

@@ -50,10 +50,6 @@ public class HealthController {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         boolean apiKeySet = apiKey != null && apiKey.startsWith("sk-ant-") && apiKey.length() > 40;
 
-        // LINE_NOTIFY_TOKEN確認
-        String lineToken = System.getenv("LINE_NOTIFY_TOKEN");
-        boolean lineTokenSet = lineToken != null && lineToken.length() > 10;
-
         // Python スクリプトディレクトリ確認
         File scriptDir = new File(pythonScriptDir);
         boolean scriptDirOk = scriptDir.exists() && scriptDir.isDirectory();
@@ -84,7 +80,6 @@ public class HealthController {
         model.addAttribute("dbOk",          dbOk);
         model.addAttribute("dbError",        dbError);
         model.addAttribute("apiKeySet",      apiKeySet);
-        model.addAttribute("lineTokenSet",   lineTokenSet);
         model.addAttribute("scriptDirOk",    scriptDirOk);
         model.addAttribute("scriptDirPath",  pythonScriptDir);
         model.addAttribute("imgDirOk",       imgDirOk);

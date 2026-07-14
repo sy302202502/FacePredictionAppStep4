@@ -514,7 +514,7 @@
         // AJAX で分析開始
         fetch('/stats-predict/run', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
             body: 'raceName=' + encodeURIComponent(race)
         })
         .then(r => r.json())
@@ -579,7 +579,7 @@
 
         fetch('/stats-predict/run-face', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
             body: 'raceName=' + encodeURIComponent(raceName)
         })
         .then(r => r.json())

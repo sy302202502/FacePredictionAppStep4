@@ -475,7 +475,7 @@
 
         let key;
         try {
-            const res = await fetch('/paddock/analyze', { method: 'POST', body: fd });
+            const res = await fetch('/paddock/analyze', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
             const json = await res.json();
             if (json.error) { showError(json.error); resetBtn(); return; }
             key = json.key;

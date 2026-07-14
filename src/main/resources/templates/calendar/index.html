@@ -152,7 +152,7 @@
         <!-- 操作バー -->
         <div class="action-bar">
             <span class="action-bar-text">出走馬を最新情報に更新してからカレンダーに反映されます</span>
-            <form method="post" action="/script/entries" style="display:inline; margin:0;">
+            <form method="post" th:action="@{/script/entries}" style="display:inline; margin:0;">
                 <button type="submit" class="btn btn-fire">REFRESH ENTRIES</button>
             </form>
             <a href="/calendar" class="btn btn-muted">RELOAD</a>
@@ -219,11 +219,10 @@
                        th:href="@{/predict-v2(raceName=${ev.raceName})}"
                        class="btn btn-fire">ANALYZE</a>
 
-                    <form th:if="${ev.daysLeft <= 1 and !ev.isPast}"
-                          method="post" action="/script/odds-fetch" style="display:inline; margin:0;">
-                        <input type="hidden" name="raceName" th:value="${ev.raceName}">
-                        <button type="submit" class="btn btn-gold">GET ODDS</button>
-                    </form>
+                    <!-- /script/odds-fetch は XHRヘッダ必須(CSRF対策)のため fetch で呼ぶ -->
+                    <button th:if="${ev.daysLeft <= 1 and !ev.isPast}"
+                            type="button" class="btn btn-gold" th:attr="data-race=${ev.raceName}"
+                            onclick="fetch('/script/odds-fetch', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'}, body:'raceName='+encodeURIComponent(this.dataset.race)}).then(function(){ location.href='/script?started=odds_fetch'; })">GET ODDS</button>
 
                     <a th:if="${ev.isPast}"
                        href="/accuracy" class="btn btn-purple">ACCURACY</a>

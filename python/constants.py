@@ -65,17 +65,40 @@ def is_garbled(text):
     return bad >= 2 or (bad > 0 and bad / len(text) > 0.3)
 
 
+# コネクション再利用のための共有セッション（TLSハンドシェイク削減・netkeibaへの負荷軽減）
+_session = requests.Session()
+_session.headers.update(HEADERS)
+
+
 def fetch_with_retry(url, headers=None, timeout=15, retries=3, min_sleep=1.0, max_sleep=2.5):
-    """リトライ付きHTTP GETリクエスト。失敗時は指数バックオフで再試行する。"""
-    if headers is None:
-        headers = HEADERS
+    """リトライ付きHTTP GETリクエスト。
+    - 共有Sessionでコネクション再利用
+    - 429 は Retry-After ヘッダを尊重して待機
+    - 429以外の4xx（404等）はリトライしても結果が変わらないため即時失敗
+    - 5xx・ネットワークエラーは指数バックオフで再試行"""
     last_exc = None
     for attempt in range(retries):
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout)
+            resp = _session.get(url, headers=headers, timeout=timeout)
             resp.raise_for_status()
             polite_sleep(min_sleep, max_sleep)
             return resp
+        except requests.HTTPError as e:
+            last_exc = e
+            status = e.response.status_code if e.response is not None else 0
+            if status == 429:
+                # サーバ指示の待機時間を尊重（無ければバックオフ。上限120秒）
+                ra = e.response.headers.get('Retry-After', '')
+                wait = min(float(ra), 120.0) if ra.isdigit() else random.uniform(5.0, 10.0) * (attempt + 1)
+                print(f"  [429リトライ {attempt + 1}/{retries}] {wait:.0f}秒待機", flush=True)
+                time.sleep(wait)
+                continue
+            if 400 <= status < 500:
+                raise  # 4xxは再試行無意味（URL誤り・削除済みページ等）
+            if attempt < retries - 1:
+                wait = random.uniform(3.0, 6.0) * (attempt + 1)
+                print(f"  [リトライ {attempt + 1}/{retries}] {wait:.1f}秒後に再試行: {e}", flush=True)
+                time.sleep(wait)
         except Exception as e:
             last_exc = e
             if attempt < retries - 1:

@@ -1413,7 +1413,7 @@
             const body = `raceName=${encodeURIComponent(raceName)}&years=${years}&supplement=${supp}`;
             fetch('/script/race-analyzer', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
                 body: body
             }).then(resp => {
                 if (!resp.ok) {

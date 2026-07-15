@@ -18,6 +18,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # ── レース当日の出馬表同期（土日 11/13/15時: 取消馬の除外・馬番確定）──
 0 11,13,15 * * 6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/entry_fetcher.py --sync >> logs/sync_cron.log 2>&1
 
+# ── レース当日のオッズ更新（土日 9/11/13/15時: predict-v2のオッズバッジ用）──
+0 9,11,13,15 * * 6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/odds_fetcher.py >> logs/odds_cron.log 2>&1
+
 # ── 的中記録の自動取得（土日夜 + 毎朝10時: 未記録分のみ処理・冪等）──
 0 18,22 * * 6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/result_auto_fetcher.py >> logs/results_cron.log 2>&1
 0 10 * * * cd /opt/faceprediction && docker compose exec -T python python3 python/result_auto_fetcher.py >> logs/results_cron.log 2>&1

@@ -327,7 +327,10 @@ def find_unrecorded_stats(conn):
         FROM stats_prediction sp
         JOIN race_entry re ON re.race_id = sp.race_id
         WHERE sp.race_id IS NOT NULL
-          AND re.race_date < CURRENT_DATE
+          -- JST基準の「今日まで」を対象にする。CURRENT_DATE(サーバ=UTC)だと
+          -- 土日夜のcronで当日レースが対象外になり、記録が翌朝まで遅れる。
+          -- 当日でも結果未公開なら scrape が空を返しスキップ→次回再試行される。
+          AND re.race_date <= (NOW() AT TIME ZONE 'Asia/Tokyo')::date
           AND NOT EXISTS (
               SELECT 1 FROM race_specific_accuracy rsa
               WHERE rsa.race_id = sp.race_id AND rsa.data_source = 'stats'
@@ -369,13 +372,15 @@ def record_stats_system(conn, race_id, race_name, actual_results):
     """, (race_id,))
     for horse_name, pred_rank, score in predictions:
         actual_rank = actual_results.get(horse_name)
+        # top5_hit は手動記録(AccuracyController)と同じ規約で「上位5頭の行のみ」保存
         cur.execute("""
             INSERT INTO race_specific_accuracy
                 (race_id, race_name, horse_name, predicted_rank, actual_rank,
                  hit, top5_hit, score, data_source, recorded_at)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'stats',NOW())
         """, (race_id, race_name, horse_name, pred_rank, actual_rank,
-              hit_1st and pred_rank == 1, top5_hit, score))
+              hit_1st and pred_rank == 1,
+              top5_hit if pred_rank <= 5 else None, score))
     conn.commit()
     cur.close()
     return len(predictions)

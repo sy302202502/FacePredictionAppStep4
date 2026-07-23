@@ -43,7 +43,14 @@ OLLAMA_MODEL   = os.environ.get('OLLAMA_MODEL', 'llava:7b')
 GROQ_API_KEY   = os.environ.get('GROQ_API_KEY', '')
 GROQ_MODEL     = os.environ.get('GROQ_MODEL',  'meta-llama/llama-4-scout-17b-16e-instruct')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_MODEL   = os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash')
+# 既定は「エイリアス」を使う。世代固定名(gemini-2.0-flash 等)はGoogle側の
+# 提供終了で突然404になるため（2026-07に 2.5-flash 系が一斉に提供終了し
+# 顔面分析が全レース停止した実績あり）。エイリアスは常に現行モデルを指す。
+GEMINI_MODEL   = os.environ.get('GEMINI_MODEL', 'gemini-flash-latest')
+# 設定モデルが404(提供終了)/429(枠超過)のときに切り替える保険。
+GEMINI_FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest']
+# 実行中に「提供終了/枠超過」と判明したモデル。以降の呼び出しでは試さない。
+_GEMINI_DEAD_MODELS: set = set()
 OR_API_KEY     = os.environ.get('OPENROUTER_API_KEY', '')
 OR_MODEL       = os.environ.get('OPENROUTER_MODEL', 'meta-llama/llama-3.2-11b-vision-instruct')
 
@@ -135,13 +142,11 @@ def _call_groq(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | N
     return None
 
 
-def _call_gemini(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | None:
-    """Google Gemini Vision API (REST) — 429時に最大3回リトライ"""
-    if not GEMINI_API_KEY:
-        print("    [エラー] GEMINI_API_KEY が未設定です")
-        return None
+def _gemini_request(model: str, image_b64: str, prompt: str, mime: str):
+    """Gemini を1モデル分だけ叩く。戻り値: (テキスト, 状態)
+    状態は 'ok' / 'gone'(404=提供終了) / 'quota'(429) / 'error'"""
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}")
+           f"{model}:generateContent?key={GEMINI_API_KEY}")
     payload = {
         "contents": [{"parts": [
             {"inline_data": {"mime_type": mime, "data": image_b64}},
@@ -153,19 +158,52 @@ def _call_gemini(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str |
         try:
             resp = requests.post(url, json=payload,
                                  timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
+            if resp.status_code == 404:
+                print(f"    [提供終了] Gemini モデル {model} は利用できません")
+                return None, 'gone'
             if resp.status_code == 429:
                 wait = float(resp.headers.get('retry-after', 2 ** (attempt + 1)))
-                print(f"    [レート制限] Gemini 429: {wait:.0f}秒待機してリトライ ({attempt+1}/3)...")
+                print(f"    [レート制限] Gemini({model}) 429: {wait:.0f}秒待機してリトライ ({attempt+1}/3)...")
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
             candidates = resp.json().get('candidates', [])
             if not candidates:
-                return None
-            return candidates[0]['content']['parts'][0]['text']
+                return None, 'error'
+            return candidates[0]['content']['parts'][0]['text'], 'ok'
         except Exception as e:
-            print(f"    [llm エラー] Gemini: {e}")
-            return None
+            print(f"    [llm エラー] Gemini({model}): {e}")
+            return None, 'error'
+    return None, 'quota'
+
+
+def _call_gemini(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | None:
+    """Google Gemini Vision API (REST)。
+    設定モデルが提供終了(404)や枠超過(429)なら、エイリアスモデルへ自動で切り替える。
+    （モデル名の陳腐化・特定モデルの枠切れで顔面分析が全滅するのを防ぐ）"""
+    if not GEMINI_API_KEY:
+        print("    [エラー] GEMINI_API_KEY が未設定です")
+        return None
+
+    tried = []
+    for model in [GEMINI_MODEL] + [m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL]:
+        # 同一プロセス内で提供終了/枠超過と判明したモデルは即スキップする。
+        # （毎回リトライ待ちすると1頭あたり十数秒×数百頭を無駄にするため）
+        if model in _GEMINI_DEAD_MODELS:
+            continue
+        tried.append(model)
+        text, status = _gemini_request(model, image_b64, prompt, mime)
+        if status == 'ok':
+            if len(tried) > 1:
+                print(f"    [代替モデル成功] {model}")
+            return text
+        if status in ('gone', 'quota'):
+            _GEMINI_DEAD_MODELS.add(model)
+            print(f"    [以降スキップ] {model} は今回の実行では使用しません")
+            continue
+        return None  # 'error' は一時障害の可能性があるので他モデルを試さない
+    if tried:
+        print(f"    [Gemini] 全モデルで失敗: {', '.join(tried)}")
     return None
 
 
@@ -214,8 +252,15 @@ def _call_openrouter(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> s
 # 公開インターフェース
 # ──────────────────────────────────────────────
 
-# フォールバック順序: 設定プロバイダー → groq → gemini → openrouter → ollama
-_FALLBACK_ORDER = ['groq', 'gemini', 'openrouter', 'ollama']
+# フォールバック順序: ビジョン対応を優先する。
+# 【重要】Groq は2026-07時点で vision(画像入力)対応モデルの提供を終了しており、
+# 画像を送ると 404 になる（提供モデルはテキスト/音声のみ）。そのため既定順では
+# gemini を先頭にし、groq は最後尾に置く（将来 vision が復活した場合の保険）。
+_FALLBACK_ORDER = ['gemini', 'openrouter', 'ollama', 'groq']
+
+# 画像入力に対応していないプロバイダー。LLM_PROVIDER でこれが指定されていても
+# 画像分析では最後尾に回す（.env を触らずに復旧できるようにするため）。
+_VISION_INCAPABLE = {'groq'}
 
 def _call_provider(provider: str, image_b64: str, prompt: str, mime: str) -> str | None:
     if provider == 'groq':
@@ -256,8 +301,13 @@ def analyze_image(image_path: str, prompt: str, validator=None) -> str | None:
     with open(image_path, 'rb') as f:
         image_b64 = base64.b64encode(f.read()).decode()
 
-    # 設定プロバイダーを先頭に、残りをフォールバック順で試行
-    order = [PROVIDER] + [p for p in _FALLBACK_ORDER if p != PROVIDER]
+    # 設定プロバイダーを先頭に、残りをフォールバック順で試行。
+    # ただし vision 非対応のプロバイダー（現在の Groq）は設定されていても最後尾に回す。
+    # .env を書き換えなくても画像分析が通るようにするため（毎回404を踏むのを防ぐ）。
+    if PROVIDER in _VISION_INCAPABLE:
+        order = [p for p in _FALLBACK_ORDER if p != PROVIDER] + [PROVIDER]
+    else:
+        order = [PROVIDER] + [p for p in _FALLBACK_ORDER if p != PROVIDER]
     last_result = None
     for provider in order:
         if not _has_key(provider):

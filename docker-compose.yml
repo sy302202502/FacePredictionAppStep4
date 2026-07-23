@@ -54,7 +54,7 @@ services:
       GROQ_API_KEY:          ${GROQ_API_KEY:-}
       GROQ_MODEL:            ${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
       GEMINI_API_KEY:        ${GEMINI_API_KEY:-}
-      GEMINI_MODEL:          ${GEMINI_MODEL:-gemini-2.0-flash}
+      GEMINI_MODEL:          ${GEMINI_MODEL:-gemini-flash-latest}
       OPENROUTER_API_KEY:    ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL:      ${OPENROUTER_MODEL:-meta-llama/llama-3.2-11b-vision-instruct}
       UPLOAD_DIR:            /data/uploads

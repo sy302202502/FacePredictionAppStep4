@@ -7,8 +7,11 @@
 #
 #     cd /opt/faceprediction && git pull && bash deploy/vps_deploy.sh
 #
-# python コンテナ（cron実行環境）は触らない。Pythonスクリプトは
-# ./python がボリュームマウントなので git pull だけで反映される。
+# 【重要・訂正】python コンテナは ./python のバインドマウントを持たない。
+# コードは Dockerfile.python の COPY でイメージに焼き込まれるため、
+# git pull だけでは cron の実行コードは更新されない。Pythonを直した場合は
+#     docker compose build python && docker compose up -d python
+# が必須。このスクリプトは app のみを更新する。
 # ============================================================
 set -euo pipefail
 

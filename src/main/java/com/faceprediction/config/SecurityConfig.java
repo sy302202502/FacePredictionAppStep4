@@ -59,7 +59,9 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/actuator/health").permitAll()
                 .antMatchers("/", "/stats-predict", "/weekly", "/predict-v2",
                              "/calendar", "/horse", "/horse/**",
-                             "/high-dividend", "/accuracy").permitAll()
+                             // 万馬券チャレンジは閲覧のみ公開（厳選実行 /run-stream は下でADMIN必須のまま）
+                             "/high-dividend", "/high-dividend/result",
+                             "/accuracy").permitAll()
                 // 管理機能はADMINロール必須
                 .antMatchers("/script/**", "/health/**", "/entry/**", "/paddock/**",
                              "/accuracy/record", "/accuracy/record-v2",

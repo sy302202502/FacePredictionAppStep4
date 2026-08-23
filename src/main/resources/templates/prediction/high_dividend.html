@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
     <meta charset="UTF-8">
@@ -298,8 +298,9 @@
         <div class="hd-badge">🎯 HIGH DIVIDEND</div>
     </div>
 
-    <!-- 厳選ボタンエリア（python3が使えない環境=本番appコンテナでは非表示。cronが自動実行） -->
-    <div th:if="${scriptExecAvailable}">
+    <!-- 厳選ボタンエリア（python3が使えない環境=本番appコンテナでは非表示。cronが自動実行）
+         /run-stream はADMIN必須のため、未ログイン時は表示しない（401でBasic認証ダイアログが出るのを防ぐ） -->
+    <div th:if="${scriptExecAvailable}" sec:authorize="isAuthenticated()">
     <div class="section-heading">RACE SELECTION</div>
     <div class="glass-card">
         <div class="glass-card-inner">

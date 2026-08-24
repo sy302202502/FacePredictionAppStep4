@@ -9,9 +9,11 @@ Claude Vision API は一切使用しない。
   2. G1/G2 好走実績 (15pt)
   3. 同距離±200m 勝率 (15pt)
   4. 芝/ダート 適性 (10pt)
-  5. 重馬場適性 (本日の馬場状態に応じて加点) (10pt)
+  5. 馬場状態適性 (10pt)  ← 当日の馬場（確定 or 前日天気からの予測）で評価軸を切替
   6. 調教評価 (15pt)  ← netkeiba 追い切り評価ランク(S/A〜E)
   7. 血統適性 (10pt)  ← 父・母父の距離/馬場適性と今回条件の合致
+  ── 上記の合計100pt に対して ──
+  8. 展開補正 (±5pt)  ← 出走各馬の脚質から想定ペースを出し、有利不利を加減算
 
 使い方:
   python stats_predictor.py 大阪杯
@@ -24,6 +26,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
 from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba
+from race_condition import resolve_condition
+from pace_analyzer import running_style, predict_pace, pace_adjustment
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -384,6 +388,11 @@ def fetch_horse_results(horse_id, horse_name):
                     'distance':  int(re.sub(r'\D','', cols[14])) if re.search(r'\d', cols[14]) else 2000,
                     'surface':   '芝' if cols[14].startswith('芝') else 'ダート',
                     'condition': cols[16] if len(cols) > 16 else '良',
+                    # 以下は同じテーブルに元から含まれる列（追加リクエストなし）
+                    'weather':   cols[2]  if len(cols) > 2  else '',
+                    'passing':   cols[25] if len(cols) > 25 else '',   # 通過順位 例:13-12-12-7
+                    'pace':      cols[26] if len(cols) > 26 else '',   # 例:37.1-33.4
+                    'agari':     cols[27] if len(cols) > 27 else '',   # 上がり3F
                     'grade':     'G1' if 'GI)' in cols[4] and 'GII' not in cols[4] else
                                  'G2' if 'GII)' in cols[4] else
                                  'G3' if 'GIII)' in cols[4] else 'OP',
@@ -398,8 +407,44 @@ def fetch_horse_results(horse_id, horse_name):
 # ----------------------------------------------------------------
 # スコア計算
 # ----------------------------------------------------------------
+WET_LABELS = ('稍重', '重', '不良')
+COND_NEUTRAL = 5.0   # 馬場適性の中立点
+COND_FULL_N  = 5     # この走数で満額評価。これ未満は中立へ寄せる
+
+
+def calc_condition_pt(results, today_condition):
+    """馬場状態適性 (10pt)。当日の馬場に応じて評価する実績を切り替える。
+
+    旧実装は today_condition を一切見ておらず、良馬場のレースでも
+    「道悪巧者」が無条件に加点されていた（docstringの仕様と不一致）。
+    馬場が特定できない場合のみ、従来どおり中立点を返す。
+    """
+    if today_condition in WET_LABELS:
+        target, label = [r for r in results if r['condition'] in WET_LABELS], f'道悪({today_condition})'
+    elif today_condition == '良':
+        target, label = [r for r in results if r['condition'] == '良'], '良馬場'
+    else:
+        return 5.0, '馬場不明 → 中立5.0pt'
+
+    if not target:
+        return 3.5, f'{label}実績なし → 3.5pt'
+
+    wins = sum(1 for r in target if r['rank'] == 1)
+    top3 = sum(1 for r in target if r['rank'] <= 3)
+    rate = top3 / len(target)
+    raw  = min(10.0, wins * 5 + rate * 7)
+
+    # 少ないサンプルの複勝率は当てにならない（2走100%など）。
+    # 実績数がCOND_FULL_Nに満たない分は中立点(5.0)へ寄せる。
+    conf = min(1.0, len(target) / COND_FULL_N)
+    pt   = COND_NEUTRAL + (raw - COND_NEUTRAL) * conf
+    note = '' if conf >= 1.0 else f'・{len(target)}走のみのため中立寄せ'
+    return round(pt, 1), (f'{label} {len(target)}走 {wins}勝 複勝率{rate:.0%}'
+                          f'{note} → {pt:.1f}pt')
+
+
 def calc_score(results, target_distance, target_surface,
-               training=None, blood=None):
+               training=None, blood=None, today_condition=None):
     """
     0〜100点のスコアと詳細コメントを返す
     training: fetch_oikiri_data() の1頭分 dict or None
@@ -460,16 +505,9 @@ def calc_score(results, target_distance, target_surface,
             detail['馬場適性'] = f"{target_surface}実績なし → 3.5pt"
 
         # ── 5. 馬場状態適性 (10pt) ──────────────────────
-        all_wet  = [r for r in results if r['condition'] in ('稍重','重','不良')]
-        wet_wins = sum(1 for r in all_wet if r['rank'] == 1)
-        wet_top3 = sum(1 for r in all_wet if r['rank'] <= 3)
-        if all_wet:
-            wet_rate = wet_top3 / len(all_wet)
-            wet_pt   = min(10.0, wet_wins * 5 + wet_rate * 7)
-        else:
-            wet_pt = 3.5
-        score += wet_pt
-        detail['稍重適性'] = f"稍重以上 {len(all_wet)}走 {wet_wins}勝 → {wet_pt:.0f}pt"
+        cond_pt, cond_desc = calc_condition_pt(results, today_condition)
+        score += cond_pt
+        detail['馬場状態適性'] = cond_desc
 
     # ── 6. 調教評価 (15pt) ──────────────────────────
     train_pt, train_desc = calc_training_pt(training)
@@ -487,9 +525,10 @@ def calc_score(results, target_distance, target_surface,
     score = round(min(100.0, max(0.0, score)), 1)
     if not results:
         return score, detail, "過去成績データなし（調教・血統のみで評価）"
-    return score, detail, build_comment(results, target_distance, target_surface, detail)
+    return score, detail, build_comment(results, target_distance, target_surface,
+                                        detail, today_condition)
 
-def build_comment(results, dist, surf, detail):
+def build_comment(results, dist, surf, detail, today_condition=None):
     parts = []
     recent5 = results[:5]
     if recent5:
@@ -509,12 +548,20 @@ def build_comment(results, dist, surf, detail):
     elif dist_wins == 1:
         parts.append("この距離での勝利実績あり")
 
-    wet = [r for r in results if r['condition'] in ('稍重','重','不良')]
-    wet_wins = len([r for r in wet if r['rank']==1])
-    if wet_wins >= 1:
-        parts.append(f"稍重以上で{wet_wins}勝と馬場適性高い")
-    elif wet and all(r['rank'] >= 5 for r in wet):
-        parts.append("稍重以上の成績は良くない")
+    # 馬場コメントは当日の馬場に関係するときだけ出す。
+    # （良馬場の日に「稍重以上の成績は良くない」と書いても判断材料にならない）
+    if today_condition in WET_LABELS:
+        wet = [r for r in results if r['condition'] in WET_LABELS]
+        wet_wins = len([r for r in wet if r['rank'] == 1])
+        if wet_wins >= 1:
+            parts.append(f"道悪で{wet_wins}勝と{today_condition}向き")
+        elif len(wet) >= 2 and all(r['rank'] >= 5 for r in wet):
+            parts.append(f"道悪{len(wet)}走はいずれも掲示板外で{today_condition}は不安")
+    elif today_condition == '良':
+        firm = [r for r in results if r['condition'] == '良']
+        firm_wins = len([r for r in firm if r['rank'] == 1])
+        if firm_wins >= 2:
+            parts.append(f"良馬場で{firm_wins}勝と良績")
 
     g1_wins = len([r for r in results if r['grade']=='G1' and r['rank']==1])
     if g1_wins >= 1:
@@ -575,6 +622,13 @@ def main():
     print(f"レース条件: {target_distance}m {target_surface} ({race_date})\n")
     print(f"出走馬: {len(entries)}頭\n")
 
+    # 馬場状態を確定（当日）または前日天気から予測（前日以前）
+    cond_info = resolve_condition(race_id, race_date)
+    today_condition = cond_info['condition']
+    print(f"馬場: {today_condition or '不明'}"
+          f"（{cond_info['source']} / 確度{cond_info['confidence']}）")
+    print(f"      {cond_info['reason']}\n")
+
     # 調教評価をレース単位で一括取得（1リクエスト）
     oikiri = fetch_oikiri_data(race_id)
     if oikiri:
@@ -598,15 +652,48 @@ def main():
         blood   = fetch_blood(horse_id)
         score, detail, comment = calc_score(results, target_distance or 2000, target_surface or '芝',
                                             training=oikiri.get(horse_name),
-                                            blood=blood)
-        print(f"    スコア: {score:.1f}点 | {comment}")
+                                            blood=blood,
+                                            today_condition=today_condition)
+        style_info = running_style(results)
+        if style_info:
+            detail['脚質'] = (f"{style_info['style']}（直近{style_info['samples']}走の平均通過"
+                             f"{style_info['ratio']:.0%}"
+                             + (f"・上がり平均{style_info['agari']}秒" if style_info['agari'] else '')
+                             + "）")
+        print(f"    基礎スコア: {score:.1f}点"
+              f"{' / ' + style_info['style'] if style_info else ''} | {comment}")
         scored.append({
             'horse_name': horse_name, 'horse_id': horse_id,
             'horse_num': horse_num,  'jockey': jockey,
             'score': score, 'detail': detail, 'comment': comment,
             'results_count': len(results),
+            'style': style_info,
         })
         polite_sleep(1.5, 3.0)
+
+    # ── 2パス目: 全頭の脚質が出そろってから展開を想定し、補正を適用 ──
+    pace_info = predict_pace([h['style']['style'] if h.get('style') else None for h in scored])
+    c = pace_info['counts']
+    print(f"\n展開想定: {pace_info['pace']}"
+          f"（逃げ{c['逃げ']}・先行{c['先行']}・差し{c['差し']}・追込{c['追込']}）")
+    print(f"          {pace_info['reason']}\n")
+
+    # レース単位の前提（馬場・想定ペース）は各馬のdetailにも入れておく。
+    # 画面の SCORE DETAIL と、レース見出しのバナー表示の両方で使う。
+    cond_label = (f"{today_condition}（{cond_info['source']}）" if today_condition
+                  else f"不明（{cond_info['reason']}）")
+    pace_label = (f"{pace_info['pace']}（逃げ{c['逃げ']}・先行{c['先行']}"
+                  f"・差し{c['差し']}・追込{c['追込']}）")
+
+    for h in scored:
+        st = h['style']['style'] if h.get('style') else None
+        adj, adj_desc = pace_adjustment(st, pace_info['pace'],
+                                        target_surface, today_condition)
+        h['detail']['当日馬場']   = cond_label
+        h['detail']['想定ペース'] = pace_label
+        h['detail']['展開']       = adj_desc
+        h['pace_adjust'] = adj
+        h['score'] = round(h['score'] + adj, 1)
 
     # 順位付け
     scored.sort(key=lambda x: x['score'], reverse=True)

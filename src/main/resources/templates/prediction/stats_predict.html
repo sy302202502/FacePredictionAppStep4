@@ -213,6 +213,19 @@
         }
 
         /* Detail toggle */
+        .race-context {
+            display: flex; flex-wrap: wrap; gap: 10px;
+            margin: 0 0 14px; padding: 10px 14px;
+            background: rgba(125,255,79,0.05);
+            border: 1px solid rgba(125,255,79,0.16); border-radius: 8px;
+            font-size: 13px;
+        }
+        .race-context .rc-item { display: flex; align-items: center; gap: 6px; }
+        .race-context .rc-label {
+            color: var(--text-muted); opacity: 0.65; font-size: 11px;
+            letter-spacing: 0.08em;
+        }
+        .race-context .rc-value { color: var(--neon); font-weight: 700; }
         .detail-toggle {
             font-family: 'Bebas Neue', sans-serif;
             font-size: 11px;
@@ -399,6 +412,19 @@
         <div th:if="${!results.isEmpty()}">
             <div class="section-heading">
                 <span th:text="${selectedRace}"></span> PREDICTION
+            </div>
+
+            <!-- レース単位の前提（当日馬場・想定ペース）。予想の読み筋がここで分かる -->
+            <div class="race-context"
+                 th:if="${results[0].detail != null and results[0].detail['当日馬場'] != null}">
+                <div class="rc-item">
+                    <span class="rc-label">馬場</span>
+                    <span class="rc-value" th:text="${results[0].detail['当日馬場']}"></span>
+                </div>
+                <div class="rc-item" th:if="${results[0].detail['想定ペース'] != null}">
+                    <span class="rc-label">想定ペース</span>
+                    <span class="rc-value" th:text="${results[0].detail['想定ペース']}"></span>
+                </div>
             </div>
 
             <div class="glass-card">

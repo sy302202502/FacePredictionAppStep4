@@ -106,15 +106,48 @@ def _netkeiba_session():
         pass
     return s
 
+LOGIN_PAGE = 'https://regist.netkeiba.com/account/?pid=login'
+
+
+def _login_form(s):
+    """ログインページを読み、フォームの送信先と hidden 値を実際のHTMLから拾う。
+
+    netkeibaは告知なくログインフォームを変更する（2026-08に送信先が
+    /account/ → / に、フィールドが return_url2/mem_tp → rtn_url に変わり、
+    ハードコードしていた旧実装は静かに失敗し続けていた）。
+    毎回HTMLから読むことで、次に変わっても追随できる。
+    返り値 (action_url, payload_dict) / 見つからなければ (None, None)。
+    """
+    from urllib.parse import urljoin
+    r = s.get(LOGIN_PAGE, timeout=15)
+    soup = BeautifulSoup(decode_netkeiba(r), 'lxml')
+    for form in soup.find_all('form'):
+        if not form.find('input', {'name': 'pswd'}):
+            continue
+        action = urljoin(r.url, form.get('action') or r.url)
+        payload = {}
+        for inp in form.find_all('input'):
+            name = inp.get('name')
+            if name:
+                payload[name] = inp.get('value') or ''
+        return action, payload
+    return None, None
+
+
 def _netkeiba_login(s):
     """プレミアムログイン。成功時 True。失敗は Discord に警告。"""
     if not NETKEIBA_ID or not NETKEIBA_PW:
         return False
     try:
-        r = s.post('https://regist.netkeiba.com/account/', data={
-            'pid': 'login', 'action': 'auth', 'return_url2': '', 'mem_tp': '',
-            'login_id': NETKEIBA_ID, 'pswd': NETKEIBA_PW,
-        }, timeout=15)
+        action, payload = _login_form(s)
+        if not action:
+            print("  [警告] ログインフォームを解析できませんでした")
+            _notify_discord("⚠️ **netkeibaログインフォームを解析できません**\n"
+                            "サイト構造が変わった可能性があります。")
+            return False
+        payload['login_id'] = NETKEIBA_ID
+        payload['pswd'] = NETKEIBA_PW
+        r = s.post(action, data=payload, timeout=15)
         ok = any(c.name == 'nkauth' for c in s.cookies)
         if ok:
             with open(_COOKIE_FILE, 'wb') as f:

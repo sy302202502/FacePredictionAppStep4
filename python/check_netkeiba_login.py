@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 from constants import HEADERS          # ← 本番と同じUAを使う
-from stats_predictor import _parse_oikiri_page
+from stats_predictor import _parse_oikiri_page, _login_form, _netkeiba_login
 
 RACE_ID = sys.argv[1] if len(sys.argv) > 1 else '202602011010'
 URL = f'https://race.netkeiba.com/race/oikiri.html?race_id={RACE_ID}'
@@ -52,19 +52,17 @@ except Exception as e:
     d0 = {}
 
 # ── 3. ログイン（1回だけ）──
+# 本番と同じ経路を使う。フォームの送信先とhidden値はHTMLから毎回読む方式。
 print("\n[ログイン試行] ※1回のみ")
-r = s.post('https://regist.netkeiba.com/account/', data={
-    'pid': 'login', 'action': 'auth', 'return_url2': '', 'mem_tp': '',
-    'login_id': uid, 'pswd': pw,
-}, timeout=20, allow_redirects=True)
-txt = r.content.decode('euc-jp', 'ignore')
-print(f"  HTTP {r.status_code} / 最終URL {r.url}")
+action, payload = _login_form(s)
+if action:
+    print(f"  フォーム送信先: {action}")
+    print(f"  フィールド    : {sorted(payload.keys())}")
+else:
+    print("  ⚠ ログインフォームを解析できません（サイト構造の変更を疑う）")
+ok = _netkeiba_login(s)
 print(f"  cookies: {sorted(c.name for c in s.cookies)}")
-print(f"  nkauth : {any(c.name == 'nkauth' for c in s.cookies)}")
-for kw in ['パスワード', 'メールアドレス', '一致しません', '違います', 'ロック', '再度']:
-    if kw in txt:
-        m = re.search(r'.{0,40}' + kw + r'.{0,40}', txt)
-        print(f"  ⚠ 文言検出[{kw}]: {m.group(0).strip() if m else ''}")
+print(f"  nkauth : {ok}")
 
 # ── 4. ログイン後のパース ──
 r2 = s.get(URL, timeout=20); r2.encoding = 'EUC-JP'

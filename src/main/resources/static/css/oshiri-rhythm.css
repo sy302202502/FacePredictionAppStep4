@@ -1,0 +1,473 @@
+/* ============================================================
+   舞鬼法師 リズムゲーム「まいきーおしりビート」
+   VTuber配信オーバーレイ × 格闘ゲームHP × サイバーパンク
+   ============================================================ */
+
+.orb-root {
+    --orb-neon:    #7dff4f;
+    --orb-orange:  #ff8000;
+    --orb-purple:  #8b5cf6;
+    --orb-gold:    #c9a84c;
+    --orb-gold-lt: #f5d878;
+    --orb-crimson: #ff2244;
+    --orb-pink:    #ff5fa2;
+    --orb-deep:    #050708;
+    --orb-text:    #d4e8cc;
+
+    /* JSから書き換えるレイアウト変数 */
+    --orb-hit-y: 78%;      /* 判定ラインのY位置 */
+    --orb-lane-w: 25%;
+}
+
+/* ---------- ステージ（縦持ちスマホ比） ---------- */
+.orb-stage {
+    position: relative;
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+    aspect-ratio: 9 / 16;
+    border-radius: 14px;
+    overflow: hidden;
+    background:
+        radial-gradient(ellipse at 50% 20%, rgba(139,92,246,0.30) 0%, transparent 60%),
+        radial-gradient(ellipse at 50% 95%, rgba(255,95,162,0.22) 0%, transparent 55%),
+        linear-gradient(180deg, #10071c 0%, #060409 55%, #12060f 100%);
+    border: 1px solid rgba(201,168,76,0.30);
+    box-shadow: 0 0 40px rgba(139,92,246,0.25), inset 0 0 60px rgba(0,0,0,0.8);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    font-family: 'Noto Sans JP', sans-serif;
+}
+/* 旧ブラウザ向け aspect-ratio フォールバック */
+@supports not (aspect-ratio: 9 / 16) {
+    .orb-stage { height: 76vh; }
+}
+.orb-stage.orb-shake { animation: orb-shake 0.16s ease-out; }
+@keyframes orb-shake {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(-3px, 2px); }
+    50%  { transform: translate(3px, -2px); }
+    75%  { transform: translate(-2px, -1px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* ---------- キャラクター（まいきー） ---------- */
+.orb-chara {
+    position: absolute;
+    left: 50%;
+    bottom: 14%;
+    width: 78%;
+    transform: translateX(-50%);
+    opacity: 0.42;
+    filter: drop-shadow(0 0 18px rgba(139,92,246,0.55));
+    pointer-events: none;
+    transition: opacity 0.4s;
+    z-index: 1;
+}
+.orb-chara.orb-bounce { animation: orb-bounce 0.22s ease-out; }
+@keyframes orb-bounce {
+    0%   { transform: translateX(-50%) scale(1) rotate(0deg); }
+    35%  { transform: translateX(-50%) scale(1.07, 0.93) rotate(-1.5deg); }
+    70%  { transform: translateX(-50%) scale(0.97, 1.04) rotate(1.5deg); }
+    100% { transform: translateX(-50%) scale(1) rotate(0deg); }
+}
+
+/* ---------- レーン ---------- */
+.orb-lanes {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    z-index: 2;
+}
+.orb-lane {
+    position: relative;
+    border-left: 1px solid rgba(201,168,76,0.16);
+    background: linear-gradient(180deg, rgba(255,255,255,0.015) 0%, rgba(255,255,255,0.05) 100%);
+}
+.orb-lane:last-child { border-right: 1px solid rgba(201,168,76,0.16); }
+.orb-lane.orb-lane-lit::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 40%, rgba(255,95,162,0.35) 100%);
+    animation: orb-fade 0.28s ease-out forwards;
+    pointer-events: none;
+}
+@keyframes orb-fade { from { opacity: 1; } to { opacity: 0; } }
+
+/* ---------- 判定ライン & 叩きパッド ---------- */
+.orb-hitline {
+    position: absolute;
+    left: 0; right: 0;
+    top: var(--orb-hit-y);
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(255,95,162,0.85), rgba(201,168,76,0.85), rgba(255,95,162,0.85), transparent);
+    box-shadow: 0 0 14px rgba(255,95,162,0.7);
+    z-index: 3;
+    pointer-events: none;
+}
+.orb-pads {
+    position: absolute;
+    left: 0; right: 0;
+    top: var(--orb-hit-y);
+    transform: translateY(-50%);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    z-index: 4;
+}
+.orb-pad {
+    display: flex; align-items: center; justify-content: center;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+    width: 74%;
+    border-radius: 50%;
+    font-size: 26px;
+    cursor: pointer;
+    border: 3px solid rgba(201,168,76,0.75);
+    background: radial-gradient(circle at 50% 45%, rgba(255,95,162,0.30), rgba(20,10,20,0.55) 72%);
+    box-shadow: 0 0 16px rgba(201,168,76,0.45), inset 0 0 18px rgba(255,95,162,0.25);
+    transition: transform 0.08s ease-out, box-shadow 0.12s;
+}
+@supports not (aspect-ratio: 1 / 1) {
+    .orb-pad { height: 58px; width: 58px; }
+}
+.orb-pad.orb-pad-hit {
+    transform: scale(0.86);
+    box-shadow: 0 0 34px rgba(255,95,162,0.95), inset 0 0 26px rgba(255,255,255,0.5);
+}
+.orb-pad-key {
+    position: absolute;
+    margin-top: 58px;
+    font-size: 10px; letter-spacing: 1px;
+    color: rgba(212,232,204,0.45);
+    font-weight: 700;
+    pointer-events: none;
+}
+@media (max-width: 560px) { .orb-pad-key { display: none; } }
+
+/* ---------- ノーツ ---------- */
+.orb-note {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 70%;
+    aspect-ratio: 1 / 1;
+    margin-left: -35%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.55);
+    background: radial-gradient(circle at 50% 40%, rgba(255,255,255,0.85), rgba(139,92,246,0.55) 70%);
+    box-shadow: 0 0 14px rgba(255,255,255,0.5);
+    will-change: transform;
+    pointer-events: none;
+}
+@supports not (aspect-ratio: 1 / 1) {
+    .orb-note { height: 54px; width: 54px; margin-left: -27px; }
+}
+.orb-note.orb-note-gold {
+    border-color: rgba(245,216,120,0.9);
+    background: radial-gradient(circle at 50% 40%, #fff6d0, rgba(201,168,76,0.75) 70%);
+    box-shadow: 0 0 20px rgba(245,216,120,0.85);
+}
+
+/* ---------- 中央HUD（PERFECT / コンボ） ---------- */
+.orb-center {
+    position: absolute;
+    left: 0; right: 0;
+    top: 38%;
+    text-align: center;
+    z-index: 5;
+    pointer-events: none;
+}
+.orb-judge {
+    font-family: 'Bebas Neue', 'Noto Sans JP', sans-serif;
+    font-size: 42px;
+    letter-spacing: 3px;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 0 18px currentColor, 0 3px 0 rgba(0,0,0,0.6);
+    opacity: 0;
+}
+.orb-judge.orb-pop { animation: orb-pop 0.42s ease-out; }
+@keyframes orb-pop {
+    0%   { opacity: 0; transform: scale(0.6); }
+    25%  { opacity: 1; transform: scale(1.15); }
+    70%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1); }
+}
+.orb-j-perfect { color: #ff8fd0; }
+.orb-j-great   { color: var(--orb-neon); }
+.orb-j-good    { color: var(--orb-gold-lt); }
+.orb-j-miss    { color: var(--orb-crimson); }
+
+.orb-combo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    color: #fff;
+    line-height: 1;
+    margin-top: 4px;
+    text-shadow: 0 0 20px rgba(255,95,162,0.9), 0 3px 0 rgba(0,0,0,0.7);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.orb-combo.orb-on { opacity: 1; }
+.orb-combo.orb-beat { animation: orb-beat 0.18s ease-out; }
+@keyframes orb-beat {
+    0% { transform: scale(1.28); } 100% { transform: scale(1); }
+}
+.orb-combo-label { display: block; font-size: 12px; letter-spacing: 4px; color: rgba(255,255,255,0.6); font-family: 'Noto Sans JP', sans-serif; }
+
+/* ---------- FEVER TIME ---------- */
+.orb-fever {
+    position: absolute;
+    left: 0; right: 0;
+    top: 58%;
+    text-align: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    line-height: 0.92;
+    letter-spacing: 3px;
+    color: var(--orb-gold-lt);
+    text-shadow: 0 0 22px rgba(255,128,0,0.95), 0 4px 0 #7a3d00;
+    z-index: 5;
+    display: none;
+    pointer-events: none;
+    animation: orb-fever-pulse 0.5s ease-in-out infinite alternate;
+}
+.orb-fever.orb-on { display: block; }
+@keyframes orb-fever-pulse {
+    from { transform: scale(1); }
+    to   { transform: scale(1.06); }
+}
+.orb-stage.orb-fevering {
+    box-shadow: 0 0 60px rgba(255,128,0,0.55), inset 0 0 80px rgba(255,128,0,0.18);
+}
+.orb-stage.orb-fevering .orb-lane {
+    background: linear-gradient(180deg, rgba(255,128,0,0.05) 0%, rgba(255,128,0,0.16) 100%);
+}
+.orb-rain { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; display: none; }
+.orb-stage.orb-fevering .orb-rain { display: block; }
+.orb-rain span {
+    position: absolute; top: -12%;
+    width: 2px; height: 44px;
+    background: linear-gradient(180deg, transparent, rgba(255,214,140,0.75));
+    animation: orb-rain-fall linear infinite;
+}
+@keyframes orb-rain-fall { to { transform: translateY(140vh); } }
+
+/* ---------- 上部HUD（HP・スコア） ---------- */
+.orb-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 10px 12px 14px;
+    z-index: 6;
+    background: linear-gradient(180deg, rgba(0,0,0,0.7), transparent);
+}
+.orb-top-row { display: flex; align-items: center; gap: 8px; }
+.orb-btn-icon {
+    flex-shrink: 0;
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(125,255,79,0.45);
+    background: rgba(10,20,10,0.7);
+    color: var(--orb-neon);
+    font-size: 13px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.orb-btn-icon:hover { background: rgba(125,255,79,0.14); }
+.orb-hp-wrap { flex: 1; }
+.orb-hp-track {
+    height: 12px;
+    border: 1px solid rgba(201,168,76,0.55);
+    border-radius: 3px;
+    background: rgba(0,0,0,0.65);
+    overflow: hidden;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.9);
+}
+.orb-hp-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--orb-neon), var(--orb-gold-lt));
+    box-shadow: 0 0 12px rgba(125,255,79,0.7);
+    transition: width 0.25s ease-out, background 0.3s;
+}
+.orb-hp-fill.orb-hp-low {
+    background: linear-gradient(90deg, var(--orb-crimson), var(--orb-orange));
+    box-shadow: 0 0 14px rgba(255,34,68,0.85);
+}
+.orb-meta {
+    display: flex; justify-content: space-between;
+    margin-top: 5px;
+    font-size: 11px; letter-spacing: 1px;
+    color: rgba(212,232,204,0.75);
+}
+.orb-score { font-family: 'Bebas Neue', sans-serif; font-size: 19px; color: var(--orb-gold-lt); letter-spacing: 2px; }
+
+/* 配信風バッジ */
+.orb-live {
+    display: inline-block;
+    font-size: 9px; font-weight: 900; letter-spacing: 1px;
+    padding: 1px 6px; border-radius: 3px; margin-right: 3px;
+    background: var(--orb-crimson);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(255,34,68,0.7);
+    animation: orb-live-blink 1.4s ease-in-out infinite;
+}
+@keyframes orb-live-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+.orb-nameplate {
+    position: absolute; left: 12px; bottom: 10px;
+    z-index: 6;
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px 5px 6px;
+    border-radius: 20px;
+    background: rgba(0,0,0,0.72);
+    border: 1px solid rgba(201,168,76,0.35);
+    font-size: 12px; font-weight: 700;
+    color: var(--orb-gold-lt);
+}
+.orb-nameplate img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.orb-mute {
+    position: absolute; right: 12px; bottom: 10px;
+    z-index: 7;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid rgba(201,168,76,0.4);
+    background: rgba(0,0,0,0.72);
+    color: var(--orb-gold-lt);
+    font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+
+/* ---------- スラップエフェクト ---------- */
+.orb-fx {
+    position: absolute;
+    z-index: 5;
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 900;
+    pointer-events: none;
+    animation: orb-fx-up 0.55s ease-out forwards;
+}
+@keyframes orb-fx-up {
+    0%   { opacity: 1; transform: translate(-50%, 0) scale(0.7) rotate(var(--orb-fx-rot, 0deg)); }
+    30%  { opacity: 1; transform: translate(-50%, -14px) scale(1.15) rotate(var(--orb-fx-rot, 0deg)); }
+    100% { opacity: 0; transform: translate(-50%, -52px) scale(1) rotate(var(--orb-fx-rot, 0deg)); }
+}
+
+/* ---------- オーバーレイ（タイトル/一時停止/リザルト） ---------- */
+.orb-overlay {
+    position: absolute; inset: 0;
+    z-index: 20;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 12px;
+    padding: 22px;
+    text-align: center;
+    background: rgba(4,3,8,0.90);
+    backdrop-filter: blur(6px);
+    color: var(--orb-text);
+}
+.orb-overlay[hidden] { display: none; }
+.orb-title {
+    font-family: 'Bebas Neue', 'Noto Serif JP', sans-serif;
+    font-size: 34px; line-height: 1.05; letter-spacing: 2px;
+    background: linear-gradient(135deg, #ff8fd0, var(--orb-gold-lt), var(--orb-neon));
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.orb-sub { font-size: 12px; color: rgba(212,232,204,0.7); line-height: 1.7; }
+.orb-diffs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.orb-diff {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(201,168,76,0.4);
+    background: rgba(20,14,24,0.85);
+    color: var(--orb-text);
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s;
+}
+.orb-diff:hover { border-color: var(--orb-gold-lt); color: var(--orb-gold-lt); }
+.orb-diff.orb-selected {
+    border-color: var(--orb-pink);
+    background: rgba(255,95,162,0.18);
+    color: #fff;
+    box-shadow: 0 0 14px rgba(255,95,162,0.5);
+}
+.orb-btn {
+    padding: 11px 30px;
+    border-radius: 6px;
+    border: 1px solid var(--orb-neon);
+    background: linear-gradient(135deg, rgba(125,255,79,0.18), rgba(139,92,246,0.22));
+    color: #eafce3;
+    font-size: 14px; font-weight: 900; letter-spacing: 2px;
+    cursor: pointer;
+    box-shadow: 0 0 18px rgba(125,255,79,0.28);
+    transition: transform 0.15s, box-shadow 0.2s;
+}
+.orb-btn:hover { transform: translateY(-2px); box-shadow: 0 0 26px rgba(125,255,79,0.5); }
+.orb-btn-sub {
+    border-color: rgba(201,168,76,0.5);
+    background: rgba(20,14,24,0.85);
+    box-shadow: none;
+    color: var(--orb-gold-lt);
+    padding: 9px 22px; font-size: 12px;
+}
+
+/* カウントダウン */
+.orb-count {
+    position: absolute; inset: 0;
+    z-index: 15;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 96px;
+    color: #fff;
+    text-shadow: 0 0 30px rgba(255,95,162,0.9);
+    pointer-events: none;
+}
+.orb-count[hidden] { display: none; }
+.orb-count span { animation: orb-count-pop 0.5s ease-out; }
+@keyframes orb-count-pop {
+    0% { transform: scale(1.9); opacity: 0; }
+    40% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.9); opacity: 0.85; }
+}
+
+/* リザルト */
+.orb-rank {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 96px; line-height: 1;
+    color: var(--orb-gold-lt);
+    text-shadow: 0 0 34px rgba(245,216,120,0.85);
+}
+.orb-rank.orb-rank-s { color: #ff8fd0; text-shadow: 0 0 40px rgba(255,143,208,0.95); }
+.orb-rank.orb-rank-d { color: var(--orb-crimson); text-shadow: 0 0 30px rgba(255,34,68,0.8); }
+.orb-result-table {
+    width: 100%; max-width: 280px;
+    font-size: 12px;
+    border-collapse: collapse;
+}
+.orb-result-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid rgba(201,168,76,0.15);
+}
+.orb-result-table td:last-child { text-align: right; font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 1px; }
+.orb-best { font-size: 11px; color: var(--orb-gold); letter-spacing: 1px; }
+
+/* 操作説明 */
+.orb-howto {
+    max-width: 430px;
+    margin: 14px auto 0;
+    font-size: 11px; line-height: 1.9;
+    color: rgba(212,232,204,0.6);
+    text-align: center;
+}
+.orb-howto kbd {
+    display: inline-block;
+    padding: 1px 6px; margin: 0 1px;
+    border: 1px solid rgba(201,168,76,0.4);
+    border-radius: 3px;
+    background: rgba(255,255,255,0.05);
+    font-size: 10px;
+    color: var(--orb-gold-lt);
+}

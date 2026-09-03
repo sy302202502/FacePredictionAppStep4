@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>まいきーおしりビート | 舞鬼法師リズムゲーム</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <link rel="stylesheet" th:href="@{/css/oshiri-rhythm.css}">
+    <style>
+        :root {
+            --neon: #7dff4f; --orange: #ff8000; --gold: #c9a84c; --gold-light: #f5d878;
+            --purple: #8b5cf6; --crimson: #ff2244; --deep: #050708; --text: #d4e8cc;
+        }
+        body { font-family: 'Noto Sans JP', sans-serif; background: var(--deep); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+        body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px); background-size: 44px 44px; pointer-events: none; z-index: 0; }
+        body::after { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse at 10% 15%, rgba(139,92,246,0.12) 0%, transparent 50%), radial-gradient(ellipse at 90% 85%, rgba(255,128,0,0.08) 0%, transparent 50%); pointer-events: none; z-index: 0; }
+        .scanlines { position: fixed; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px); pointer-events: none; z-index: 1; }
+        .page-body { position: relative; z-index: 2; max-width: 900px; margin: 0 auto; padding: 14px 12px 60px; }
+        .page-head { text-align: center; margin-bottom: 12px; }
+        .page-head h1 {
+            font-family: 'Bebas Neue', 'Noto Serif JP', sans-serif;
+            font-size: 30px; letter-spacing: 3px; margin: 0;
+            background: linear-gradient(135deg, #ff8fd0, var(--gold-light), var(--neon));
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .page-head p { font-size: 11px; color: rgba(212,232,204,0.55); letter-spacing: 2px; margin: 4px 0 0; }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body orb-root">
+        <div class="page-head">
+            <h1>まいきーおしりビート</h1>
+            <p>MIKEY MASTER / OSHIRI BEAT — 舞鬼法師公式リズムゲーム</p>
+        </div>
+
+        <!-- ============ ゲームステージ ============ -->
+        <div class="orb-stage" id="orbStage">
+
+            <div class="orb-rain" id="orbRain"></div>
+            <img class="orb-chara" id="orbChara" th:src="@{/images/chibi-maiki.png}" alt="まいきー" draggable="false">
+
+            <!-- レーン（ノーツの器）とパッド -->
+            <div class="orb-lanes" id="orbLanes"></div>
+            <div class="orb-hitline"></div>
+            <div class="orb-pads" id="orbPads"></div>
+
+            <!-- 中央HUD -->
+            <div class="orb-center">
+                <div class="orb-judge" id="orbJudge"></div>
+                <div class="orb-combo" id="orbCombo">
+                    <span id="orbComboNum">0</span>
+                    <span class="orb-combo-label">COMBO</span>
+                </div>
+            </div>
+            <div class="orb-fever" id="orbFever">FEVER<br>TIME</div>
+
+            <!-- 上部HUD -->
+            <div class="orb-top">
+                <div class="orb-top-row">
+                    <button class="orb-btn-icon" id="orbPause" type="button" title="一時停止 (Esc)">❚❚</button>
+                    <div class="orb-hp-wrap">
+                        <div class="orb-hp-track"><div class="orb-hp-fill" id="orbHpFill"></div></div>
+                        <div class="orb-meta">
+                            <span><span class="orb-live">● LIVE</span> まいきーHP</span>
+                            <span>MAX COMBO <b id="orbMaxCombo">0</b></span>
+                        </div>
+                    </div>
+                    <div class="orb-score" id="orbScore">0</div>
+                </div>
+            </div>
+            <div class="orb-nameplate">
+                <img th:src="@{/images/maiki-logo.png}" alt="">
+                <span>舞鬼法師</span>
+            </div>
+            <button class="orb-mute" id="orbMute" type="button" title="ミュート">🔊</button>
+
+            <!-- カウントダウン -->
+            <div class="orb-count" id="orbCount" hidden></div>
+
+            <!-- タイトル -->
+            <div class="orb-overlay" id="orbTitleOv">
+                <div class="orb-title">まいきー<br>おしりビート</div>
+                <div class="orb-sub">
+                    落ちてくる 👋 が判定ラインに重なった瞬間に叩け！<br>
+                    20コンボごとに <b style="color:var(--gold-light)">FEVER TIME</b>（スコア2倍）
+                </div>
+                <div class="orb-diffs">
+                    <button class="orb-diff" data-diff="easy" type="button">EASY</button>
+                    <button class="orb-diff orb-selected" data-diff="normal" type="button">NORMAL</button>
+                    <button class="orb-diff" data-diff="hard" type="button">HARD</button>
+                </div>
+                <button class="orb-btn" id="orbStart" type="button">▶ ゲーム開始</button>
+                <div class="orb-best" id="orbTitleBest">まだ記録なし</div>
+            </div>
+
+            <!-- 一時停止 -->
+            <div class="orb-overlay" id="orbPauseOv" hidden>
+                <div class="orb-title">PAUSE</div>
+                <button class="orb-btn" id="orbResume" type="button">▶ 再開</button>
+                <button class="orb-btn orb-btn-sub" id="orbQuit" type="button">タイトルへ戻る</button>
+            </div>
+
+            <!-- リザルト -->
+            <div class="orb-overlay" id="orbResultOv" hidden>
+                <div class="orb-sub" id="orbResultTitle">ステージクリア！</div>
+                <div class="orb-rank" id="orbRank">S</div>
+                <table class="orb-result-table">
+                    <tr><td>難易度</td><td id="orbResDiff">NORMAL</td></tr>
+                    <tr><td>スコア</td><td id="orbResScore">0</td></tr>
+                    <tr><td>最大コンボ</td><td id="orbResCombo">0</td></tr>
+                    <tr><td>精度</td><td id="orbResAcc">0%</td></tr>
+                    <tr><td style="color:#ff8fd0">PERFECT</td><td id="orbResPerfect">0</td></tr>
+                    <tr><td style="color:var(--neon)">GREAT</td><td id="orbResGreat">0</td></tr>
+                    <tr><td style="color:var(--gold-light)">GOOD</td><td id="orbResGood">0</td></tr>
+                    <tr><td style="color:var(--crimson)">MISS</td><td id="orbResMiss">0</td></tr>
+                </table>
+                <div class="orb-best" id="orbBest"></div>
+                <button class="orb-btn" id="orbRetry" type="button">↻ もう一回</button>
+                <button class="orb-btn orb-btn-sub" id="orbResultBack" type="button">タイトルへ戻る</button>
+            </div>
+        </div>
+
+        <div class="orb-howto">
+            PC: <kbd>D</kbd><kbd>F</kbd><kbd>J</kbd><kbd>K</kbd>（または ←↓↑→）でレーンを叩く / <kbd>Esc</kbd> で一時停止<br>
+            スマホ: 叩きたいレーンを直接タップ<br>
+            MISSでまいきーHPが減少。0になるとダウン＝ゲームオーバー。
+        </div>
+    </div>
+
+    <script th:src="@{/js/oshiri-rhythm.js}"></script>
+</body>
+</html>

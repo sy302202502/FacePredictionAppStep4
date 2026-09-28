@@ -49,7 +49,7 @@ public class RacePredictionV2Controller {
         model.addAttribute("selectedRace", selected);
 
         if (selectedId != null) {
-            // 顔面スコア(主)＋統計スコア(差別化用)を取得。開催は race_id、馬は horse_id で突合。
+            // 顔面スコア＋統計スコア（50:50で合成）を取得。開催は race_id、馬は horse_id で突合。
             // INNER JOIN race_entry で「現出走表に居る馬」だけを対象にする（出走取消馬は出ない）
             List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT sp.horse_id, sp.horse_name, sp.image_path, sp.face_comment, sp.face_score, sp.score, " +

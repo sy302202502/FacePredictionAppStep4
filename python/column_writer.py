@@ -31,8 +31,8 @@ from race_condition import place_from_race_id
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 MARKS = ['◎', '○', '▲', '△', '注']
-# /predict-v2 の順位付け（FaceRankingService）と同じ配合。変える場合は両方そろえること
-FACE_WEIGHT, STATS_WEIGHT = 0.75, 0.25
+# /predict-v2 の順位付け（FaceRankingService）と同じ配合（2026-09-28 検証で 50:50）。変える場合は両方そろえること
+FACE_WEIGHT, STATS_WEIGHT = 0.5, 0.5
 
 PERSONA = """あなたは競馬予想VTuber「舞鬼法師（まいきーほうし／MIKEY MASTER）」として、
 重賞レースの展開予想コラムを書く。

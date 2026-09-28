@@ -18,9 +18,11 @@ import com.faceprediction.entity.RaceSpecificResult;
 @Service
 public class FaceRankingService {
 
-    // 顔面スコアと統計スコアの配合比率（顔面主軸）
-    private static final double FACE_WEIGHT  = 0.75;
-    private static final double STATS_WEIGHT = 0.25;
+    // 顔面スコアと統計スコアの配合比率。
+    // 2026-09-28 に本番347レースで検証し、顔面75%→50% に変更（◎の3着内率 38.6%→41.8%）。
+    // 顔面は看板として半分を担う。変える場合は python/column_writer.py の FACE_WEIGHT もそろえること
+    private static final double FACE_WEIGHT  = 0.5;
+    private static final double STATS_WEIGHT = 0.5;
     // レース内コントラスト強調係数（平均からの差を広げる）
     private static final double CONTRAST     = 1.9;
     private static final double SCORE_MIN    = 40.0;
@@ -41,7 +43,7 @@ public class FaceRankingService {
     }
 
     /**
-     * 顔面スコアを主軸に統計スコアで差別化し、レース内でコントラストを強調して
+     * 顔面スコアと統計スコアを半々で合成し、レース内でコントラストを強調して
      * スコアの団子状態を解消する。顔面分析済みの馬のみ対象（未分析は末尾・スコア無し）。
      * rows には horse_name / image_path / face_comment / face_score / score /
      * horse_number / post_position（任意で actual_rank）を含めること。

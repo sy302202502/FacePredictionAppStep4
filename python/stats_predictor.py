@@ -5,15 +5,17 @@ netkeiba から各馬の過去成績をスクレイピングし、以下の指�
 Claude Vision API は一切使用しない。
 
 スコア要素:
-  1. 直近5走平均着順 (25pt)  ← 低いほど良い
+  1. 直近5走平均着順 (27pt)  ← 低いほど良い
   2. G1/G2 好走実績 (15pt)
-  3. 同距離±200m 勝率 (15pt)
+  3. 同距離±200m 勝率 (17pt)
   4. 芝/ダート 適性 (10pt)
   5. 馬場状態適性 (10pt)  ← 当日の馬場（確定 or 前日天気からの予測）で評価軸を切替
-  6. 調教評価 (15pt)  ← netkeiba 追い切り評価ランク(S/A〜E)
-  7. 血統適性 (10pt)  ← 父・母父の距離/馬場適性と今回条件の合致
+  6. 調教評価 (17pt)  ← netkeiba 追い切り評価ランク(S/A〜E)
+  7. 血統適性 (4pt)   ← 父・母父の距離/馬場適性と今回条件の合致
   ── 上記の合計100pt に対して ──
-  8. 展開補正 (±5pt)  ← 出走各馬の脚質から想定ペースを出し、有利不利を加減算
+  8. 展開補正 (±2pt)  ← 出走各馬の脚質から想定ペースを出し、有利不利を加減算
+  配点は 2026-09-28 に本番347レースの検証で見直した（直近5走・距離・調教が着順とよく相関し、
+  血統・展開はほぼ相関しなかったため比重を移した。前半7割で選び後半3割で確認済み）
   9. 専門紙補正 (-3〜+7pt) ← 東スポ競馬の指数・記者印（TOSPO_ENABLED=1 のときだけ。tospo_client.py）
 
 使い方:
@@ -78,10 +80,11 @@ def ensure_stats_table(conn):
 import pickle as _pickle
 import requests as _nk_requests
 
-# ランク基礎点（最大9pt）＋タイム加点（最大6pt）= 調教15pt
+# ランク基礎点（最大9pt）＋タイム加点（最大6pt）= 15 を、調教の満点 17pt に換算して使う
 TRAINING_RANK_PT = {'S': 9.0, 'A': 8.0, 'B': 6.0, 'C': 4.0, 'D': 2.0, 'E': 1.0}
 TRAINING_RANK_DEFAULT = 4.5  # ランク不明時の基礎点
-TRAINING_DEFAULT = 7.0       # 調教データが一切ない場合の中立点
+TRAINING_DEFAULT = 7.0       # 調教データが一切ない場合の中立点（15pt満点時。配点換算は calc_training_pt）
+TRAINING_MAX = 17.0          # 調教評価の満点（ランク9＋タイム6＝15 を 17 に換算）
 
 NETKEIBA_ID = os.getenv('NETKEIBA_LOGIN_ID', '').strip()
 NETKEIBA_PW = os.getenv('NETKEIBA_PASSWORD', '').strip()
@@ -230,15 +233,15 @@ def fetch_oikiri_data(race_id):
         return {}
 
 def calc_training_pt(t):
-    """調教15pt = ランク基礎点(〜9) + タイム加点(〜6)。データなしは中立7pt。"""
+    """調教17pt = (ランク基礎点(〜9) + タイム加点(〜6)) × 17/15。データなしは中立（約7.9pt）。"""
     if not t:
-        return TRAINING_DEFAULT, "評価なし"
+        return round(TRAINING_DEFAULT * TRAINING_MAX / 15.0, 1), "評価なし"
     rank_pt = TRAINING_RANK_PT.get(t.get('rank'), TRAINING_RANK_DEFAULT)
     time_pt = t.get('time_pt', 0.0)
     desc = f"追い切り{t['rank'] or '?'}評価"
     if t.get('has_time'):
         desc += f"＋タイム加点{time_pt:.0f}"
-    pt = min(15.0, rank_pt + time_pt)
+    pt = min(15.0, rank_pt + time_pt) * TRAINING_MAX / 15.0
     return pt, desc
 
 # ----------------------------------------------------------------
@@ -347,7 +350,8 @@ def calc_blood_pt(sire, bm_sire, target_category):
     """血統適性 0〜10pt。父6pt + 母父4pt（適性合致時）。不明は中立扱い。"""
     detail_parts = []
     pt = 0.0
-    for name, weight, label in ((sire, 6.0, '父'), (bm_sire, 4.0, '母父')):
+    # 血統は着順との関係が弱かったため 4pt（父2.4＋母父1.6）に縮小
+    for name, weight, label in ((sire, 2.4, '父'), (bm_sire, 1.6, '母父')):
         if not name:
             pt += weight * 0.5  # データなしは中立（半分）
             continue
@@ -528,17 +532,17 @@ def calc_score(results, target_distance, target_surface,
         score = 25.0  # 成績系5ファクター分の基準値
         detail['過去成績'] = "データなし → 基準25pt"
     else:
-        # ── 1. 直近5走平均着順 (25pt) ──────────────────
+        # ── 1. 直近5走平均着順 (27pt) ──────────────────
         recent5 = [r for r in results[:5] if r['rank'] <= r['horses']]
         if recent5:
             avg_rank = sum(r['rank'] for r in recent5) / len(recent5)
-            # 1着→25pt、5着→約17pt、10着以下→4pt 線形補間
-            pt = max(4.0, 25.0 - (avg_rank - 1) * 2.1)
+            # 1着→27pt、5着→約18pt、10着以下→約4pt 線形補間
+            pt = max(4.0, 25.0 - (avg_rank - 1) * 2.1) * 27.0 / 25.0
             score += pt
             detail['直近5走平均'] = f"{avg_rank:.1f}着 → {pt:.0f}pt"
         else:
-            score += 12.0
-            detail['直近5走平均'] = "データ不足 → 12pt"
+            score += 13.0
+            detail['直近5走平均'] = "データ不足 → 13pt"
 
         # ── 2. 重賞好走実績 (15pt) ──────────────────────
         # 障害戦は障害重賞(JG)、平地は平地重賞(G)の実績で見る
@@ -550,7 +554,7 @@ def calc_score(results, target_distance, target_surface,
         score += grade_pt
         detail['重賞実績'] = f"G1勝{g1_win}回 G1で3着内{g1_place}回 G2で3着内{g2_place}回 → {grade_pt:.0f}pt"
 
-        # ── 3. 同距離±200m 勝率 (15pt) ─────────────────
+        # ── 3. 同距離±200m 勝率 (17pt) ─────────────────
         # 距離適性は同じ馬場（芝/ダート/障害）の中で見る。芝1600mの好走はダート1700m戦の
         # 根拠にならない（旧実装は馬場を混ぜて数えていた）
         dist_races = [r for r in results
@@ -560,12 +564,12 @@ def calc_score(results, target_distance, target_surface,
             dist_top3  = sum(1 for r in dist_races if r['rank'] <= 3)
             win_rate   = dist_wins / len(dist_races)
             top3_rate  = dist_top3 / len(dist_races)
-            dist_pt    = min(15.0, win_rate * 22 + top3_rate * 8)
+            dist_pt    = min(15.0, win_rate * 22 + top3_rate * 8) * 17.0 / 15.0
             score += dist_pt
             detail['距離適性'] = f"{target_distance}m±200 {len(dist_races)}走 {dist_wins}勝 → {dist_pt:.0f}pt"
         else:
-            score += 6.0
-            detail['距離適性'] = f"{target_surface}{target_distance}m±200の実績なし → 6pt"
+            score += 7.0
+            detail['距離適性'] = f"{target_surface}{target_distance}m±200の実績なし → 7pt"
 
         # ── 4. 芝/ダート適性 (10pt) ─────────────────────
         surf_races = [r for r in results if r['surface'] == target_surface]
@@ -599,7 +603,7 @@ def calc_score(results, target_distance, target_surface,
     score += blood_pt
     detail['血統適性'] = f"{blood_desc} → {blood_pt:.1f}pt"
 
-    # 100点満点に正規化（最大は 25+15+15+10+10+15+10=100）
+    # 100点満点に正規化（最大は 27+15+17+10+10+17+4=100）
     score = round(min(100.0, max(0.0, score)), 1)
     if not results:
         return score, detail, "過去成績データなし（調教・血統のみで評価）"

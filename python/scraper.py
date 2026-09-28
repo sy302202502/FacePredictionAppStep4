@@ -16,6 +16,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
+from constants import parse_course
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -29,6 +30,8 @@ def classify_race(distance, surface):
     """距離と馬場からレース種別を判定"""
     if surface == 'ダート':
         return 'dirt'
+    if surface == '障害':
+        return 'jump'
     d = int(distance) if distance else 0
     if d <= 1400:
         return 'sprint'
@@ -40,10 +43,11 @@ def classify_race(distance, surface):
 
 CATEGORY_LABEL = {
     'sprint': '短距離（〜1400m）',
-    'mile':   'マイル（1600〜1800m）',
-    'middle': '中距離（2000〜2200m）',
-    'long':   '長距離（2400m〜）',
+    'mile':   'マイル（1500〜1800m）',
+    'middle': '中距離（1900〜2200m）',
+    'long':   '長距離（2300m〜）',
     'dirt':   'ダート',
+    'jump':   '障害',
 }
 
 def get_conn():
@@ -141,11 +145,10 @@ def fetch_race_results(race_id):
     if race_data:
         text = race_data.get_text()
         import re
-        m = re.search(r'(芝|ダート|ダ)[右左外内直線\-\s]*(?:\d+周)?[右左外内\-\s]*(\d+)m', text)
-        if m:
-            raw_surface = m.group(1)
-            surface = 'ダート' if raw_surface in ('ダ', 'ダート') else '芝'
-            distance = int(m.group(2))
+        # 障害（「障芝 外4260m」）も読めるよう共通パーサを使う
+        surf, dist = parse_course(text)
+        if surf:
+            surface, distance = surf, dist
 
     result_table = soup.find('table', class_='race_table_01')
     if not result_table:

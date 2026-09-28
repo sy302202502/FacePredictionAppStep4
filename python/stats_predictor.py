@@ -25,7 +25,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
-from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba
+from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, surface_of_distance_cell
 from race_condition import resolve_condition
 from pace_analyzer import running_style, predict_pace, pace_adjustment
 
@@ -280,10 +280,15 @@ SIRE_APTITUDE = {
     'ビッグアーサー':     {'sprint'},
     'モーリス':           {'mile', 'middle'},
     'ミッキーアイル':     {'sprint', 'mile'},
-    'グランアレグリア':   {'sprint', 'mile'},
     'アドマイヤマーズ':   {'mile'},
     'インディチャンプ':   {'sprint', 'mile'},
     'タワーオブロンドン': {'sprint'},
+    'ファインニードル':   {'sprint'},
+    'ミスターメロディ':   {'sprint', 'mile', 'dirt'},
+    'リオンディーズ':     {'mile', 'middle', 'dirt'},
+    'サトノクラウン':     {'middle', 'long'},
+    'ブリックスアンドモルタル': {'mile', 'middle'},
+    'デクラレーションオブウォー': {'mile', 'dirt'},
     # ダート系
     'ヘニーヒューズ':     {'dirt'},
     'シニスターミニスター': {'dirt'},
@@ -296,6 +301,12 @@ SIRE_APTITUDE = {
     'キングカメハメハ':   {'mile', 'middle', 'dirt'},
     'ロージズインメイ':   {'dirt'},
     'サウスヴィグラス':   {'dirt', 'sprint'},
+    'ルヴァンスレーヴ':   {'dirt'},
+    'ナダル':             {'dirt'},
+    'アジアエクスプレス': {'dirt'},
+    'エスポワールシチー': {'dirt'},
+    'ディスクリートキャット': {'dirt', 'sprint'},
+    'ダンカーク':         {'dirt'},
     # 海外系
     'Kingman':            {'mile'},
     'Frankel':            {'mile', 'middle'},
@@ -339,7 +350,10 @@ def calc_blood_pt(sire, bm_sire, target_category):
             pt += weight * 0.5  # データなしは中立（半分）
             continue
         apt = SIRE_APTITUDE.get(name)
-        if apt is None:
+        if target_category is None:
+            pt += weight * 0.5  # 障害戦など分類対象外は中立
+            detail_parts.append(f"{label}{name}(対象外)")
+        elif apt is None:
             pt += weight * 0.5  # テーブル未登録も中立
             detail_parts.append(f"{label}{name}(未分類)")
         elif target_category in apt:
@@ -352,6 +366,8 @@ def calc_blood_pt(sire, bm_sire, target_category):
 def classify_target(distance, surface):
     if surface == 'ダート':
         return 'dirt'
+    if surface == '障害':
+        return None  # 障害戦は平地の距離適性表が当てはまらない → 血統は中立
     d = distance or 2000
     if d <= 1400: return 'sprint'
     if d <= 1800: return 'mile'
@@ -395,6 +411,17 @@ def get_entries(conn, race_name, race_id=None):
 # ----------------------------------------------------------------
 # 馬の過去成績スクレイピング
 # ----------------------------------------------------------------
+def grade_of(race_name):
+    """成績表のレース名（例: 天皇賞(秋)(GI) / 帝王賞(JpnI) / 中山グランドジャンプ(JGI)）
+    → 'G1'/'G2'/'G3' / 障害重賞は 'JG1'/'JG2'/'JG3' / それ以外 'OP'。
+    地方交流重賞の JpnI〜III は中央の GI〜III と同格として扱う。"""
+    m = re.search(r'\((J\.?・?)?(?:G|Jpn)(III|II|I|3|2|1)\)', race_name or '')
+    if not m:
+        return 'OP'
+    level = {'I': '1', '1': '1', 'II': '2', '2': '2', 'III': '3', '3': '3'}[m.group(2)]
+    # 障害重賞（JGI〜JGIII）は平地の重賞とは別物として 'JG1' 等で返す
+    return ('JG' if m.group(1) else 'G') + level
+
 def fetch_horse_results(horse_id, horse_name):
     """直近20走を取得"""
     url = f'https://db.netkeiba.com/horse/result/{horse_id}/'
@@ -410,6 +437,16 @@ def fetch_horse_results(horse_id, horse_name):
             cols = [td.text.strip() for td in row.find_all('td')]
             if len(cols) < 15:
                 continue
+            # 着順: 「3(降)」は降着後の着順、「中」(競走中止)は最下位扱い。
+            # 「取」「除」(出走取消・競走除外)は走っていないので成績に数えない
+            # （旧実装は一律10着扱いで、取消が「大敗」として減点されていた）
+            m_rank = re.match(r'(\d+)', cols[11])
+            if m_rank:
+                finish = int(m_rank.group(1))
+            elif cols[11].startswith('中'):
+                finish = int(cols[6]) if cols[6].strip().isdigit() else 18
+            else:
+                continue
             try:
                 results.append({
                     'date':      cols[0],
@@ -417,18 +454,16 @@ def fetch_horse_results(horse_id, horse_name):
                     'horses':    int(cols[6]) if cols[6].strip().isdigit() else 10,
                     'odds':      (lambda v: float(v) if v.replace('.','',1).isdigit() else 10.0)(cols[9].strip()),
                     'popularity':int(cols[10]) if cols[10].strip().isdigit() else 10,
-                    'rank':      int(cols[11]) if cols[11].strip().isdigit() else 10,
+                    'rank':      finish,
                     'distance':  int(re.sub(r'\D','', cols[14])) if re.search(r'\d', cols[14]) else 2000,
-                    'surface':   '芝' if cols[14].startswith('芝') else 'ダート',
+                    'surface':   surface_of_distance_cell(cols[14]),
                     'condition': cols[16] if len(cols) > 16 else '良',
                     # 以下は同じテーブルに元から含まれる列（追加リクエストなし）
                     'weather':   cols[2]  if len(cols) > 2  else '',
                     'passing':   cols[25] if len(cols) > 25 else '',   # 通過順位 例:13-12-12-7
                     'pace':      cols[26] if len(cols) > 26 else '',   # 例:37.1-33.4
                     'agari':     cols[27] if len(cols) > 27 else '',   # 上がり3F
-                    'grade':     'G1' if 'GI)' in cols[4] and 'GII' not in cols[4] else
-                                 'G2' if 'GII)' in cols[4] else
-                                 'G3' if 'GIII)' in cols[4] else 'OP',
+                    'grade':     grade_of(cols[4]),
                 })
             except Exception:
                 continue
@@ -504,15 +539,20 @@ def calc_score(results, target_distance, target_surface,
             detail['直近5走平均'] = "データ不足 → 12pt"
 
         # ── 2. 重賞好走実績 (15pt) ──────────────────────
-        g1_win   = sum(1 for r in results if r['grade']=='G1' and r['rank']==1)
-        g1_place = sum(1 for r in results if r['grade']=='G1' and r['rank']<=3)
-        g2_place = sum(1 for r in results if r['grade']=='G2' and r['rank']<=3)
+        # 障害戦は障害重賞(JG)、平地は平地重賞(G)の実績で見る
+        gp = 'JG' if target_surface == '障害' else 'G'
+        g1_win   = sum(1 for r in results if r['grade']==gp+'1' and r['rank']==1)
+        g1_place = sum(1 for r in results if r['grade']==gp+'1' and r['rank']<=3)
+        g2_place = sum(1 for r in results if r['grade']==gp+'2' and r['rank']<=3)
         grade_pt = min(15.0, g1_win * 8 + g1_place * 5 + g2_place * 2.5)
         score += grade_pt
-        detail['重賞実績'] = f"G1勝{g1_win}回 G1連対{g1_place}回 G2連対{g2_place}回 → {grade_pt:.0f}pt"
+        detail['重賞実績'] = f"G1勝{g1_win}回 G1で3着内{g1_place}回 G2で3着内{g2_place}回 → {grade_pt:.0f}pt"
 
         # ── 3. 同距離±200m 勝率 (15pt) ─────────────────
-        dist_races = [r for r in results if abs(r['distance'] - target_distance) <= 200]
+        # 距離適性は同じ馬場（芝/ダート/障害）の中で見る。芝1600mの好走はダート1700m戦の
+        # 根拠にならない（旧実装は馬場を混ぜて数えていた）
+        dist_races = [r for r in results
+                      if r['surface'] == target_surface and abs(r['distance'] - target_distance) <= 200]
         if dist_races:
             dist_wins  = sum(1 for r in dist_races if r['rank'] == 1)
             dist_top3  = sum(1 for r in dist_races if r['rank'] <= 3)
@@ -523,7 +563,7 @@ def calc_score(results, target_distance, target_surface,
             detail['距離適性'] = f"{target_distance}m±200 {len(dist_races)}走 {dist_wins}勝 → {dist_pt:.0f}pt"
         else:
             score += 6.0
-            detail['距離適性'] = f"同距離実績なし → 6pt"
+            detail['距離適性'] = f"{target_surface}{target_distance}m±200の実績なし → 6pt"
 
         # ── 4. 芝/ダート適性 (10pt) ─────────────────────
         surf_races = [r for r in results if r['surface'] == target_surface]
@@ -532,13 +572,16 @@ def calc_score(results, target_distance, target_surface,
             surf_rate = surf_wins / len(surf_races)
             surf_pt   = min(10.0, surf_rate * 13 + (len(surf_races) >= 5) * 2)
             score += surf_pt
-            detail['馬場適性'] = f"{target_surface} {len(surf_races)}走 {surf_wins}勝 → {surf_pt:.0f}pt"
+            detail['芝ダート適性'] = f"{target_surface} {len(surf_races)}走 {surf_wins}勝 → {surf_pt:.0f}pt"
         else:
             score += 3.5
-            detail['馬場適性'] = f"{target_surface}実績なし → 3.5pt"
+            detail['芝ダート適性'] = f"{target_surface}実績なし → 3.5pt"
 
         # ── 5. 馬場状態適性 (10pt) ──────────────────────
-        cond_pt, cond_desc = calc_condition_pt(results, today_condition)
+        # 芝の道悪（時計がかかる）とダートの道悪（脚抜きが良く時計が速い）は性質が逆なので、
+        # 今回と同じ馬場の実績だけで評価する
+        cond_pt, cond_desc = calc_condition_pt(
+            [r for r in results if r['surface'] == target_surface], today_condition)
         score += cond_pt
         detail['馬場状態適性'] = cond_desc
 
@@ -575,7 +618,8 @@ def build_comment(results, dist, surf, detail, today_condition=None):
             else:
                 parts.append("直近成績は苦戦傾向")
 
-    dist_wins = len([r for r in results if abs(r['distance']-dist)<=200 and r['rank']==1])
+    dist_wins = len([r for r in results
+                     if r['surface'] == surf and abs(r['distance']-dist)<=200 and r['rank']==1])
     if dist_wins >= 2:
         parts.append(f"この距離で{dist_wins}勝と得意")
     elif dist_wins == 1:
@@ -583,15 +627,16 @@ def build_comment(results, dist, surf, detail, today_condition=None):
 
     # 馬場コメントは当日の馬場に関係するときだけ出す。
     # （良馬場の日に「稍重以上の成績は良くない」と書いても判断材料にならない）
+    same_surf = [r for r in results if r['surface'] == surf]
     if today_condition in WET_LABELS:
-        wet = [r for r in results if r['condition'] in WET_LABELS]
+        wet = [r for r in same_surf if r['condition'] in WET_LABELS]
         wet_wins = len([r for r in wet if r['rank'] == 1])
         if wet_wins >= 1:
             parts.append(f"道悪で{wet_wins}勝と{today_condition}向き")
         elif len(wet) >= 2 and all(r['rank'] >= 5 for r in wet):
             parts.append(f"道悪{len(wet)}走はいずれも掲示板外で{today_condition}は不安")
     elif today_condition == '良':
-        firm = [r for r in results if r['condition'] == '良']
+        firm = [r for r in same_surf if r['condition'] == '良']
         firm_wins = len([r for r in firm if r['rank'] == 1])
         if firm_wins >= 2:
             parts.append(f"良馬場で{firm_wins}勝と良績")
@@ -726,7 +771,8 @@ def main():
         h['detail']['想定ペース'] = pace_label
         h['detail']['展開']       = adj_desc
         h['pace_adjust'] = adj
-        h['score'] = round(h['score'] + adj, 1)
+        # 展開補正の後も 0〜100 点に収める（100点満点の表示・ゲージが崩れないように）
+        h['score'] = round(min(100.0, max(0.0, h['score'] + adj)), 1)
 
     # 順位付け
     scored.sort(key=lambda x: x['score'], reverse=True)

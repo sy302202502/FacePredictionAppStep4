@@ -88,4 +88,21 @@ print('  ✅ race_condition / pace_analyzer 読み込みOK')
 print('  馬場解決テスト:', resolve_condition('202602011010','2026-07-12')['condition'])
 " 2>&1 | tail -5
 
+hr; echo "コース表記（芝/ダート/障害）の読み取り確認"
+docker compose exec -T python python3 -c "
+import sys; sys.path.insert(0,'python')
+from constants import parse_course
+r = [parse_course(t) for t in ('ダ1700m (右)', '芝2000m (右 A)', '障4260m (芝 外)')]
+ok = r == [('ダート', 1700), ('芝', 2000), ('障害', 4260)]
+print('  ✅ 読み取りOK' if ok else f'  ❌ 読み取り異常: {r}')
+" 2>&1 | tail -3
+
+hr; echo "cron の二重登録チェック"
+if [ -f /etc/cron.d/faceprediction ]; then
+    echo "  ⚠️ 旧 /etc/cron.d/faceprediction が残っています（正本 crontab と二重稼働）。"
+    echo "     削除コマンド: sudo rm /etc/cron.d/faceprediction"
+else
+    echo "  ✅ 旧cronファイルなし（正本 crontab のみ）"
+fi
+
 hr; echo "完了。問題があればロールバック手順はこのファイル冒頭のコメント参照。"

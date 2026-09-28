@@ -37,10 +37,11 @@ NUMERIC_KEYS = ['eye_aspect_ratio', 'nose_width_ratio', 'face_aspect_ratio',
 
 CATEGORY_LABEL = {
     'sprint': '短距離（〜1400m）',
-    'mile':   'マイル（1600〜1800m）',
-    'middle': '中距離（2000〜2200m）',
-    'long':   '長距離（2400m〜）',
+    'mile':   'マイル（1500〜1800m）',
+    'middle': '中距離（1900〜2200m）',
+    'long':   '長距離（2300m〜）',
     'dirt':   'ダート',
+    'jump':   '障害',
 }
 
 ANALYSIS_PROMPT = """

@@ -20,7 +20,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, date
 from dotenv import load_dotenv
-from constants import decode_netkeiba
+from constants import decode_netkeiba, parse_course
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -477,13 +477,11 @@ def fetch_shutuba_entries(race_id):
     distance, surface, venue = None, '芝', ''
     race_data = soup.find('div', class_='RaceData01')
     if race_data:
-        text = race_data.get_text()
-        m = re.search(r'(芝|ダート)(\d+)m', text)
-        if m:
-            surface = m.group(1)
-            distance = int(m.group(2))
+        surf, dist = parse_course(race_data.get_text())
+        if surf:
+            surface, distance = surf, dist
 
-    race_name_el = soup.find('div', class_='RaceName')
+    race_name_el = soup.find(class_='RaceName')
     scraped_race_name = race_name_el.text.strip() if race_name_el else ''
 
     venue_el = soup.find('span', class_='RaceData02')
@@ -498,6 +496,9 @@ def fetch_shutuba_entries(race_id):
     for row in table.find_all('tr', class_=re.compile(r'HorseList')):
         cols = row.find_all('td')
         if len(cols) < 5:
+            continue
+        # 出走取消・競走除外の行は含めない（entry_fetcher と同じ判定）
+        if 'Cancel' in ' '.join(row.get('class') or []) or row.find(class_=re.compile(r'Cancel')):
             continue
         try:
             post_pos = cols[0].text.strip()
@@ -527,6 +528,8 @@ def fetch_shutuba_entries(race_id):
 def classify_race(distance, surface):
     if surface == 'ダート':
         return 'dirt'
+    if surface == '障害':
+        return 'jump'
     d = int(distance) if distance else 0
     if d <= 1400:
         return 'sprint'

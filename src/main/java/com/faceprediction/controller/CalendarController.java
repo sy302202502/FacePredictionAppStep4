@@ -95,6 +95,7 @@ public class CalendarController {
                 case "middle": categoryLabel = "中距離"; break;
                 case "long":   categoryLabel = "長距離"; break;
                 case "dirt":   categoryLabel = "ダート"; break;
+                case "jump":   categoryLabel = "障害"; break;
                 default:       categoryLabel = category; break;
             }
 

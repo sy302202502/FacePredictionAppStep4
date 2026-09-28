@@ -106,3 +106,45 @@ def fetch_with_retry(url, headers=None, timeout=15, retries=3, min_sleep=1.0, ma
                 print(f"  [リトライ {attempt + 1}/{retries}] {wait:.1f}秒後に再試行: {e}", flush=True)
                 time.sleep(wait)
     raise last_exc
+
+
+# ----------------------------------------------------------------
+# コース表記（出馬表の RaceData01）の解析
+# ----------------------------------------------------------------
+# netkeiba の表記は「芝2000m」「ダ1700m」「障4260m (芝 外)」など。
+# 旧実装は「ダート1700m」しか想定しておらず、ダート戦がすべて
+# 「芝・距離不明（→2000m扱い）」で保存・採点されていた。
+_COURSE_RE = None
+
+
+def parse_course(text):
+    """RaceData01 のテキストから (surface, distance) を返す。
+    surface は '芝' / 'ダート' / '障害'。読めなければ (None, None)。"""
+    import re as _re
+    global _COURSE_RE
+    if not text:
+        return None, None
+    if _COURSE_RE is None:
+        # 「障」「芝」「ダ」「ダート」の直後に距離が続く箇所だけを拾う（賞金等の数字を誤認しない）
+        # 結果ページは「芝右2000m」「ダ右1700m」「障芝 外4260m」のように回りや内外が挟まる
+        _COURSE_RE = _re.compile(r'(障)?\s*(芝|ダート|ダ)?[右左外内直線\s]*(?:\d周)?[右左外内\s]*(\d{3,4})\s*m')
+    m = next((x for x in _COURSE_RE.finditer(text) if x.group(1) or x.group(2)), None)
+    if not m:
+        return None, None
+    if m.group(1):
+        surface = '障害'
+    elif m.group(2) in ('ダ', 'ダート'):
+        surface = 'ダート'
+    else:
+        surface = '芝'
+    return surface, int(m.group(3))
+
+
+def surface_of_distance_cell(cell):
+    """馬の成績表「距離」列（例: 芝2000 / ダ1800 / 障3000）→ '芝' / 'ダート' / '障害'。"""
+    cell = (cell or '').strip()
+    if cell.startswith('障'):
+        return '障害'
+    if cell.startswith('ダ'):
+        return 'ダート'
+    return '芝'

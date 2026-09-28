@@ -118,10 +118,11 @@ public class PredictionService {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("",       "全カテゴリ");
         m.put("sprint", "短距離（〜1400m）");
-        m.put("mile",   "マイル（1600〜1800m）");
-        m.put("middle", "中距離（2000〜2200m）");
-        m.put("long",   "長距離（2400m〜）");
+        m.put("mile",   "マイル（1500〜1800m）");
+        m.put("middle", "中距離（1900〜2200m）");
+        m.put("long",   "長距離（2300m〜）");
         m.put("dirt",   "ダート");
+        m.put("jump",   "障害");
         return m;
     }
 

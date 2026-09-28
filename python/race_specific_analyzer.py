@@ -31,7 +31,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from collections import Counter
 from dotenv import load_dotenv
-from constants import decode_netkeiba
+from constants import decode_netkeiba, parse_course
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -387,11 +387,10 @@ def fetch_all_finishers(race_id):
     race_data = soup.find('div', class_='data_intro')
     if race_data:
         text = race_data.get_text()
-        m = re.search(r'(芝|ダート|ダ)[右左外内直線\-\s]*(?:\d+周)?[右左外内\-\s]*(\d+)m', text)
-        if m:
-            raw_s = m.group(1)
-            surface = 'ダート' if raw_s in ('ダ', 'ダート') else '芝'
-            distance = int(m.group(2))
+        # 障害（「障芝 外4260m」）も読めるよう共通パーサを使う
+        surf, dist = parse_course(text)
+        if surf:
+            surface, distance = surf, dist
 
     result_table = soup.find('table', class_='race_table_01')
     if not result_table:
@@ -1516,6 +1515,8 @@ def save_race_results(conn, race_name, results):
 def classify_race(distance, surface):
     if surface == 'ダート':
         return 'dirt'
+    if surface == '障害':
+        return 'jump'
     d = int(distance) if distance else 0
     if d <= 1400: return 'sprint'
     if d <= 1800: return 'mile'

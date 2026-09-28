@@ -14,14 +14,14 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, is_garbled
+from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, is_garbled, parse_course
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 UPLOAD_DIR = os.environ.get('UPLOAD_DIR_CANDIDATES', os.path.join(os.path.dirname(__file__), '../uploads/candidates'))
 
 CATEGORY_MAP = {
-    'sprint': '短距離（〜1400m）', 'mile': 'マイル（1600〜1800m）',
-    'middle': '中距離（2000〜2200m）', 'long': '長距離（2400m〜）', 'dirt': 'ダート',
+    'sprint': '短距離（〜1400m）', 'mile': 'マイル（1500〜1800m）',
+    'middle': '中距離（1900〜2200m）', 'long': '長距離（2300m〜）', 'dirt': 'ダート', 'jump': '障害',
 }
 
 def get_conn():
@@ -37,6 +37,7 @@ def get_conn():
 
 def classify_race(distance, surface):
     if surface == 'ダート': return 'dirt'
+    if surface == '障害': return 'jump'
     d = int(distance) if distance else 0
     if d <= 1400: return 'sprint'
     if d <= 1800: return 'mile'
@@ -88,12 +89,11 @@ def fetch_shutuba_entries(race_id):
     distance, surface, grade, venue = None, '芝', '', ''
     race_data = soup.find('div', class_='RaceData01')
     if race_data:
-        text = race_data.get_text()
-        m = re.search(r'(芝|ダート)(\d+)m', text)
-        if m:
-            surface = m.group(1)
-            distance = int(m.group(2))
-    race_name_el = soup.find('div', class_='RaceName')
+        surf, dist = parse_course(race_data.get_text())
+        if surf:
+            surface, distance = surf, dist
+    # RaceName は div とは限らない（現行は h1）。タグを問わず拾う
+    race_name_el = soup.find(class_='RaceName')
     race_name = race_name_el.text.strip() if race_name_el else ''
     venue_el = soup.find('span', class_='RaceData02')
     if venue_el:
@@ -107,6 +107,9 @@ def fetch_shutuba_entries(race_id):
     for row in table.find_all('tr', class_=re.compile(r'HorseList')):
         cols = row.find_all('td')
         if len(cols) < 5:
+            continue
+        # 出走取消・競走除外の馬は行が残ったまま「Cancel」表示になる。出走馬に含めない
+        if 'Cancel' in ' '.join(row.get('class') or []) or row.find(class_=re.compile(r'Cancel')):
             continue
         try:
             post_pos   = cols[0].text.strip()
@@ -318,6 +321,7 @@ def sync_with_latest_shutuba():
             return
 
         print(f"{len(races)}件のレースを確認します\n")
+        failed = []  # 出馬表を取れなかった・異常スキップしたレース
 
         for race_id, race_name, race_date in races:
             print(f"【{race_name}】{race_date} race_id={race_id}")
@@ -326,6 +330,7 @@ def sync_with_latest_shutuba():
             entries, distance, surface, scraped_name, venue = fetch_shutuba_entries(race_id)
             if not entries:
                 print(f"  出馬表未確定のためスキップ")
+                failed.append(race_name)
                 polite_sleep(1.0, 2.0)
                 continue
 
@@ -344,6 +349,7 @@ def sync_with_latest_shutuba():
             if db_names and len(removed) > max(3, len(db_names) * 0.5):
                 print(f"  ⚠️ 除外判定が{len(removed)}/{len(db_names)}頭と異常に多いためスキップ"
                       f"（スクレイピング失敗の可能性）")
+                failed.append(race_name)
                 polite_sleep(1.0, 2.0)
                 continue
 
@@ -431,7 +437,12 @@ def sync_with_latest_shutuba():
 
             polite_sleep(2.0, 4.0)
 
-        print("\n=== 同期完了 ===")
+        print(f"\n=== 同期完了: {len(races) - len(failed)}/{len(races)}レース ===")
+        if failed:
+            # 取消馬を含んだまま予想・買い目を公開しないよう、呼び出し元(cron/パイプライン)へ失敗を伝える
+            print(f"  同期できなかったレース: {', '.join(failed)}")
+            return False
+        return True
 
     except Exception as e:
         conn.rollback()
@@ -468,7 +479,8 @@ def main():
     # --sync: 出馬表との差異チェック・除外馬削除・再ランク付け
     if '--sync' in sys.argv:
         print("=== 出走馬同期開始（出馬表との差異チェック） ===")
-        sync_with_latest_shutuba()
+        if sync_with_latest_shutuba() is False:
+            sys.exit(1)
         return
 
     # --race-id オプション対応: race_id, race_name, race_date を直接指定

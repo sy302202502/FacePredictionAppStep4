@@ -38,10 +38,11 @@ public class AccuracyController {
     private static final Map<String, String> CATEGORY_LABELS = new LinkedHashMap<>();
     static {
         CATEGORY_LABELS.put("sprint", "短距離（〜1400m）");
-        CATEGORY_LABELS.put("mile",   "マイル（1600〜1800m）");
-        CATEGORY_LABELS.put("middle", "中距離（2000〜2200m）");
-        CATEGORY_LABELS.put("long",   "長距離（2400m〜）");
+        CATEGORY_LABELS.put("mile",   "マイル（1500〜1800m）");
+        CATEGORY_LABELS.put("middle", "中距離（1900〜2200m）");
+        CATEGORY_LABELS.put("long",   "長距離（2300m〜）");
         CATEGORY_LABELS.put("dirt",   "ダート");
+        CATEGORY_LABELS.put("jump",   "障害");
         CATEGORY_LABELS.put("all",    "全カテゴリ");
     }
 

@@ -1141,6 +1141,48 @@
 
         .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+        /* ============================================================
+           BETTING — 鬼眼買い目 / 答え合わせ導線
+        ============================================================ */
+        .bet-card-inner { padding: 14px 18px; }
+        .bet-head {
+            display: flex; justify-content: space-between; align-items: baseline;
+            gap: 10px; flex-wrap: wrap; margin-bottom: 10px;
+        }
+        .bet-total { font-size: 12px; color: var(--text-muted); }
+        .bet-total strong { color: var(--gold-light); font-size: 15px; }
+        .bet-row {
+            display: grid;
+            grid-template-columns: 64px 1fr;
+            gap: 4px 12px;
+            padding: 9px 0;
+            border-top: 1px solid rgba(125,255,79,0.08);
+        }
+        .bet-type {
+            font-weight: 900; font-size: 14px; color: var(--neon);
+            text-shadow: 0 0 8px var(--neon-glow);
+        }
+        .bet-method { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+        .bet-combos { display: flex; flex-wrap: wrap; gap: 5px; }
+        .bet-combo {
+            font-size: 12px; padding: 2px 8px; border-radius: 3px;
+            background: var(--surface3); border: 1px solid rgba(125,255,79,0.15);
+            white-space: nowrap;
+        }
+        .bet-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+        .bet-jump {
+            display: block; text-align: right; margin: -6px 0 14px;
+            font-size: 12px; color: var(--gold-light); text-decoration: none;
+        }
+        .bet-jump:hover { text-decoration: underline; }
+        .review-link {
+            display: block; text-align: center; margin-bottom: 16px; padding: 10px;
+            border: 1px solid var(--purple); border-radius: 4px;
+            color: #fff; text-decoration: none; font-weight: 700; font-size: 14px;
+            background: rgba(139,92,246,0.15); box-shadow: 0 0 14px var(--purple-glow);
+        }
+        .review-link:hover { background: rgba(139,92,246,0.28); }
+
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: var(--deep); }
         ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; }
@@ -1293,6 +1335,12 @@
                 🏆 本命 ◎ — <span th:text="${results[0].horseName}">馬名</span>
             </div>
 
+            <a th:if="${bets != null and !#lists.isEmpty(bets)}" href="#bets" class="bet-jump">🎫 鬼眼買い目（<span th:text="${betPoints}">20</span>点）を見る ↓</a>
+
+            <!-- レース結果が記録済みなら答え合わせへ -->
+            <a th:if="${reviewRaceId != null}" class="review-link"
+               th:href="@{/review(raceId=${reviewRaceId})}">🎯 結果が出ました — 答え合わせを見る</a>
+
             <div th:if="${results == null or #lists.isEmpty(results)}"
                  style="text-align:center; padding:40px; color:var(--text-muted); font-size:13px;">
                 出走馬データがありません。
@@ -1372,6 +1420,31 @@
                               class="comment-sub"
                               th:text="${r.comment}">
                         </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 鬼眼買い目（◎〜注の5頭が顔面分析済みのときだけ） -->
+            <div th:if="${bets != null and !#lists.isEmpty(bets)}">
+                <div class="section-heading" id="bets">BETTING — 鬼眼買い目</div>
+                <div class="glass-card">
+                    <div class="bet-card-inner">
+                        <div class="bet-head">
+                            <span class="bet-total">各100円 ／ 合計 <strong th:text="${betPoints}">20</strong> 点
+                                （<span th:text="${#numbers.formatInteger(betPoints * 100, 1, 'COMMA')}">2,000</span>円）</span>
+                        </div>
+                        <div class="bet-row" th:each="b : ${bets}">
+                            <div class="bet-type" th:text="${b.type}">馬連</div>
+                            <div>
+                                <div class="bet-method" th:text="${b.method}">◎-○▲△注 流し</div>
+                                <div class="bet-combos">
+                                    <span class="bet-combo" th:each="c : ${b.combos}" th:text="${c.label}">◎3 - ○7</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bet-note">
+                            数字は馬番（枠順発表前は印のみ）。鬼眼スコア上位5頭から機械的に組んだ買い目です。馬券の購入は自己判断で。
+                        </div>
                     </div>
                 </div>
             </div>

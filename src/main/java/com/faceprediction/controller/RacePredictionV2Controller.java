@@ -1,6 +1,5 @@
 package com.faceprediction.controller;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -16,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import com.faceprediction.entity.RaceOdds;
 import com.faceprediction.entity.RaceSpecificResult;
 import com.faceprediction.repository.RaceOddsRepository;
+import com.faceprediction.service.BetLine;
+import com.faceprediction.service.BettingService;
+import com.faceprediction.service.FaceRankingService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +30,8 @@ public class RacePredictionV2Controller {
 
     @Autowired private RaceOddsRepository oddsRepo;
     @Autowired private JdbcTemplate       jdbc;
+    @Autowired private FaceRankingService rankingService;
+    @Autowired private BettingService     bettingService;
 
     @GetMapping
     public String show(@RequestParam(required = false) String raceName, Model model) {
@@ -76,8 +80,23 @@ public class RacePredictionV2Controller {
                 }
             }
 
-            List<RaceSpecificResult> results = buildSpreadResults(rows);
+            List<RaceSpecificResult> results = rankingService.rank(rows);
             model.addAttribute("results", results);
+
+            // 買い目提案（◎〜注の5頭が顔面分析済みのときだけ）
+            List<BetLine> bets = bettingService.suggest(results);
+            model.addAttribute("bets", bets);
+            model.addAttribute("betPoints", bettingService.totalPoints(bets));
+
+            // 結果が記録済みなら答え合わせページへの導線を出す（最新開催の race_id で判定）
+            List<String> reviewIds = jdbc.queryForList(
+                "SELECT rsa.race_id FROM race_specific_accuracy rsa " +
+                "WHERE rsa.data_source = 'stats' AND rsa.race_id = " +
+                "  (SELECT race_id FROM race_entry WHERE race_name = ? " +
+                "   ORDER BY race_date DESC, race_id DESC LIMIT 1) " +
+                "LIMIT 1",
+                String.class, selected);
+            model.addAttribute("reviewRaceId", reviewIds.isEmpty() ? null : reviewIds.get(0));
 
             // オッズデータ（馬名→RaceOdds）。レース当日以外は空マップになる
             List<RaceOdds> oddsList = oddsRepo.findByRaceNameOrderByPopularityAsc(selected);
@@ -87,83 +106,9 @@ public class RacePredictionV2Controller {
         } else {
             model.addAttribute("results", List.of());
             model.addAttribute("oddsMap", Map.of());
+            model.addAttribute("bets", List.of());
         }
 
         return "prediction/v2";
-    }
-
-    // 顔面スコアと統計スコアの配合比率（顔面主軸）
-    private static final double FACE_WEIGHT  = 0.75;
-    private static final double STATS_WEIGHT = 0.25;
-    // レース内コントラスト強調係数（平均からの差を広げる）
-    private static final double CONTRAST     = 1.9;
-    private static final double SCORE_MIN    = 40.0;
-    private static final double SCORE_MAX    = 99.0;
-
-    /**
-     * 顔面スコアを主軸に統計スコアで差別化し、レース内でコントラストを強調して
-     * スコアの団子状態を解消する。顔面分析済みの馬のみ対象（未分析は末尾・スコア無し）。
-     */
-    private List<RaceSpecificResult> buildSpreadResults(List<Map<String, Object>> rows) {
-        // 1. 各馬の合成スコアを計算
-        List<RaceSpecificResult> analyzed = new ArrayList<>();
-        List<RaceSpecificResult> unanalyzed = new ArrayList<>();
-        List<Double> composites = new ArrayList<>();
-
-        for (Map<String, Object> row : rows) {
-            RaceSpecificResult r = new RaceSpecificResult();
-            r.setHorseName((String) row.get("horse_name"));
-            r.setImagePath((String) row.get("image_path"));
-            r.setComment(toHeadlineFormat((String) row.get("face_comment")));
-            Object hn = row.get("horse_number");
-            if (hn != null) r.setHorseNumber(((Number) hn).intValue());
-            Object pp = row.get("post_position");
-            if (pp != null) r.setPostPosition(((Number) pp).intValue());
-
-            Object fs = row.get("face_score");
-            if (fs == null) {
-                r.setScore(null);
-                unanalyzed.add(r);
-                continue;
-            }
-            double face  = ((Number) fs).doubleValue();
-            Object ss = row.get("score");
-            double stats = ss != null ? ((Number) ss).doubleValue() : face;
-            double composite = face * FACE_WEIGHT + stats * STATS_WEIGHT;
-            r.setScore(composite); // 一旦合成スコアを格納（後で引き伸ばす）
-            analyzed.add(r);
-            composites.add(composite);
-        }
-
-        // 2. レース内平均を基準にコントラストを強調して引き伸ばす
-        if (!composites.isEmpty()) {
-            double mean = composites.stream().mapToDouble(Double::doubleValue).average().orElse(70.0);
-            for (RaceSpecificResult r : analyzed) {
-                double stretched = mean + (r.getScore() - mean) * CONTRAST;
-                stretched = Math.max(SCORE_MIN, Math.min(SCORE_MAX, stretched));
-                r.setScore(Math.round(stretched * 10.0) / 10.0);
-            }
-        }
-
-        // 3. スコア降順に並べ替え、順位を振り直す（未分析馬は末尾）
-        analyzed.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
-        List<RaceSpecificResult> results = new ArrayList<>();
-        results.addAll(analyzed);
-        results.addAll(unanalyzed);
-        int rank = 1;
-        for (RaceSpecificResult r : results) {
-            r.setRankPosition(rank++);
-        }
-        return results;
-    }
-
-    /**
-     * face_comment（「phrase1。phrase2。総括」形式）を
-     * テンプレートの見出し分割（全角スペース区切り）に合わせて変換する。
-     * 先頭の「。」を全角スペースに置換し、1文目を見出し、残りを本文にする。
-     */
-    private static String toHeadlineFormat(String comment) {
-        if (comment == null || comment.isBlank()) return null;
-        return comment.replaceFirst("。", "　");
     }
 }

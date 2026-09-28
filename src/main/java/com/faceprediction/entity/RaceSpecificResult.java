@@ -49,6 +49,13 @@ public class RaceSpecificResult {
     public Integer getPostPosition() { return postPosition; }
     public void setPostPosition(Integer postPosition) { this.postPosition = postPosition; }
 
+    // 答え合わせ用の実際の着順（DB列ではないため @Transient。未確定・取消は null）
+    @javax.persistence.Transient
+    private Integer actualRank;
+
+    public Integer getActualRank() { return actualRank; }
+    public void setActualRank(Integer actualRank) { this.actualRank = actualRank; }
+
     public RaceSpecificResult() {}
 
     @PrePersist

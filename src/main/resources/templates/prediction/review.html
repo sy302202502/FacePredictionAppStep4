@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>🎯 答え合わせ — 鬼眼競馬予想</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* 配色は predict-v2 と共通 */
+        :root {
+            --neon:        #7dff4f;
+            --neon-dim:    #3a7d22;
+            --neon-glow:   rgba(125,255,79,0.32);
+            --gold:        #c9a84c;
+            --gold-light:  #f5d878;
+            --orange:      #ff8000;
+            --crimson:     #ff2244;
+            --purple:      #8b5cf6;
+            --purple-glow: rgba(139,92,246,0.35);
+            --deep:        #050708;
+            --surface2:    #111811;
+            --surface3:    #182018;
+            --panel:       rgba(10,14,10,0.93);
+            --text:        #d4e8cc;
+            --text-muted:  #607860;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--deep);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px);
+            background-size: 44px 44px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .page-body {
+            position: relative;
+            z-index: 2;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px 16px 60px;
+        }
+
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 34px;
+            letter-spacing: 5px;
+            color: var(--neon);
+            text-shadow: 0 0 22px var(--neon-glow);
+            text-align: center;
+            margin: 10px 0 2px;
+        }
+        .page-sub { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
+
+        .section-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 17px;
+            letter-spacing: 4px;
+            color: var(--neon);
+            margin: 30px 0 12px;
+            text-shadow: 0 0 10px var(--neon-glow);
+        }
+        .section-heading::before { content: '▶'; color: var(--purple); font-size: 11px; }
+        .section-heading::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent);
+            opacity: 0.7;
+        }
+
+        .glass-card {
+            background: var(--panel);
+            border: 1px solid rgba(125,255,79,0.13);
+            border-radius: 5px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .card-inner { padding: 14px 18px; }
+
+        /* 直近成績 */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+        }
+        .stat-box {
+            background: var(--surface2);
+            border: 1px solid rgba(125,255,79,0.1);
+            border-radius: 4px;
+            padding: 10px;
+            text-align: center;
+        }
+        .stat-box .val { font-size: 22px; font-weight: 900; color: var(--gold-light); }
+        .stat-box .val small { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+        .stat-box .lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+        /* レース選択 */
+        /* style.css の汎用 form 装飾（白背景・中央寄せ）を打ち消す */
+        .race-bar { max-width: none; margin: 0; background: transparent; border: none; border-radius: 0;
+                    padding: 12px 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .race-bar label { font-family: 'Bebas Neue', sans-serif; letter-spacing: 3px; color: var(--neon); }
+        .race-bar select {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--neon-dim);
+            border-radius: 3px;
+            padding: 7px 12px;
+            font-size: 13px;
+            max-width: 100%;
+        }
+
+        /* 結果ヘッダ */
+        .race-title { font-size: 20px; font-weight: 900; }
+        .race-date { font-size: 12px; color: var(--text-muted); margin-left: 8px; }
+        .verdict {
+            margin-top: 10px;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-weight: 700;
+            border: 1px solid rgba(125,255,79,0.2);
+            background: var(--surface2);
+        }
+        .verdict.win { border-color: var(--gold); color: var(--gold-light); box-shadow: 0 0 14px rgba(201,168,76,0.3); }
+        .verdict.place { border-color: var(--neon-dim); color: var(--neon); }
+
+        .podium { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+        .podium-item {
+            flex: 1 1 150px;
+            background: var(--surface2);
+            border-radius: 4px;
+            padding: 8px 10px;
+            border-left: 3px solid var(--text-muted);
+            font-size: 13px;
+        }
+        .podium-item.p1 { border-left-color: var(--gold); }
+        .podium-item.p2 { border-left-color: #c0c0c0; }
+        .podium-item.p3 { border-left-color: #cd7f32; }
+        .podium-rank { font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 2px; color: var(--text-muted); }
+        .podium-name { font-weight: 700; }
+
+        .mark { display: inline-block; min-width: 1.4em; text-align: center; font-weight: 900; color: var(--orange); }
+
+        /* 買い目 */
+        .bet-row {
+            display: grid;
+            grid-template-columns: 64px 1fr 40px;
+            gap: 4px 10px;
+            padding: 9px 0;
+            border-top: 1px solid rgba(125,255,79,0.08);
+            align-items: start;
+        }
+        .bet-row:first-of-type { border-top: none; }
+        .bet-type { font-weight: 900; font-size: 14px; color: var(--neon); }
+        .bet-method { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+        .bet-combos { display: flex; flex-wrap: wrap; gap: 5px; }
+        .bet-combo {
+            font-size: 12px; padding: 2px 8px; border-radius: 3px; white-space: nowrap;
+            background: var(--surface3); border: 1px solid rgba(125,255,79,0.12); color: var(--text-muted);
+        }
+        .bet-combo.hit {
+            color: #1a1200; font-weight: 700;
+            background: var(--gold-light); border-color: var(--gold);
+            box-shadow: 0 0 10px rgba(245,216,120,0.45);
+        }
+        .bet-result { font-size: 18px; text-align: center; }
+        .bet-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+
+        /* 予想 vs 着順 */
+        table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; }
+        table.cmp th {
+            font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; font-weight: 400;
+            color: var(--text-muted); text-align: left; padding: 6px 8px;
+            border-bottom: 1px solid rgba(125,255,79,0.15);
+        }
+        table.cmp td { padding: 7px 8px; border-bottom: 1px solid rgba(125,255,79,0.06); }
+        table.cmp td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        table.cmp tr.in-money td { background: rgba(201,168,76,0.08); }
+        .finish { font-weight: 900; }
+        .finish.f1 { color: var(--gold-light); }
+        .finish.f2 { color: #d8d8d8; }
+        .finish.f3 { color: #e0a060; }
+
+        /* 直近レース一覧 */
+        .race-list a {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 4px 10px;
+            padding: 10px 4px;
+            border-top: 1px solid rgba(125,255,79,0.08);
+            color: var(--text);
+            text-decoration: none;
+        }
+        .race-list a:first-child { border-top: none; }
+        .race-list a:hover { background: rgba(125,255,79,0.04); }
+        .race-list a.current { background: rgba(139,92,246,0.12); }
+        .rl-name { font-weight: 700; }
+        .rl-date { font-size: 11px; color: var(--text-muted); margin-left: 6px; font-weight: 400; }
+        .rl-honmei { font-size: 12px; color: var(--text-muted); text-align: right; white-space: nowrap; }
+        .rl-hits { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
+        .hit-badge {
+            font-size: 11px; padding: 1px 7px; border-radius: 10px;
+            background: rgba(201,168,76,0.18); color: var(--gold-light); border: 1px solid var(--gold);
+        }
+
+        .empty-state { text-align: center; padding: 50px 20px; color: var(--text-muted); font-size: 14px; line-height: 1.9; }
+
+        @media (max-width: 640px) {
+            .page-title { font-size: 28px; }
+            .card-inner { padding: 12px; }
+            table.cmp { font-size: 12px; }
+            table.cmp th, table.cmp td { padding: 6px 4px; }
+            .col-score { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <h1 class="page-title">RESULT CHECK</h1>
+        <div class="page-sub">🎯 鬼眼予想の答え合わせ ― 予想した印と実際の着順を並べて確認</div>
+
+        <div th:if="${selected == null}" class="glass-card">
+            <div class="empty-state">
+                まだ結果が記録されたレースがありません。<br>
+                レース後に的中記録（result_auto_fetcher）が走ると、ここに答え合わせが表示されます。
+            </div>
+        </div>
+
+        <div th:if="${selected != null}">
+
+            <!-- 直近成績 -->
+            <div class="section-heading"><span th:text="${'RECENT FORM — 直近' + summary.races + 'レース'}">RECENT FORM — 直近30レース</span></div>
+            <div class="glass-card">
+                <div class="card-inner">
+                    <div class="stat-grid">
+                        <div class="stat-box">
+                            <div class="val"><span th:text="${summary.honmeiWin}">0</span><small> / <span th:text="${summary.races}">0</span></small></div>
+                            <div class="lbl">◎ 1着</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="val"><span th:text="${summary.honmeiPlace}">0</span><small> / <span th:text="${summary.races}">0</span></small></div>
+                            <div class="lbl">◎ 3着以内</div>
+                        </div>
+                        <div class="stat-box" th:each="e : ${summary.betHits}">
+                            <div class="val"><span th:text="${e.value}">0</span><small> / <span th:text="${summary.betRaces}">0</span></small></div>
+                            <div class="lbl" th:text="${e.key + ' 的中'}">馬連 的中</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- レース選択 -->
+            <div class="glass-card">
+                <form class="race-bar" method="get" th:action="@{/review}">
+                    <label>⛩ SELECT RACE</label>
+                    <select name="raceId" onchange="this.form.submit()">
+                        <option th:each="rv : ${reviews}"
+                                th:value="${rv.raceId}"
+                                th:text="${rv.raceDate + '　' + rv.raceName}"
+                                th:selected="${rv.raceId == selected.raceId}"></option>
+                    </select>
+                </form>
+            </div>
+
+            <!-- 結果サマリ -->
+            <div class="glass-card" th:with="h=${selected.honmei}">
+                <div class="card-inner">
+                    <div>
+                        <span class="race-title" th:text="${selected.raceName}">小倉記念</span>
+                        <span class="race-date" th:text="${selected.raceDate}">2026-07-19</span>
+                    </div>
+                    <div class="verdict"
+                         th:classappend="${h.actualRank != null and h.actualRank == 1 ? 'win' : (h.actualRank != null and h.actualRank <= 3 ? 'place' : '')}">
+                        <span th:if="${h.actualRank != null and h.actualRank == 1}">🏆 本命的中！ </span>
+                        ◎ <span th:text="${h.horseName}">馬名</span> は
+                        <strong th:text="${h.actualRank != null ? h.actualRank + '着' : '着順不明（取消・除外など）'}">1着</strong>
+                        <span th:if="${!#lists.isEmpty(selected.hitTypes)}"
+                              th:text="${' ／ 的中: ' + #strings.listJoin(selected.hitTypes, '・')}"></span>
+                    </div>
+                    <div class="podium">
+                        <div class="podium-item" th:each="p : ${selected.podium}"
+                             th:classappend="${'p' + p.actualRank}">
+                            <div class="podium-rank" th:text="${p.actualRank + '着'}">1着</div>
+                            <div class="podium-name">
+                                <span class="mark" th:text="${selected.markOf(p.rankPosition)}">◎</span>
+                                <span th:if="${p.horseNumber != null}" th:text="${p.horseNumber + '番'}">3番</span>
+                                <span th:text="${p.horseName}">馬名</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 買い目の答え合わせ -->
+            <div th:if="${!#lists.isEmpty(selected.bets)}">
+                <div class="section-heading">BETTING — 買い目の結果</div>
+                <div class="glass-card">
+                    <div class="card-inner">
+                        <div class="bet-row" th:each="b : ${selected.bets}">
+                            <div class="bet-type" th:text="${b.type}">馬連</div>
+                            <div>
+                                <div class="bet-method" th:text="${b.method}">◎-○▲△注 流し</div>
+                                <div class="bet-combos">
+                                    <span class="bet-combo" th:each="c : ${b.combos}"
+                                          th:classappend="${c.hit} ? 'hit'"
+                                          th:text="${c.label}">◎3 - ○7</span>
+                                </div>
+                            </div>
+                            <div class="bet-result" th:text="${b.hit} ? '✅' : '❌'">❌</div>
+                        </div>
+                        <div class="bet-note">
+                            各100円・合計 <span th:text="${betPoints}">20</span> 点の鬼眼買い目（予想画面と同じ組み方）。金色が的中した組です。配当は含みません。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 予想 vs 着順 -->
+            <div class="section-heading">PREDICTION vs RESULT</div>
+            <div class="glass-card">
+                <div class="card-inner">
+                    <table class="cmp">
+                        <thead>
+                            <tr>
+                                <th>印</th>
+                                <th>馬番</th>
+                                <th>馬名</th>
+                                <th class="num col-score">鬼眼PT</th>
+                                <th class="num">着順</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="r : ${selected.ranked}"
+                                th:classappend="${r.actualRank != null and r.actualRank <= 3} ? 'in-money'">
+                                <td><span class="mark" th:text="${selected.markOf(r.rankPosition)}">◎</span></td>
+                                <td th:text="${r.horseNumber != null ? r.horseNumber : '-'}">3</td>
+                                <td th:text="${r.horseName}">馬名</td>
+                                <td class="num col-score"
+                                    th:text="${r.score != null ? #numbers.formatDecimal(r.score, 1, 1) : '-'}">88.0</td>
+                                <td class="num">
+                                    <span class="finish"
+                                          th:classappend="${r.actualRank != null and r.actualRank <= 3} ? ${'f' + r.actualRank}"
+                                          th:text="${r.actualRank != null ? r.actualRank + '着' : '—'}">1着</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 直近レース一覧 -->
+            <div class="section-heading">RECENT RACES</div>
+            <div class="glass-card">
+                <div class="card-inner race-list">
+                    <a th:each="rv : ${reviews}"
+                       th:href="@{/review(raceId=${rv.raceId})}"
+                       th:classappend="${rv.raceId == selected.raceId} ? 'current'">
+                        <span class="rl-name"><span th:text="${rv.raceName}">レース名</span><span class="rl-date" th:text="${rv.raceDate}">2026-07-19</span></span>
+                        <span class="rl-honmei"
+                              th:text="${'◎ ' + (rv.honmei.actualRank != null ? rv.honmei.actualRank + '着' : '—')}">◎ 1着</span>
+                        <span class="rl-hits" th:if="${!#lists.isEmpty(rv.hitTypes)}">
+                            <span class="hit-badge" th:each="t : ${rv.hitTypes}" th:text="${t}">複勝</span>
+                        </span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

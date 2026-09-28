@@ -87,6 +87,9 @@ public class RacePredictionV2Controller {
 
             String latestRaceId = selectedId;
 
+            // 鬼眼コラム（重賞のみ。python/column_writer.py が作成）
+            model.addAttribute("column", loadColumn(selectedId));
+
             // 結果が記録済みなら答え合わせページへの導線を出す
             Integer recorded = latestRaceId == null ? 0 : jdbc.queryForObject(
                 "SELECT COUNT(*) FROM race_specific_accuracy " +
@@ -108,5 +111,20 @@ public class RacePredictionV2Controller {
         }
 
         return "prediction/v2";
+    }
+
+    /** race_column の1件（title / paragraphs / generator / updated）。無ければ null */
+    private Map<String, Object> loadColumn(String raceId) {
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT title, body, generator, updated_at FROM race_column WHERE race_id = ?", raceId);
+            if (rows.isEmpty()) return null;
+            Map<String, Object> c = new java.util.HashMap<>(rows.get(0));
+            c.put("paragraphs", java.util.Arrays.stream(((String) c.get("body")).split("\\n\\s*\\n"))
+                .map(String::trim).filter(p -> !p.isEmpty()).collect(Collectors.toList()));
+            return c;
+        } catch (Exception e) {
+            return null;  // race_column 未作成（コラムがまだ一度も書かれていない環境）
+        }
     }
 }

@@ -425,6 +425,15 @@ def main():
             # 終了コードだけでなく DB 上の完了も確認する（重賞以外も同じ基準で判定）
             ok3 = ok3 and face_analysis_done(conn, race_id)
 
+        # 5. 鬼眼コラム（重賞のみ）。枠順確定後に作成し、馬場確定などで材料が変われば書き直す。
+        #    失敗しても予想そのものには影響しないので、レースの成否には数えない
+        if is_graded and ok3:
+            okc, _ = run_script('column_writer.py',
+                                [race_id, '--grade', {1: 'G1', 2: 'G2', 3: 'G3'}[grade_no]],
+                                '鬼眼コラム')
+            if not okc:
+                log(f"  ⚠️ コラム作成に失敗（予想は公開済み）")
+
         results.append({
             'race': race_name,
             'race_id': race_id,

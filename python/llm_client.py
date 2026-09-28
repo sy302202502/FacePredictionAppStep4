@@ -145,8 +145,8 @@ def _call_groq(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str | N
 def _gemini_request(model: str, image_b64: str, prompt: str, mime: str):
     """Gemini を1モデル分だけ叩く。戻り値: (テキスト, 状態)
     状態は 'ok' / 'gone'(404=提供終了) / 'quota'(429) / 'error'"""
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{model}:generateContent?key={GEMINI_API_KEY}")
+    # API キーは URL ではなくヘッダーで渡す（URL に入れると例外メッセージ経由でログにキーが残る）
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     payload = {
         "contents": [{"parts": [
             {"inline_data": {"mime_type": mime, "data": image_b64}},
@@ -156,7 +156,7 @@ def _gemini_request(model: str, image_b64: str, prompt: str, mime: str):
     }
     for attempt in range(3):
         try:
-            resp = requests.post(url, json=payload,
+            resp = requests.post(url, json=payload, headers={'x-goog-api-key': GEMINI_API_KEY},
                                  timeout=(TIMEOUT_CONNECT, TIMEOUT_READ))
             if resp.status_code == 404:
                 print(f"    [提供終了] Gemini モデル {model} は利用できません")
@@ -204,6 +204,57 @@ def _call_gemini(image_b64: str, prompt: str, mime: str = 'image/jpeg') -> str |
         return None  # 'error' は一時障害の可能性があるので他モデルを試さない
     if tried:
         print(f"    [Gemini] 全モデルで失敗: {', '.join(tried)}")
+    return None
+
+
+def generate_text(prompt: str, system: str | None = None, json_output: bool = False,
+                  temperature: float = 0.9, max_tokens: int = 8192) -> str | None:
+    """文章生成（画像なし）。コラム等に使う。現状は Gemini のみ。
+    設定モデルが提供終了(404)・枠超過(429)なら画像分析と同じくエイリアスへ自動で切り替える。
+    失敗時は None（呼び出し側でテンプレート等にフォールバックすること）。
+    ※ Claude に切り替える場合は公式 SDK（anthropic）で別関数を足し、ここから呼び分ける。"""
+    if not GEMINI_API_KEY:
+        print("    [エラー] GEMINI_API_KEY が未設定です")
+        return None
+    config = {"temperature": temperature, "maxOutputTokens": max_tokens}
+    if json_output:
+        config["responseMimeType"] = "application/json"
+    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+               "generationConfig": config}
+    if system:
+        payload["systemInstruction"] = {"parts": [{"text": system}]}
+
+    for model in [GEMINI_MODEL] + [m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL]:
+        if model in _GEMINI_DEAD_MODELS:
+            continue
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for attempt in range(3):
+            try:
+                resp = requests.post(url, json=payload, headers={'x-goog-api-key': GEMINI_API_KEY},
+                                     timeout=(TIMEOUT_CONNECT, 120))
+                if resp.status_code == 404:
+                    _GEMINI_DEAD_MODELS.add(model)
+                    break
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    # 枠超過・一時的な混雑は待って再試行。3回続けば次のモデルへ。
+                    # Retry-After が長すぎる・読めない場合も最大30秒に抑える（パイプラインを止めない）
+                    try:
+                        wait = min(30.0, float(resp.headers.get('retry-after', 3 * (attempt + 1))))
+                    except ValueError:
+                        wait = 3.0 * (attempt + 1)
+                    print(f"    [一時エラー] Gemini({model}) {resp.status_code}: {wait:.0f}秒待機 ({attempt+1}/3)")
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                cands = resp.json().get('candidates', [])
+                parts = (cands[0].get('content') or {}).get('parts', []) if cands else []
+                text = ''.join(p.get('text', '') for p in parts if not p.get('thought'))
+                return text or None
+            except Exception as e:
+                print(f"    [llm エラー] Gemini({model}): {e}")
+                return None
+        else:
+            print(f"    [以降スキップ] Gemini({model}) は一時エラーが続いたため次のモデルへ")
     return None
 
 

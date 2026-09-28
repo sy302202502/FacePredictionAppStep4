@@ -1175,6 +1175,14 @@
             font-size: 12px; line-height: 1.7; color: var(--text);
             background: rgba(255,128,0,0.08); border: 1px solid rgba(255,128,0,0.35);
         }
+        .column-inner { padding: 18px 22px; }
+        .column-title {
+            font-size: 18px; font-weight: 900; color: var(--gold-light);
+            margin-bottom: 12px; line-height: 1.5;
+        }
+        .column-p { font-size: 14px; line-height: 1.95; margin-bottom: 12px; }
+        .column-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.6; }
+        @media (max-width: 640px) { .column-inner { padding: 14px; } .column-p { font-size: 13.5px; } }
         .bet-jump {
             display: block; text-align: right; margin: -6px 0 14px;
             font-size: 12px; color: var(--gold-light); text-decoration: none;
@@ -1328,6 +1336,21 @@
                     <div class="glass-card pattern-card bottom" style="margin-bottom:0;">
                         <div class="pattern-card-head">☠️ 6着以下の顔の傾向</div>
                         <div class="pattern-card-body" th:text="${pattern.bottomComment}">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 鬼眼コラム（重賞・枠順確定後） -->
+            <div th:if="${column != null}">
+                <div class="section-heading">ONI-EYE COLUMN — 鬼眼コラム</div>
+                <div class="glass-card column-card">
+                    <div class="column-inner">
+                        <h2 class="column-title" th:text="${column.title}">見出し</h2>
+                        <p class="column-p" th:each="p : ${column.paragraphs}" th:text="${p}">本文</p>
+                        <div class="column-note"
+                             th:text="${'※ 馬場・枠順・脚質などアプリのデータをもとに'
+                                 + (column.generator == 'template' ? '自動で組み立てた' : 'AIが文章化した')
+                                 + 'コラムです（' + #temporals.format(column.updated_at.toLocalDateTime(), 'M/d HH:mm') + ' 更新）。馬券の購入は自己判断で。'}">注記</div>
                     </div>
                 </div>
             </div>

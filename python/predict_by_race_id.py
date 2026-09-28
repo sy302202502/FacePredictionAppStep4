@@ -101,6 +101,13 @@ if r2.returncode != 0:
     print(f"⚠️ 顔面分析失敗 (returncode={r2.returncode})")
     sys.exit(1)
 
+# 4. 鬼眼コラム: すでにある（＝重賞の）レースだけ、出走馬・スコアの変化を反映して書き直す
+try:
+    subprocess.run(['python3', os.path.join(script_dir, 'column_writer.py'), race_id, '--only-existing'],
+                   cwd=script_dir, timeout=600)
+except subprocess.TimeoutExpired:
+    print("⚠️ コラムの書き直しがタイムアウト（予想は完了済み）")
+
 print("\n" + "=" * 60)
 print(f"✅ {race_name} の予想完了")
 print(f"   → /predict-v2?raceName={race_name} で確認")

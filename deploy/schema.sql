@@ -397,3 +397,14 @@ CREATE TABLE IF NOT EXISTS public.job_run (
     exit_code   integer,
     summary     text
 );
+
+-- 2026-09-28 追加: 鬼眼コラム（python/column_writer.py。重賞のみ）
+CREATE TABLE IF NOT EXISTS public.race_column (
+    race_id    character varying(20) PRIMARY KEY,
+    race_name  character varying(200),
+    title      character varying(200) NOT NULL,
+    body       text NOT NULL,
+    generator  character varying(40),
+    facts_hash character varying(64),
+    updated_at timestamp without time zone DEFAULT now()
+);

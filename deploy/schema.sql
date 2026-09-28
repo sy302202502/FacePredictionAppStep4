@@ -408,3 +408,9 @@ CREATE TABLE IF NOT EXISTS public.race_column (
     facts_hash character varying(64),
     updated_at timestamp without time zone DEFAULT now()
 );
+
+-- 2026-09-28 追加: 顔面分析の項目別の点数（face_analyzer_local.py が保存。検証用）
+ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_eyes double precision;
+ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_coat double precision;
+ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_muscle double precision;
+ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_vitality double precision;

@@ -40,6 +40,36 @@ def get_conn():
         options='-c statement_timeout=60000'
     )
 
+def ensure_face_columns(conn):
+    """項目別の点数列を追加（無い場合だけ）。通常運転では DDL を打たない。
+    ALTER はテーブルの排他ロックを取るため、既存かどうかを先に information_schema で確認し、
+    追加するときも lock_timeout で待ちすぎないようにする（過去の自己デッドロック事故の再発防止）"""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'stats_prediction' AND column_name IN
+              ('face_eyes', 'face_coat', 'face_muscle', 'face_vitality')
+    """)
+    have = {r[0] for r in cur.fetchall()}
+    conn.commit()
+    missing = [c for c in ('face_eyes', 'face_coat', 'face_muscle', 'face_vitality') if c not in have]
+    if missing:
+        try:
+            cur.execute("SET lock_timeout = '5s'")
+            for c in missing:
+                cur.execute(f"ALTER TABLE stats_prediction ADD COLUMN IF NOT EXISTS {c} DOUBLE PRECISION")
+            conn.commit()
+            print(f"  項目別の点数列を追加: {', '.join(missing)}")
+        except Exception as e:
+            conn.rollback()
+            print(f"  [警告] 項目別の点数列を追加できませんでした（次回再試行）: {e}")
+            raise
+        finally:
+            cur.execute("SET lock_timeout = 0")
+            conn.commit()
+    cur.close()
+
+
 # ── llavaで画像を英語分析 ───────────────────────────
 def analyze_image_llava(image_path):
     """
@@ -51,13 +81,15 @@ def analyze_image_llava(image_path):
         print(f"    [警告] 画像ファイルが見つかりません: {abs_path}")
         return None
 
-    prompt = """Analyze this racehorse photo and rate its physical condition on a scale of 1-10.
+    # 小数点1桁で答えさせる（整数だと 4項目平均が 2.5 刻みになり、レース内の半数以上が同点になっていた）
+    prompt = """Analyze this racehorse photo and rate its physical condition on a scale of 1.0-10.0.
+Use one decimal place (e.g. 7.3, 8.6) so that small differences between horses are reflected.
 
 Evaluate these aspects:
-1. Eye brightness and alertness (1-10)
-2. Coat shine and quality (1-10)
-3. Body muscle tone and definition (1-10)
-4. Overall energy and vitality (1-10)
+1. Eye brightness and alertness (1.0-10.0)
+2. Coat shine and quality (1.0-10.0)
+3. Body muscle tone and definition (1.0-10.0)
+4. Overall energy and vitality (1.0-10.0)
 
 Respond ONLY in this exact JSON format:
 {
@@ -75,6 +107,9 @@ Respond ONLY in this exact JSON format:
     except Exception as e:
         print(f"    [エラー] LLM分析失敗: {e}")
         return None
+
+# 顔面スコアの項目比重（合計1.0）。旧: 4項目均等
+FACE_WEIGHTS = {'eyes': 0.40, 'muscle': 0.25, 'vitality': 0.20, 'coat': 0.15}
 
 # ── JSON抽出 ────────────────────────────────────────
 def _clamp_score(v):
@@ -129,7 +164,9 @@ def parse_llava_response(raw):
     vitality = raw_scores['vitality'] if raw_scores['vitality'] is not None else fill
     summary  = data.get('summary', '')
 
-    avg = (eyes + coat + muscle + vitality) / 4.0
+    # 項目の比重（2026-09-28 本番4,500頭の検証で「目」の評価が最も着順と関係し、毛艶はほぼ無関係だった）
+    avg = (eyes * FACE_WEIGHTS['eyes'] + muscle * FACE_WEIGHTS['muscle']
+           + vitality * FACE_WEIGHTS['vitality'] + coat * FACE_WEIGHTS['coat'])
     score = round(avg * 10, 1)
     return {
         'eyes': eyes, 'coat': coat, 'muscle': muscle, 'vitality': vitality,
@@ -379,6 +416,7 @@ def main():
         cond, cond_arg = "race_name = %s", race_name
 
     conn = get_conn()
+    ensure_face_columns(conn)
     try:
         cur = conn.cursor()
         try:
@@ -442,11 +480,14 @@ def main():
                 face_score   = parsed['face_score']
 
                 # DB更新（解析成功時のみ）
+                # 項目ごとの点数も残す（どの見方が当たるかを後で検証するため）
                 cur.execute("""
                     UPDATE stats_prediction
-                    SET face_comment = %s, face_score = %s, face_analyzed_at = NOW()
+                    SET face_comment = %s, face_score = %s, face_analyzed_at = NOW(),
+                        face_eyes = %s, face_coat = %s, face_muscle = %s, face_vitality = %s
                     WHERE id = %s
-                """, (face_comment, face_score, row_id))
+                """, (face_comment, face_score, parsed['eyes'], parsed['coat'],
+                      parsed['muscle'], parsed['vitality'], row_id))
                 conn.commit()
                 success_count += 1
 

@@ -123,6 +123,7 @@
                     <include>**/*.svg</include>
                     <include>**/*.woff</include>
                     <include>**/*.woff2</include>
+                    <include>static/manifest.json</include>
                 </includes>
             </resource>
         </resources>

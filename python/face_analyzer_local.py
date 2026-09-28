@@ -41,13 +41,13 @@ def get_conn():
     )
 
 def ensure_face_columns(conn):
-    """項目別の点数列を追加（無い場合だけ）。通常運転では DDL を打たない。
+    """項目別の点数列を追加（無い場合だけ）。通常運転では DDL を打たない。使えるなら True。
     ALTER はテーブルの排他ロックを取るため、既存かどうかを先に information_schema で確認し、
     追加するときも lock_timeout で待ちすぎないようにする（過去の自己デッドロック事故の再発防止）"""
     cur = conn.cursor()
     cur.execute("""
         SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'stats_prediction' AND column_name IN
+        WHERE table_schema = current_schema() AND table_name = 'stats_prediction' AND column_name IN
               ('face_eyes', 'face_coat', 'face_muscle', 'face_vitality')
     """)
     have = {r[0] for r in cur.fetchall()}
@@ -61,13 +61,17 @@ def ensure_face_columns(conn):
             conn.commit()
             print(f"  項目別の点数列を追加: {', '.join(missing)}")
         except Exception as e:
+            # 列が追加できなくても顔面分析そのものは止めない（項目別の保存だけ見送る）
             conn.rollback()
-            print(f"  [警告] 項目別の点数列を追加できませんでした（次回再試行）: {e}")
-            raise
-        finally:
+            print(f"  [警告] 項目別の点数列を追加できませんでした（今回は保存を見送り・次回再試行）: {e}")
             cur.execute("SET lock_timeout = 0")
             conn.commit()
+            cur.close()
+            return False
+        cur.execute("SET lock_timeout = 0")
+        conn.commit()
     cur.close()
+    return True
 
 
 # ── llavaで画像を英語分析 ───────────────────────────
@@ -416,10 +420,25 @@ def main():
         cond, cond_arg = "race_name = %s", race_name
 
     conn = get_conn()
-    ensure_face_columns(conn)
+    has_face_cols = ensure_face_columns(conn)
     try:
         cur = conn.cursor()
         try:
+            # 採点方式の混在を防ぐ: これから分析する馬がいて、同じレースに旧方式（2026-09-28 以前・
+            # 整数×均等比重。face_eyes が NULL）で採点済みの馬がいれば、その馬も新方式で採点し直す。
+            # （同じレースで尺度の違う点数を比べると、◎や買い目が歪む）
+            if has_face_cols:
+                cur.execute(f"""
+                    UPDATE stats_prediction SET face_comment = NULL, face_score = NULL
+                    WHERE {cond} AND face_comment IS NOT NULL AND face_eyes IS NULL AND image_path IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM stats_prediction s2
+                                  WHERE s2.{cond.split(' ')[0]} = %s
+                                    AND s2.face_comment IS NULL AND s2.image_path IS NOT NULL)
+                """, (cond_arg, cond_arg))
+                if cur.rowcount:
+                    print(f"  旧方式で採点済みの{cur.rowcount}頭を新方式で採点し直します（同じレースで尺度をそろえるため）")
+                conn.commit()
+
             # 対象レースの馬を取得（未分析の馬のみ — API呼び出しの節約）
             cur.execute(f"""
                 SELECT id, horse_name, image_path, rank_position, horse_number
@@ -481,13 +500,20 @@ def main():
 
                 # DB更新（解析成功時のみ）
                 # 項目ごとの点数も残す（どの見方が当たるかを後で検証するため）
-                cur.execute("""
-                    UPDATE stats_prediction
-                    SET face_comment = %s, face_score = %s, face_analyzed_at = NOW(),
-                        face_eyes = %s, face_coat = %s, face_muscle = %s, face_vitality = %s
-                    WHERE id = %s
-                """, (face_comment, face_score, parsed['eyes'], parsed['coat'],
-                      parsed['muscle'], parsed['vitality'], row_id))
+                if has_face_cols:
+                    cur.execute("""
+                        UPDATE stats_prediction
+                        SET face_comment = %s, face_score = %s, face_analyzed_at = NOW(),
+                            face_eyes = %s, face_coat = %s, face_muscle = %s, face_vitality = %s
+                        WHERE id = %s
+                    """, (face_comment, face_score, parsed['eyes'], parsed['coat'],
+                          parsed['muscle'], parsed['vitality'], row_id))
+                else:
+                    cur.execute("""
+                        UPDATE stats_prediction
+                        SET face_comment = %s, face_score = %s, face_analyzed_at = NOW()
+                        WHERE id = %s
+                    """, (face_comment, face_score, row_id))
                 conn.commit()
                 success_count += 1
 

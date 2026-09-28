@@ -57,4 +57,28 @@ public class RaceSelectionService {
             .map(r -> (String) r.get("race_name"))
             .findFirst().orElse(null);
     }
+
+    /**
+     * 一覧を作らずに1開催だけ解決する（配信オーバーレイなど毎分アクセスされる画面用）。
+     * raceId が予想のある開催ならそれ、raceName ならその名前の最新開催、無ければ最新の開催。
+     * 戻り値: {race_id, race_name} / 該当なしは null
+     */
+    public Map<String, Object> resolveOne(String raceId, String raceName) {
+        String sql =
+            "SELECT sp.race_id, MIN(re.race_name) AS race_name FROM stats_prediction sp " +
+            "JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id ";
+        List<Map<String, Object>> rows;
+        if (raceId != null && raceId.matches("\\d{12}")) {
+            rows = jdbc.queryForList(sql + "WHERE sp.race_id = ? GROUP BY sp.race_id", raceId);
+            if (!rows.isEmpty()) return rows.get(0);
+        }
+        if (raceName != null && !raceName.isBlank()) {
+            rows = jdbc.queryForList(sql + "WHERE re.race_name = ? GROUP BY sp.race_id " +
+                "ORDER BY MAX(re.race_date) DESC, sp.race_id DESC LIMIT 1", raceName);
+            if (!rows.isEmpty()) return rows.get(0);
+        }
+        rows = jdbc.queryForList(sql + "WHERE sp.race_id IS NOT NULL GROUP BY sp.race_id " +
+            "ORDER BY MAX(sp.created_at) DESC, sp.race_id DESC LIMIT 1");
+        return rows.isEmpty() ? null : rows.get(0);
+    }
 }

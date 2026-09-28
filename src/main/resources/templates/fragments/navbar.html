@@ -175,5 +175,9 @@
                 if (!e.target.closest('nav')) drawer.classList.remove('open');
             }
         });
+        // ホーム画面に追加（PWA）用のサービスワーカー。ページはキャッシュしない（sw.js 参照）
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(function () {});
+        }
     </script>
 </nav>

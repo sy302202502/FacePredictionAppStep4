@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="60">
+    <meta name="robots" content="noindex">
+    <title>鬼眼オーバーレイ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        /* 1920×1080 の OBS ブラウザソース用。背景は既定で透明（bg=dark で黒） */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --neon: #7dff4f; --neon-glow: rgba(125,255,79,0.45);
+            --gold: #c9a84c; --gold-light: #f5d878; --orange: #ff8000;
+            --purple: #8b5cf6; --crimson: #ff2244;
+            --panel: rgba(5,8,6,0.82); --text: #eaf6e4; --muted: #9bb592;
+        }
+        html, body { width: 1920px; height: 1080px; overflow: hidden; }
+        body { font-family: 'Noto Sans JP', sans-serif; color: var(--text); background: transparent; }
+        body.dark { background: #050708; }
+        .wrap { position: absolute; inset: 40px 60px; display: flex; flex-direction: column; gap: 24px; }
+        .head {
+            display: flex; align-items: center; gap: 24px; padding: 14px 28px;
+            background: var(--panel); border: 2px solid rgba(125,255,79,0.35); border-radius: 12px;
+        }
+        .brand { font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: 6px; color: var(--neon);
+                 text-shadow: 0 0 18px var(--neon-glow); white-space: nowrap; }
+        .race { font-size: 54px; font-weight: 900; flex: 1; text-align: right;
+                text-shadow: 0 0 20px rgba(139,92,246,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* 予想 */
+        .picks { display: grid; grid-template-columns: 1.35fr 1fr 1fr 1fr 1fr; gap: 20px; }
+        .pick { background: var(--panel); border-radius: 14px; padding: 18px; text-align: center;
+                border: 2px solid rgba(125,255,79,0.25); }
+        .pick.p1 { border-color: var(--gold); box-shadow: 0 0 30px rgba(245,216,120,0.45); }
+        .mark { font-size: 72px; font-weight: 900; color: var(--orange); line-height: 1; }
+        .p1 .mark { font-size: 96px; color: var(--gold-light); text-shadow: 0 0 24px rgba(245,216,120,0.8); }
+        .photo { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; margin: 12px 0;
+                 background: #111; }
+        .num { font-family: 'Bebas Neue', sans-serif; font-size: 44px; color: var(--neon); letter-spacing: 2px; }
+        .name { font-size: 34px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .p1 .name { font-size: 44px; }
+        .pt { font-family: 'Bebas Neue', sans-serif; font-size: 36px; color: var(--muted); letter-spacing: 2px; }
+        .bets { background: var(--panel); border-radius: 12px; padding: 16px 26px; display: flex; flex-wrap: wrap;
+                gap: 10px 34px; font-size: 26px; border: 2px solid rgba(139,92,246,0.35); }
+        .bets b { color: var(--neon); margin-right: 10px; }
+        .bets .note { color: var(--muted); font-size: 20px; width: 100%; }
+
+        /* 結果 */
+        .verdict { background: var(--panel); border-radius: 14px; padding: 26px 34px; font-size: 64px; font-weight: 900;
+                   border: 3px solid rgba(125,255,79,0.3); }
+        .verdict.hit { border-color: var(--gold); animation: glow 1.6s ease-in-out infinite; color: var(--gold-light); }
+        .verdict small { display: block; font-size: 38px; margin-top: 10px; color: var(--text); }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(245,216,120,0.4); }
+            50% { box-shadow: 0 0 60px rgba(245,216,120,0.95); }
+        }
+        .podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+        .pod { background: var(--panel); border-radius: 14px; padding: 18px; text-align: center; border-top: 8px solid var(--muted); }
+        .pod.r1 { border-top-color: var(--gold); } .pod.r2 { border-top-color: #cfcfcf; } .pod.r3 { border-top-color: #cd7f32; }
+        .pod .rank { font-family: 'Bebas Neue', sans-serif; font-size: 60px; letter-spacing: 4px; }
+        .pod .photo { aspect-ratio: 16/10; }
+        .empty { font-size: 48px; text-align: center; margin-top: 400px; }
+    </style>
+</head>
+<body th:classappend="${bgDark} ? 'dark'">
+<div class="wrap" th:if="${empty == null}">
+    <div class="head">
+        <div class="brand">👹 鬼眼競馬予想 — MIKEY MASTER</div>
+        <div class="race" th:text="${raceName}">レース名</div>
+    </div>
+
+    <!-- ── 予想 ── -->
+    <th:block th:unless="${showResult}">
+        <div class="picks">
+            <div class="pick" th:each="r, st : ${picks}" th:classappend="${st.index == 0} ? 'p1'">
+                <div class="mark" th:text="${T(com.faceprediction.service.FaceRankingService).markOf(r.rankPosition)}">◎</div>
+                <img class="photo" th:if="${r.imagePath != null}" th:src="${r.imagePath}" alt="">
+                <div class="num" th:text="${r.horseNumber != null ? r.horseNumber + '番' : ''}">3番</div>
+                <div class="name" th:text="${r.horseName}">馬名</div>
+                <div class="pt" th:text="${#numbers.formatDecimal(r.score, 1, 1) + ' PT'}">88.0 PT</div>
+            </div>
+        </div>
+        <div class="bets" th:if="${!#lists.isEmpty(bets)}">
+            <span th:each="b : ${bets}"><b th:text="${b.type}">馬連</b><span th:text="${b.method}">◎-○▲△注</span></span>
+            <span class="note" th:text="${'鬼眼買い目 各100円・計' + betPoints + '点 ／ 馬券は自己判断で'}">注記</span>
+        </div>
+    </th:block>
+
+    <!-- ── 結果 ── -->
+    <th:block th:if="${showResult}" th:with="h=${review.honmei}">
+        <div class="verdict" th:classappend="${!#lists.isEmpty(review.hitTypes)} ? 'hit'">
+            <span th:text="${(h.actualRank != null and h.actualRank == 1 ? '🏆 本命的中！ ' : '')
+                + '◎' + (h.horseNumber != null ? h.horseNumber + '番' : '') + h.horseName + ' '
+                + (h.actualRank != null ? h.actualRank + '着' : '着順なし')}">◎ 1着</span>
+            <small th:if="${!#lists.isEmpty(review.hitTypes)}"
+                   th:text="${'🎯 的中 ' + #strings.listJoin(review.hitTypes, '・')
+                       + (review.returnTotal != null ? '　払戻 ' + #numbers.formatInteger(review.returnTotal, 1, 'COMMA') + '円' : '')}">的中</small>
+            <small th:if="${#lists.isEmpty(review.hitTypes)}">次こそ鬼眼で撃ち抜く！</small>
+        </div>
+        <div class="podium">
+            <div class="pod" th:each="p : ${review.podium}" th:classappend="${'r' + p.actualRank}">
+                <div class="rank" th:text="${p.actualRank + '着'}">1着</div>
+                <img class="photo" th:if="${p.horseId != null}" th:src="${'/uploads/candidates/' + p.horseId + '.jpg'}" alt="">
+                <div class="name" th:text="${review.markOf(p.rankPosition) + ' ' + (p.horseNumber != null ? p.horseNumber + '番' : '') + p.horseName}">◎3番 馬名</div>
+            </div>
+        </div>
+    </th:block>
+</div>
+<div class="empty" th:if="${empty != null}" th:text="${empty}">予想のあるレースがありません</div>
+</body>
+</html>

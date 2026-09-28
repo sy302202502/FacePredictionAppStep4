@@ -54,14 +54,15 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 org.springframework.security.web.authentication.www.BasicAuthenticationFilter.class)
             .authorizeRequests()
                 // 静的リソース・公開ページは認証不要
-                .antMatchers("/css/**", "/js/**", "/images/**", "/uploads/**").permitAll()
+                .antMatchers("/css/**", "/js/**", "/images/**", "/uploads/**",
+                             "/manifest.json", "/sw.js").permitAll()
                 // Docker healthcheck が認証なしで叩くため公開（詳細情報は show-details=when_authorized で保護）
                 .antMatchers("/actuator/health").permitAll()
                 .antMatchers("/", "/stats-predict", "/weekly", "/predict-v2",
                              "/calendar", "/horse", "/horse/**",
                              // 万馬券チャレンジは閲覧のみ公開（厳選実行 /run-stream は下でADMIN必須のまま）
                              "/high-dividend", "/high-dividend/result",
-                             "/accuracy", "/review", "/review/api").permitAll()
+                             "/accuracy", "/review", "/review/api", "/overlay").permitAll()
                 // 管理機能はADMINロール必須
                 .antMatchers("/script/**", "/health/**", "/entry/**", "/paddock/**", "/jobs", "/jobs/**", "/tospo", "/tospo/**",
                              "/accuracy/record", "/accuracy/record-v2",

@@ -50,5 +50,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addResourceLocations("classpath:/static/js/");
         registry.addResourceHandler("/images/**")
                 .addResourceLocations("classpath:/static/images/");
+        // ホーム画面に追加（PWA）用。サービスワーカーはサイト全体を対象にするためルート直下で配信する
+        registry.addResourceHandler("/manifest.json", "/sw.js")
+                .addResourceLocations("classpath:/static/");
     }
 }

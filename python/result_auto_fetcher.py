@@ -343,19 +343,125 @@ def find_unrecorded_stats(conn):
     cur.close()
     return rows
 
-def scrape_actual_results_by_id(race_id):
+# 払戻の組番を正規化する。順序に意味がある券種（馬単・三連単）以外は昇順に並べる
+ORDERED_BET_TYPES = ('馬単', '三連単')
+
+
+def payout_key(bet_type, numbers):
+    nums = [int(n) for n in numbers]
+    if bet_type not in ORDERED_BET_TYPES:
+        nums = sorted(nums)
+    return '-'.join(str(n) for n in nums)
+
+
+def parse_payouts(soup):
+    """結果ページの払戻表 → [(券種, 組番キー, 払戻円, 人気)]。
+    同着・複勝・ワイドの複数組もそのまま全行を返す（100円あたり）。"""
+    rows = []
+    for table in soup.find_all('table', class_='pay_table_01'):
+        for tr in table.find_all('tr'):
+            th = tr.find('th')
+            tds = tr.find_all('td')
+            if not th or len(tds) < 2:
+                continue
+            bet_type = th.get_text(strip=True)
+            combos = [c for c in tds[0].get_text('|', strip=True).split('|') if c]
+            pays = [p for p in tds[1].get_text('|', strip=True).split('|') if p]
+            pops = [p for p in tds[2].get_text('|', strip=True).split('|')] if len(tds) > 2 else []
+            for i, combo in enumerate(combos):
+                nums = re.findall(r'\d+', combo)
+                if not nums or i >= len(pays):
+                    continue
+                pay = int(re.sub(r'\D', '', pays[i]) or 0)
+                pop = int(pops[i]) if i < len(pops) and pops[i].isdigit() else None
+                rows.append((bet_type, payout_key(bet_type, nums), pay, pop))
+    return rows
+
+
+def ensure_payout_table(conn):
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS race_payout (
+            id         SERIAL PRIMARY KEY,
+            race_id    VARCHAR(20) NOT NULL,
+            bet_type   VARCHAR(10) NOT NULL,
+            combo      VARCHAR(20) NOT NULL,
+            payout     INTEGER NOT NULL,
+            popularity INTEGER,
+            fetched_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (race_id, bet_type, combo)
+        )
+    """)
+    conn.commit()
+    cur.close()
+
+
+def save_payouts(conn, race_id, payouts):
+    """払戻を入れ替え保存。払戻が確定していない（空）ときは何もしない。"""
+    if not payouts:
+        return 0
+    cur = conn.cursor()
+    cur.execute("DELETE FROM race_payout WHERE race_id = %s", (race_id,))
+    for bet_type, combo, pay, pop in payouts:
+        cur.execute("""
+            INSERT INTO race_payout (race_id, bet_type, combo, payout, popularity)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (race_id, bet_type, combo) DO NOTHING
+        """, (race_id, bet_type, combo, pay, pop))
+    conn.commit()
+    cur.close()
+    return len(payouts)
+
+
+def backfill_horse_numbers(conn, race_id, soup):
+    """馬番が未反映（NULL）の出走馬に、結果ページの馬番を horse_id で埋める。
+    出馬表同期を取りこぼしたレースでも、払戻との照合（馬番が必要）ができるようにする。"""
+    table = soup.find('table', class_='race_table_01') if soup else None
+    if not table:
+        return 0
+    nums = {}
+    for row in table.find_all('tr')[1:]:
+        cols = row.find_all('td')
+        if len(cols) < 4:
+            continue
+        link = cols[3].find('a', href=re.compile(r'/horse/'))
+        m_id = re.search(r'/horse/(\w+)', link.get('href', '')) if link else None
+        num = cols[2].get_text(strip=True)
+        if m_id and num.isdigit():
+            nums[m_id.group(1)] = int(num)
+    cur = conn.cursor()
+    n = 0
+    for hid, num in nums.items():
+        cur.execute("UPDATE race_entry SET horse_number = %s WHERE race_id = %s AND horse_id = %s "
+                    "AND horse_number IS NULL", (num, race_id, hid))
+        n += cur.rowcount
+        cur.execute("UPDATE stats_prediction SET horse_number = %s WHERE race_id = %s AND horse_id = %s "
+                    "AND horse_number IS NULL", (num, race_id, hid))
+    conn.commit()
+    cur.close()
+    return n
+
+
+def fetch_result_page(race_id):
+    """db.netkeiba の結果ページの soup。取れなければ None。"""
+    try:
+        resp = requests.get(f"https://db.netkeiba.com/race/{race_id}/", headers=HEADERS, timeout=15)
+        resp.encoding = 'EUC-JP'
+        return BeautifulSoup(resp.text, 'lxml')
+    except Exception as e:
+        print(f"    [スクレイピングエラー] {e}")
+        return None
+
+
+def scrape_actual_results_by_id(race_id, soup=None):
     """netkeiba の結果表から {horse_id: 着順} を取る。
     取消・除外・中止など数字でない着順の馬は含めない（着順なし）。
     馬名は表記揺れ・文字化けで予想側と一致しないことがあるため、現行システムは ID で突合する。"""
     if not race_id:
         return {}
-    url = f"https://db.netkeiba.com/race/{race_id}/"
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
-        soup = BeautifulSoup(resp.text, 'lxml')
-    except Exception as e:
-        print(f"    [スクレイピングエラー] {e}")
+    if soup is None:
+        soup = fetch_result_page(race_id)
+    if soup is None:
         return {}
     table = soup.find('table', class_='race_table_01')
     if not table:
@@ -524,6 +630,7 @@ def main():
     conn = get_conn()
     try:
         ensure_tables(conn)
+        ensure_payout_table(conn)
 
         if report:
             show_report(conn)
@@ -587,14 +694,40 @@ def main():
             if dry_run:
                 print(f"    [dry-run]")
                 continue
-            actual = scrape_actual_results_by_id(race_id)
+            soup = fetch_result_page(race_id)
+            actual = scrape_actual_results_by_id(race_id, soup) if soup else {}
             if not actual:
                 print(f"    [スキップ] 結果取得失敗")
                 time.sleep(1)
                 continue
             print(f"    {len(actual)}頭分の着順を取得")
             n = record_stats_system(conn, race_id, race_name, actual)
+            if n:
+                np_ = save_payouts(conn, race_id, parse_payouts(soup))
+                nb = backfill_horse_numbers(conn, race_id, soup)
+                print(f"    払戻 {np_}件を保存" + (f"・馬番 {nb}頭を補完" if nb else ""))
             print(f"    → {n}件記録完了")
+            time.sleep(1.5)
+
+        # 着順は記録済みだが払戻が未保存のレース（払戻機能の追加前に記録した分など）を埋める
+        cur_p = conn.cursor()
+        cur_p.execute("""
+            SELECT DISTINCT rsa.race_id FROM race_specific_accuracy rsa
+            WHERE rsa.data_source = 'stats' AND rsa.race_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM race_payout rp WHERE rp.race_id = rsa.race_id)
+            LIMIT 60
+        """)
+        missing = [r[0] for r in cur_p.fetchall()]
+        cur_p.close()
+        if missing:
+            print(f"\n払戻の未保存: {len(missing)}レース")
+        for rid in missing:
+            if dry_run:
+                continue
+            soup = fetch_result_page(rid)
+            np_ = save_payouts(conn, rid, parse_payouts(soup)) if soup else 0
+            nb = backfill_horse_numbers(conn, rid, soup) if soup else 0
+            print(f"  {rid}: 払戻 {np_}件" + (f"・馬番 {nb}頭を補完" if nb else ""))
             time.sleep(1.5)
 
         if not dry_run:

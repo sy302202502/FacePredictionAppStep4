@@ -63,7 +63,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                              "/high-dividend", "/high-dividend/result",
                              "/accuracy", "/review").permitAll()
                 // 管理機能はADMINロール必須
-                .antMatchers("/script/**", "/health/**", "/entry/**", "/paddock/**",
+                .antMatchers("/script/**", "/health/**", "/entry/**", "/paddock/**", "/jobs", "/jobs/**",
                              "/accuracy/record", "/accuracy/record-v2",
                              "/stats-predict/run", "/stats-predict/run-face",
                              "/weekly/run-pipeline", "/high-dividend/run-stream",

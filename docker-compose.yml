@@ -65,6 +65,10 @@ services:
       DISCORD_WEBHOOK_URL:   ${DISCORD_WEBHOOK_URL:-}
       NETKEIBA_LOGIN_ID:     ${NETKEIBA_LOGIN_ID:-}
       NETKEIBA_PASSWORD:     ${NETKEIBA_PASSWORD:-}
+      # 東スポ競馬（専門紙補正）。規約上、生データは画面に出さない。0 で無効
+      TOSPO_ENABLED:         ${TOSPO_ENABLED:-0}
+      TOSPO_LOGIN_EMAIL:     ${TOSPO_LOGIN_EMAIL:-}
+      TOSPO_PASSWORD:        ${TOSPO_PASSWORD:-}
       PGCONNECT_TIMEOUT:     ${PGCONNECT_TIMEOUT:-15}
       HEALTHCHECK_URL:       ${HEALTHCHECK_URL:-}
     volumes:

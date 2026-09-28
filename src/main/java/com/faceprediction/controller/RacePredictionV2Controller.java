@@ -18,6 +18,7 @@ import com.faceprediction.repository.RaceOddsRepository;
 import com.faceprediction.service.BetLine;
 import com.faceprediction.service.BettingService;
 import com.faceprediction.service.FaceRankingService;
+import com.faceprediction.service.RaceSelectionService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,52 +33,39 @@ public class RacePredictionV2Controller {
     @Autowired private JdbcTemplate       jdbc;
     @Autowired private FaceRankingService rankingService;
     @Autowired private BettingService     bettingService;
+    @Autowired private RaceSelectionService selectionService;
 
     @GetMapping
-    public String show(@RequestParam(required = false) String raceName, Model model) {
+    public String show(@RequestParam(required = false) String raceId,
+                       @RequestParam(required = false) String raceName, Model model) {
 
-        // 顔面分析済みレース一覧（stats_prediction を唯一の情報源にする）
-        List<String> raceNames = jdbc.queryForList(
-            "SELECT race_name FROM stats_prediction GROUP BY race_name ORDER BY MAX(created_at) DESC",
-            String.class);
-        model.addAttribute("raceNames", raceNames);
+        // 予想のある開催の一覧（開催=race_id 単位。同名重賞の別年も選べる）
+        List<Map<String, Object>> races = selectionService.listRaces();
+        model.addAttribute("raceOptions", races);
 
-        String selected = raceName;
-        if (selected == null && !raceNames.isEmpty()) {
-            selected = raceNames.get(0);
-        }
+        String selectedId = selectionService.resolve(raceId, raceName, races);
+        String selected = selectionService.nameOf(selectedId, races);
+        model.addAttribute("selectedRaceId", selectedId);
         model.addAttribute("selectedRace", selected);
 
-        if (selected != null) {
-            // 顔面スコア(主)＋統計スコア(差別化用)を取得
-            // INNER JOIN race_entry で「現出走表に居る馬」だけを対象にする
-            // = 出走取消馬は予想に表示されない
-            // race_entry の最新 horse_number を表示用に取得
+        if (selectedId != null) {
+            // 顔面スコア(主)＋統計スコア(差別化用)を取得。開催は race_id、馬は horse_id で突合。
+            // INNER JOIN race_entry で「現出走表に居る馬」だけを対象にする（出走取消馬は出ない）
             List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT sp.horse_name, sp.image_path, sp.face_comment, sp.face_score, sp.score, sp.rank_position, " +
-                "       re.horse_number, re.post_position " +
+                "SELECT sp.horse_id, sp.horse_name, sp.image_path, sp.face_comment, sp.face_score, sp.score, " +
+                "       sp.rank_position, re.horse_number, re.post_position " +
                 "FROM stats_prediction sp " +
-                // 馬は ID で厳密突合。開催は「この race_name の最新開催」に固定し、
-                // 予想行側は race_id 一致 or 未付与(旧コード由来のNULL)を許容する
-                "INNER JOIN race_entry re " +
-                "  ON re.horse_id = sp.horse_id " +
-                " AND re.race_id = (SELECT race_id FROM race_entry WHERE race_name = sp.race_name " +
-                "                   ORDER BY race_date DESC, race_id DESC LIMIT 1) " +
-                "WHERE sp.race_name = ? " +
-                "  AND (sp.race_id = re.race_id " +
-                // 旧コード由来の race_id NULL 行は、同じ馬の最新開催の行が無いときだけ使う
-                // （両方あると同じ馬が二重に表示されていた）
-                "       OR (sp.race_id IS NULL AND NOT EXISTS (SELECT 1 FROM stats_prediction sp2 " +
-                "           WHERE sp2.race_id = re.race_id AND sp2.horse_id = sp.horse_id))) " +
+                "INNER JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id " +
+                "WHERE sp.race_id = ? " +
                 "ORDER BY sp.rank_position ASC",
-                selected);
+                selectedId);
 
             // 防御的検知: stats_prediction には予想があるのに JOIN 結果ゼロ件
             // → race_entry が同期失敗等で空になっている兆候を即時検知
             if (rows.isEmpty()) {
                 Integer rawCount = jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM stats_prediction WHERE race_name = ?",
-                    Integer.class, selected);
+                    "SELECT COUNT(*) FROM stats_prediction WHERE race_id = ?",
+                    Integer.class, selectedId);
                 if (rawCount != null && rawCount > 0) {
                     log.warn("RACE_ENTRY MISMATCH: race={} has {} predictions but JOIN returned 0 rows. " +
                              "Check race_entry sync status.", selected, rawCount);
@@ -97,12 +85,7 @@ public class RacePredictionV2Controller {
             model.addAttribute("bets", bets);
             model.addAttribute("betPoints", bettingService.totalPoints(bets));
 
-            // 表示中の開催（この race_name の最新開催）
-            List<String> latestIds = jdbc.queryForList(
-                "SELECT race_id FROM race_entry WHERE race_name = ? " +
-                "ORDER BY race_date DESC, race_id DESC LIMIT 1",
-                String.class, selected);
-            String latestRaceId = latestIds.isEmpty() ? null : latestIds.get(0);
+            String latestRaceId = selectedId;
 
             // 結果が記録済みなら答え合わせページへの導線を出す
             Integer recorded = latestRaceId == null ? 0 : jdbc.queryForObject(

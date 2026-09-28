@@ -185,6 +185,8 @@
             box-shadow: 0 0 10px rgba(245,216,120,0.45);
         }
         .bet-result { font-size: 18px; text-align: center; }
+        .verdict-money { margin-top: 6px; font-size: 13px; color: var(--gold-light); }
+        .stat-box.recovery { border-color: var(--gold); }
         .bet-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
 
         /* 予想 vs 着順 */
@@ -264,9 +266,15 @@
                             <div class="val"><span th:text="${summary.honmeiPlace}">0</span><small> / <span th:text="${summary.races}">0</span></small></div>
                             <div class="lbl">◎ 3着以内</div>
                         </div>
+                        <div class="stat-box recovery" th:if="${summary.payoutRaces > 0}">
+                            <div class="val"><span th:text="${summary.recovery}">85</span><small>%</small></div>
+                            <div class="lbl" th:text="${'回収率（' + summary.payoutRaces + 'レース・'
+                                + #numbers.formatInteger(summary.returned, 1, 'COMMA') + '円 / '
+                                + #numbers.formatInteger(summary.invested, 1, 'COMMA') + '円）'}">回収率</div>
+                        </div>
                         <div class="stat-box" th:each="e : ${summary.betHits}">
                             <div class="val"><span th:text="${e.value}">0</span><small> / <span th:text="${summary.betRaces}">0</span></small></div>
-                            <div class="lbl" th:text="${e.key + ' 的中'}">馬連 的中</div>
+                            <div class="lbl" th:text="${e.key + ' 的中' + (summary.recoveryByType[e.key] != null and summary.payoutRaces > 0 ? '・回収' + summary.recoveryByType[e.key] + '%' : '')}">馬連 的中</div>
                         </div>
                     </div>
                 </div>
@@ -299,6 +307,10 @@
                         <strong th:text="${h.actualRank != null ? h.actualRank + '着' : '着順なし（取消・除外・中止、または結果未取得）'}">1着</strong>
                         <span th:if="${!#lists.isEmpty(selected.hitTypes)}"
                               th:text="${' ／ 的中: ' + #strings.listJoin(selected.hitTypes, '・')}"></span>
+                        <div class="verdict-money" th:if="${selected.returnTotal != null}"
+                             th:text="${'払戻 ' + #numbers.formatInteger(selected.returnTotal, 1, 'COMMA') + '円 ／ 投資 '
+                                 + #numbers.formatInteger(selected.invested, 1, 'COMMA') + '円（回収率 '
+                                 + (selected.invested > 0 ? #numbers.formatInteger(selected.returnTotal * 100 / selected.invested, 1) : 0) + '%）'}">払戻</div>
                     </div>
                     <div class="podium">
                         <div class="podium-item" th:each="p : ${selected.podium}"
@@ -326,13 +338,13 @@
                                 <div class="bet-combos">
                                     <span class="bet-combo" th:each="c : ${b.combos}"
                                           th:classappend="${c.hit} ? 'hit'"
-                                          th:text="${c.label}">◎3 - ○7</span>
+                                          th:text="${c.label + (c.payout != null ? '　' + #numbers.formatInteger(c.payout, 1, 'COMMA') + '円' : '')}">◎3 - ○7</span>
                                 </div>
                             </div>
                             <div class="bet-result" th:text="${b.hit == null ? '…' : (b.hit ? '✅' : '❌')}">❌</div>
                         </div>
                         <div class="bet-note">
-                            各100円・合計 <span th:text="${betPoints}">20</span> 点の鬼眼買い目（予想画面と同じ組み方）。金色が的中した組です。1〜3着の着順がそろっていないレースは「…」（判定保留）になります。配当は含みません。
+                            各100円・合計 <span th:text="${betPoints}">20</span> 点の鬼眼買い目（予想画面と同じ組み方）。金色が的中した組で、金額は100円あたりの払戻です（netkeibaの払戻表で判定するため、同着・複勝の頭数条件にも対応）。払戻・着順がそろっていないレースは「…」（判定保留）になります。
                         </div>
                     </div>
                 </div>
@@ -380,7 +392,8 @@
                        th:classappend="${rv.raceId == selected.raceId} ? 'current'">
                         <span class="rl-name"><span th:text="${rv.raceName}">レース名</span><span class="rl-date" th:text="${rv.raceDate}">2026-07-19</span></span>
                         <span class="rl-honmei"
-                              th:text="${'◎ ' + (rv.honmei.actualRank != null ? rv.honmei.actualRank + '着' : '—')}">◎ 1着</span>
+                              th:text="${'◎ ' + (rv.honmei.actualRank != null ? rv.honmei.actualRank + '着' : '—')
+                                  + (rv.returnTotal != null ? '　払戻' + #numbers.formatInteger(rv.returnTotal, 1, 'COMMA') + '円' : '')}">◎ 1着</span>
                         <span class="rl-hits" th:if="${!#lists.isEmpty(rv.hitTypes)}">
                             <span class="hit-badge" th:each="t : ${rv.hitTypes}" th:text="${t}">複勝</span>
                         </span>

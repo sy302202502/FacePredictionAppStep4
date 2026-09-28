@@ -45,44 +45,56 @@ public class WeeklyController {
 
     // ── GET /weekly ───────────────────────────────────────────
     @GetMapping
-    public String index(@RequestParam(required = false) String raceName, Model model) {
+    public String index(@RequestParam(required = false) String raceId,
+                        @RequestParam(required = false) String raceName, Model model) {
 
-        // 蓄積済みレース一覧（日付降順）
+        // 蓄積済みレース一覧（開催=race_id 単位、日付降順）。
+        // 同名重賞の別年は別の行になり、頭数・分析数も開催ごとに数える
         List<Map<String, Object>> raceList = jdbc.queryForList(
-            "SELECT sp.race_name," +
+            "SELECT sp.race_id, MIN(re.race_name) AS race_name," +
             "  MAX(re.race_date) AS race_date," +
-            "  COUNT(DISTINCT sp.horse_name) AS horse_count," +
-            "  COUNT(DISTINCT CASE WHEN sp.face_comment IS NOT NULL THEN sp.horse_name END) AS face_done," +
+            "  COUNT(DISTINCT sp.horse_id) AS horse_count," +
+            "  COUNT(DISTINCT CASE WHEN sp.face_comment IS NOT NULL THEN sp.horse_id END) AS face_done," +
             "  MAX(sp.created_at) AS updated_at" +
             " FROM stats_prediction sp" +
-            // race_name JOINだと同名の過去開催×全頭に行が膨らむため、IDで厳密に突合
-            " LEFT JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id" +
-            // 選択時の表示（同名レースの最新開催）と同じ行だけを数える。
-            // 絞らないと前年の同名重賞の頭数・分析数が合算されていた
-            " WHERE sp.race_id IS NULL OR sp.race_id =" +
-            "   (SELECT race_id FROM race_entry WHERE race_name = sp.race_name" +
-            "    ORDER BY race_date DESC, race_id DESC LIMIT 1)" +
-            " GROUP BY sp.race_name" +
+            " JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id" +
+            " WHERE sp.race_id IS NOT NULL" +
+            " GROUP BY sp.race_id" +
             " ORDER BY MAX(re.race_date) DESC NULLS LAST, MAX(sp.created_at) DESC");
 
-        model.addAttribute("raceList",  raceList);
-        model.addAttribute("selected",  raceName);
+        // 表示する開催: raceId 優先。旧来の ?raceName= はその名前の最新開催として扱う
+        String selectedId = null;
+        if (raceId != null && raceList.stream().anyMatch(r -> raceId.equals(r.get("race_id")))) {
+            selectedId = raceId;
+        } else if (raceName != null && !raceName.isBlank()) {
+            selectedId = raceList.stream()
+                .filter(r -> raceName.equals(r.get("race_name")))
+                .map(r -> (String) r.get("race_id"))
+                .findFirst().orElse(null);
+        }
+        String selectedIdFinal = selectedId;
+        String selectedName = raceList.stream()
+            .filter(r -> selectedIdFinal != null && selectedIdFinal.equals(r.get("race_id")))
+            .map(r -> (String) r.get("race_name"))
+            .findFirst().orElse(null);
+
+        model.addAttribute("raceList",   raceList);
+        model.addAttribute("selectedId", selectedId);
+        model.addAttribute("selected",   selectedName);
         model.addAttribute("isPipelineRunning", running.getOrDefault(PIPELINE_KEY, false));
 
-        // 選択レースの予想結果
+        // 選択レースの予想結果（開催・馬とも ID で突合、馬番は出走表の値）
         List<Map<String, Object>> results = List.of();
-        if (raceName != null && !raceName.isBlank()) {
+        if (selectedId != null) {
             results = jdbc.queryForList(
-                "SELECT horse_name, horse_number, jockey_name," +
-                " rank_position, score, comment," +
-                " image_path, face_comment, face_score" +
-                " FROM stats_prediction sp WHERE sp.race_name = ?" +
-                // 同名の過去開催（別年）の行を混ぜない。race_id 未付与(旧コード由来)は表示を許容
-                " AND (sp.race_id IS NULL OR sp.race_id =" +
-                "      (SELECT race_id FROM race_entry WHERE race_name = sp.race_name" +
-                "       ORDER BY race_date DESC, race_id DESC LIMIT 1))" +
-                " ORDER BY rank_position",
-                raceName);
+                "SELECT sp.horse_name, re.horse_number, sp.jockey_name," +
+                " sp.rank_position, sp.score, sp.comment," +
+                " sp.image_path, sp.face_comment, sp.face_score" +
+                " FROM stats_prediction sp" +
+                " JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id" +
+                " WHERE sp.race_id = ?" +
+                " ORDER BY sp.rank_position",
+                selectedId);
         }
         model.addAttribute("results", results);
 

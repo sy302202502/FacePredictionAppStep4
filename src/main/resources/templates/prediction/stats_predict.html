@@ -370,17 +370,17 @@
         </div>
 
         <!-- 結果表示パネル -->
-        <div class="glass-card" th:if="${!raceNames.isEmpty()}">
+        <div class="glass-card" th:if="${!raceOptions.isEmpty()}">
             <div class="glass-card-inner">
                 <div style="margin-bottom:4px;">
                     <label style="display:block; margin-bottom:6px;">VIEW RACE RESULTS</label>
                     <form method="get" action="/stats-predict">
                         <div class="control-row">
-                            <select name="raceName" id="view-race-select" style="flex:1;" onchange="this.form.submit()">
+                            <select name="raceId" id="view-race-select" style="flex:1;" onchange="this.form.submit()">
                                 <option value="">-- レースを選択 --</option>
-                                <option th:each="race : ${raceNames}"
-                                        th:value="${race}" th:text="${race}"
-                                        th:selected="${race == selectedRace}"></option>
+                                <option th:each="r : ${raceOptions}"
+                                        th:value="${r.race_id}" th:text="${r.label}"
+                                        th:selected="${r.race_id == selectedRaceId}"></option>
                             </select>
                         </div>
                     </form>

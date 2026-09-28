@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗓 実行履歴 — 鬼眼競馬予想</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        /* 配色は predict-v2 と共通 */
+        :root {
+            --neon:       #7dff4f;
+            --neon-dim:   #3a7d22;
+            --neon-glow:  rgba(125,255,79,0.32);
+            --gold-light: #f5d878;
+            --crimson:    #ff2244;
+            --purple:     #8b5cf6;
+            --deep:       #050708;
+            --surface2:   #111811;
+            --panel:      rgba(10,14,10,0.93);
+            --text:       #d4e8cc;
+            --text-muted: #607860;
+        }
+        body { font-family: 'Noto Sans JP', sans-serif; background: var(--deep); color: var(--text); min-height: 100vh; }
+        .page-body { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 5px;
+            color: var(--neon); text-shadow: 0 0 22px var(--neon-glow); text-align: center; margin: 10px 0 2px;
+        }
+        .page-sub { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
+        .section-heading {
+            font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 4px;
+            color: var(--neon); margin: 26px 0 10px;
+        }
+        .glass-card {
+            background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px;
+            padding: 14px 16px; margin-bottom: 16px; overflow-x: auto;
+        }
+        .job-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+        .job-box { background: var(--surface2); border-radius: 4px; padding: 10px 12px; border-left: 3px solid var(--text-muted); }
+        .job-box.ok { border-left-color: var(--neon); }
+        .job-box.ng { border-left-color: var(--crimson); }
+        .job-box.run { border-left-color: var(--purple); }
+        .job-name { font-weight: 700; font-size: 13px; }
+        .job-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .job-sum { font-size: 11px; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { text-align: left; color: var(--text-muted); font-weight: 400; padding: 6px; border-bottom: 1px solid rgba(125,255,79,0.15); }
+        td { padding: 6px; border-bottom: 1px solid rgba(125,255,79,0.06); vertical-align: top; }
+        td.sum { white-space: pre-wrap; word-break: break-all; color: var(--text-muted); max-width: 420px; }
+        .st-ok { color: var(--neon); } .st-ng { color: var(--crimson); font-weight: 700; } .st-run { color: var(--purple); }
+        .empty { text-align: center; color: var(--text-muted); padding: 30px; line-height: 1.9; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <h1 class="page-title">JOB HISTORY</h1>
+        <div class="page-sub">🗓 cron ジョブの実行履歴（直近100件・180日保存）</div>
+
+        <div th:if="${#lists.isEmpty(runs)}" class="glass-card">
+            <div class="empty">
+                まだ記録がありません。<br>
+                deploy/conoha_crontab.txt を crontab に反映すると、次回のcron実行から記録されます。
+            </div>
+        </div>
+
+        <div th:unless="${#lists.isEmpty(runs)}">
+            <div class="section-heading">LATEST — ジョブごとの最新</div>
+            <div class="glass-card">
+                <div class="job-grid">
+                    <div class="job-box" th:each="j : ${latest}"
+                         th:classappend="${j.finished_at == null ? 'run' : (j.exit_code == 0 ? 'ok' : 'ng')}">
+                        <div class="job-name" th:text="${labels[j.job_name] != null ? labels[j.job_name] : j.job_name}">週次パイプライン</div>
+                        <div class="job-meta">
+                            <span th:text="${#temporals.format(j.started_at.toLocalDateTime(), 'MM/dd HH:mm')}">09/28 09:00</span>
+                            ・<span th:text="${j.finished_at == null ? '実行中／中断' : (j.exit_code == 0 ? '成功' : '失敗（' + j.exit_code + '）')}">成功</span>
+                        </div>
+                        <div class="job-sum" th:text="${j.summary}">RESULT:...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-heading">HISTORY</div>
+            <div class="glass-card">
+                <table>
+                    <thead><tr><th>開始</th><th>ジョブ</th><th>結果</th><th>所要</th><th>要約</th></tr></thead>
+                    <tbody>
+                        <tr th:each="r : ${runs}">
+                            <td th:text="${#temporals.format(r.started_at.toLocalDateTime(), 'MM/dd HH:mm')}">09/28 09:00</td>
+                            <td th:text="${labels[r.job_name] != null ? labels[r.job_name] : r.job_name}" th:title="${r.command}">週次</td>
+                            <td>
+                                <span th:if="${r.finished_at == null}" class="st-run">実行中／中断</span>
+                                <span th:if="${r.finished_at != null and r.exit_code == 0}" class="st-ok">成功</span>
+                                <span th:if="${r.finished_at != null and r.exit_code != 0}" class="st-ng" th:text="${'失敗(' + r.exit_code + ')'}">失敗</span>
+                            </td>
+                            <td th:text="${r.seconds != null ? (r.seconds >= 60 ? (r.seconds / 60) + '分' : r.seconds + '秒') : '—'}">3分</td>
+                            <td class="sum" th:text="${r.summary}">…</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

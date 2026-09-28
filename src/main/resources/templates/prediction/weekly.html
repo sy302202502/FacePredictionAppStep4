@@ -398,8 +398,8 @@
                     予想がありません。<br>パイプラインを実行してください。
                 </div>
                 <a th:each="r : ${raceList}"
-                   th:href="@{/weekly(raceName=${r.race_name})}"
-                   th:classappend="${r.race_name == selected} ? 'race-item active' : 'race-item'">
+                   th:href="@{/weekly(raceId=${r.race_id})}"
+                   th:classappend="${r.race_id == selectedId} ? 'race-item active' : 'race-item'">
                     <div class="race-date"
                          th:text="${r.race_date != null} ? ${#dates.format(r.race_date, 'M/d(E)')} : '日付未定'">
                     </div>

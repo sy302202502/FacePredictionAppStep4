@@ -361,3 +361,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_stats_prediction_race_horse
     WHERE race_id IS NOT NULL AND horse_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_stats_prediction_race_id ON public.stats_prediction(race_id);
 CREATE INDEX IF NOT EXISTS idx_rsa_race_id ON public.race_specific_accuracy(race_id);
+
+-- 2026-09-28 追加: 払戻（result_auto_fetcher）・予想の固定保存（SnapshotService）・cron実行履歴（job_runner）
+-- いずれも各処理が CREATE TABLE IF NOT EXISTS で自動作成するが、新規構築・復元用にここにも記載する
+CREATE TABLE IF NOT EXISTS public.race_payout (
+    id         SERIAL PRIMARY KEY,
+    race_id    character varying(20) NOT NULL,
+    bet_type   character varying(10) NOT NULL,
+    combo      character varying(20) NOT NULL,
+    payout     integer NOT NULL,
+    popularity integer,
+    fetched_at timestamp without time zone DEFAULT now(),
+    UNIQUE (race_id, bet_type, combo)
+);
+
+CREATE TABLE IF NOT EXISTS public.prediction_snapshot (
+    id            SERIAL PRIMARY KEY,
+    race_id       character varying(20) NOT NULL,
+    horse_id      character varying(20),
+    horse_name    character varying(100),
+    horse_number  integer,
+    post_position integer,
+    rank_position integer NOT NULL,
+    score         double precision,
+    snapshot_at   timestamp without time zone DEFAULT now(),
+    UNIQUE (race_id, horse_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.job_run (
+    id          SERIAL PRIMARY KEY,
+    job_name    character varying(50) NOT NULL,
+    command     character varying(300),
+    started_at  timestamp without time zone DEFAULT now(),
+    finished_at timestamp without time zone,
+    exit_code   integer,
+    summary     text
+);

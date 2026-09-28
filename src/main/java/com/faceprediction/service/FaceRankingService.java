@@ -57,6 +57,7 @@ public class FaceRankingService {
         for (Map<String, Object> row : rows) {
             RaceSpecificResult r = new RaceSpecificResult();
             r.setHorseName((String) row.get("horse_name"));
+            r.setHorseId((String) row.get("horse_id"));
             r.setImagePath((String) row.get("image_path"));
             r.setComment(toHeadlineFormat((String) row.get("face_comment")));
             Object hn = row.get("horse_number");

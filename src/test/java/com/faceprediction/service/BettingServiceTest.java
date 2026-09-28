@@ -117,4 +117,50 @@ class BettingServiceTest {
         assertEquals(5, ranked.get(1).getHorseNumber());
         assertEquals(9, ranked.get(2).getHorseNumber());
     }
+
+    @Test
+    void 払戻表があれば払戻表で判定し払戻額を合計する() {
+        // A(1番)が1着、D(4番)が2着、F(6番)が3着
+        Map<String, Integer> pay = new HashMap<>();
+        pay.put("単勝:1", 350);
+        pay.put("複勝:1", 150);
+        pay.put("複勝:4", 400);
+        pay.put("複勝:6", 900);
+        pay.put("馬連:1-4", 2100);
+        pay.put("ワイド:1-4", 700);
+        pay.put("ワイド:1-6", 1800);
+        pay.put("ワイド:4-6", 4200);
+        pay.put("三連複:1-4-6", 15000);
+        pay.put("三連単:1-4-6", 60000);
+        List<BetLine> lines = betting.suggest(race(Map.of("A", 1, "D", 2, "F", 3)), pay);
+        assertEquals(true, line(lines, "単勝").getHit());
+        assertEquals(350, line(lines, "単勝").getReturnAmount());
+        assertEquals(true, line(lines, "馬連").getHit());       // ◎1-△4
+        assertEquals(2100, line(lines, "馬連").getReturnAmount());
+        assertEquals(false, line(lines, "ワイド").getHit());    // ◎-○(2) ◎-▲(3) は外れ
+        assertEquals(0, line(lines, "ワイド").getReturnAmount());
+        assertEquals(false, line(lines, "三連複").getHit());    // 6番は印外
+    }
+
+    @Test
+    void 払戻表の同着組も的中になる() {
+        // 1着同着(A,B)・3着C → 三連単は 1-2-3 と 2-1-3 の両方が払戻表にある
+        Map<String, Integer> pay = new HashMap<>();
+        pay.put("三連単:1-2-3", 30000);
+        pay.put("三連単:2-1-3", 28000);
+        pay.put("単勝:1", 400);
+        pay.put("単勝:2", 380);
+        List<BetLine> lines = betting.suggest(race(Map.of("A", 1, "B", 1, "C", 3)), pay);
+        assertEquals(true, line(lines, "三連単").getHit());
+        assertEquals(30000, line(lines, "三連単").getReturnAmount());   // ◎→○→▲ のみ購入
+        assertEquals(400, line(lines, "単勝").getReturnAmount());
+    }
+
+    @Test
+    void 払戻キーは馬単と三連単だけ順序を保つ() {
+        assertEquals("馬連:3-12", BettingService.payoutKey("馬連", 12, 3));
+        assertEquals("三連複:2-5-9", BettingService.payoutKey("三連複", 9, 2, 5));
+        assertEquals("三連単:9-2-5", BettingService.payoutKey("三連単", 9, 2, 5));
+        assertEquals("馬単:12-3", BettingService.payoutKey("馬単", 12, 3));
+    }
 }

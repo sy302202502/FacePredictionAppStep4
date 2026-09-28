@@ -14,6 +14,7 @@ Claude Vision API は一切使用しない。
   7. 血統適性 (10pt)  ← 父・母父の距離/馬場適性と今回条件の合致
   ── 上記の合計100pt に対して ──
   8. 展開補正 (±5pt)  ← 出走各馬の脚質から想定ペースを出し、有利不利を加減算
+  9. 専門紙補正 (-3〜+7pt) ← 東スポ競馬の指数・記者印（TOSPO_ENABLED=1 のときだけ。tospo_client.py）
 
 使い方:
   python stats_predictor.py 大阪杯
@@ -28,6 +29,7 @@ from dotenv import load_dotenv
 from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, surface_of_distance_cell
 from race_condition import resolve_condition
 from pace_analyzer import running_style, predict_pace, pace_adjustment
+from tospo_client import fetch_adjustments as fetch_tospo_adjustments
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -763,6 +765,12 @@ def main():
     pace_label = (f"{pace_info['pace']}（逃げ{c['逃げ']}・先行{c['先行']}"
                   f"・差し{c['差し']}・追込{c['追込']}）")
 
+    # 専門紙補正（東スポ競馬の指数・記者印。TOSPO_ENABLED=1 のときだけ）。
+    # 規約上、生データは detail にもログにも残さず、補正値だけを使う
+    tospo_adj = fetch_tospo_adjustments(race_id)
+    if tospo_adj:
+        print(f"専門紙補正: {len(tospo_adj)}頭分を反映\n")
+
     for h in scored:
         st = h['style']['style'] if h.get('style') else None
         adj, adj_desc = pace_adjustment(st, pace_info['pace'],
@@ -771,8 +779,11 @@ def main():
         h['detail']['想定ペース'] = pace_label
         h['detail']['展開']       = adj_desc
         h['pace_adjust'] = adj
-        # 展開補正の後も 0〜100 点に収める（100点満点の表示・ゲージが崩れないように）
-        h['score'] = round(min(100.0, max(0.0, h['score'] + adj)), 1)
+        extra = tospo_adj.get(h['horse_id'], 0.0) if h.get('horse_id') else 0.0
+        if extra:
+            h['detail']['専門紙補正'] = f"{extra:+.1f}pt"
+        # 補正の後も 0〜100 点に収める（100点満点の表示・ゲージが崩れないように）
+        h['score'] = round(min(100.0, max(0.0, h['score'] + adj + extra)), 1)
 
     # 順位付け
     scored.sort(key=lambda x: x['score'], reverse=True)

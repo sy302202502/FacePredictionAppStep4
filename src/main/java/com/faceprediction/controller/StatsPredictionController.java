@@ -52,19 +52,20 @@ public class StatsPredictionController {
     private static final ConcurrentHashMap<String, Boolean>    running  = new ConcurrentHashMap<>();
     private static final ExecutorService executor = Executors.newFixedThreadPool(4);
     private static final Pattern SAFE_INPUT = Pattern.compile("^[\\p{L}\\p{N}\\s　（）()\\-・／/★]{1,100}$");
+    @Autowired private com.faceprediction.service.RaceSelectionService selectionService;
+
     private static final ObjectMapper    mapper   = new ObjectMapper();
 
     // ──────────────────────────────────────────────
     // GET /stats-predict  — 結果表示
     // ──────────────────────────────────────────────
     @GetMapping
-    public String show(@RequestParam(required = false) String raceName, Model model) {
+    public String show(@RequestParam(required = false) String raceId,
+                       @RequestParam(required = false) String raceName, Model model) {
 
-        // 分析済みレース一覧
-        List<String> raceNames = jdbc.queryForList(
-            "SELECT race_name FROM stats_prediction GROUP BY race_name ORDER BY MAX(created_at) DESC",
-            String.class);
-        model.addAttribute("raceNames", raceNames);
+        // 予想のある開催の一覧（開催=race_id 単位）
+        List<Map<String, Object>> races = selectionService.listRaces();
+        model.addAttribute("raceOptions", races);
 
         // 出走馬がいるレース（未分析含む）
         List<String> entryRaces = jdbc.queryForList(
@@ -72,30 +73,22 @@ public class StatsPredictionController {
             String.class);
         model.addAttribute("entryRaces", entryRaces);
 
-        String selected = raceName;
-        if (selected == null && !raceNames.isEmpty()) selected = raceNames.get(0);
+        String selectedId = selectionService.resolve(raceId, raceName, races);
+        String selected = selectionService.nameOf(selectedId, races);
+        model.addAttribute("selectedRaceId", selectedId);
         model.addAttribute("selectedRace", selected);
 
-        if (selected != null) {
-            // INNER JOIN race_entry で「現出走表に居る馬」だけを対象にする（出走取消馬を除外）
+        if (selectedId != null) {
+            // 開催は race_id、馬は horse_id で突合。INNER JOIN race_entry で出走取消馬を除外。
+            // 馬番は出走表（race_entry）の最新値を使う
             List<Map<String, Object>> results = jdbc.queryForList(
-                "SELECT sp.horse_name, sp.horse_number, sp.jockey_name, sp.rank_position, sp.score, " +
+                "SELECT sp.horse_name, re.horse_number, sp.jockey_name, sp.rank_position, sp.score, " +
                 "sp.score_detail, sp.comment, sp.image_path, sp.face_comment, sp.face_score " +
                 "FROM stats_prediction sp " +
-                // 馬は ID で厳密突合。開催は「この race_name の最新開催」に固定し、
-                // 予想行側は race_id 一致 or 未付与(旧コード由来のNULL)を許容する
-                "INNER JOIN race_entry re " +
-                "  ON re.horse_id = sp.horse_id " +
-                " AND re.race_id = (SELECT race_id FROM race_entry WHERE race_name = sp.race_name " +
-                "                   ORDER BY race_date DESC, race_id DESC LIMIT 1) " +
-                "WHERE sp.race_name = ? " +
-                "  AND (sp.race_id = re.race_id " +
-                // 旧コード由来の race_id NULL 行は、同じ馬の最新開催の行が無いときだけ使う
-                // （両方あると同じ馬が二重に表示されていた）
-                "       OR (sp.race_id IS NULL AND NOT EXISTS (SELECT 1 FROM stats_prediction sp2 " +
-                "           WHERE sp2.race_id = re.race_id AND sp2.horse_id = sp.horse_id))) " +
+                "INNER JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id " +
+                "WHERE sp.race_id = ? " +
                 "ORDER BY sp.rank_position",
-                selected);
+                selectedId);
 
             // score_detail JSON → Map に変換
             List<Map<String, Object>> enriched = new ArrayList<>();

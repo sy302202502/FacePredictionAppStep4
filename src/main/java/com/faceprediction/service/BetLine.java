@@ -13,14 +13,18 @@ public class BetLine {
     public static class Combo {
         private final String label;
         private final Boolean hit;
+        private final Integer payout;
 
-        public Combo(String label, Boolean hit) {
+        public Combo(String label, Boolean hit, Integer payout) {
             this.label = label;
             this.hit = hit;
+            this.payout = payout;
         }
 
         public String getLabel() { return label; }
         public Boolean getHit() { return hit; }
+        /** 100円あたりの払戻（払戻表で判定したときの的中組のみ） */
+        public Integer getPayout() { return payout; }
     }
 
     private final String type;
@@ -38,6 +42,13 @@ public class BetLine {
     public String getMethod() { return method; }
     public List<Combo> getCombos() { return combos; }
     public int getPoints() { return combos.size(); }
+
+    /** 払戻の合計（100円×各組）。払戻表で判定していなければ null */
+    public Integer getReturnAmount() {
+        if (combos.isEmpty() || combos.get(0).getHit() == null) return null;
+        if (combos.stream().allMatch(c -> c.getPayout() == null) && getHit()) return null;
+        return combos.stream().filter(c -> c.getPayout() != null).mapToInt(Combo::getPayout).sum();
+    }
 
     /** 1組でも的中していれば true。結果未確定なら null */
     public Boolean getHit() {

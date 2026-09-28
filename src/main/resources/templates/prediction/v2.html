@@ -1229,12 +1229,12 @@
             <div class="race-bar">
                 <label>⛩ SELECT RACE</label>
                 <form method="get" action="/predict-v2" style="display:flex; gap:8px; align-items:center;">
-                    <select name="raceName" onchange="this.form.submit()">
+                    <select name="raceId" onchange="this.form.submit()">
                         <option value="">— レースを選択 —</option>
-                        <option th:each="rn : ${raceNames}"
-                                th:value="${rn}"
-                                th:text="${rn}"
-                                th:selected="${rn == selectedRace}">
+                        <option th:each="r : ${raceOptions}"
+                                th:value="${r.race_id}"
+                                th:text="${r.label}"
+                                th:selected="${r.race_id == selectedRaceId}">
                         </option>
                     </select>
                 </form>

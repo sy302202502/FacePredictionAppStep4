@@ -343,14 +343,48 @@ def find_unrecorded_stats(conn):
     cur.close()
     return rows
 
+def scrape_actual_results_by_id(race_id):
+    """netkeiba の結果表から {horse_id: 着順} を取る。
+    取消・除外・中止など数字でない着順の馬は含めない（着順なし）。
+    馬名は表記揺れ・文字化けで予想側と一致しないことがあるため、現行システムは ID で突合する。"""
+    if not race_id:
+        return {}
+    url = f"https://db.netkeiba.com/race/{race_id}/"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.encoding = 'EUC-JP'
+        soup = BeautifulSoup(resp.text, 'lxml')
+    except Exception as e:
+        print(f"    [スクレイピングエラー] {e}")
+        return {}
+    table = soup.find('table', class_='race_table_01')
+    if not table:
+        return {}
+    results = {}
+    for row in table.find_all('tr')[1:]:
+        cols = row.find_all('td')
+        if not cols:
+            continue
+        m_rank = re.match(r'(\d+)', cols[0].text.strip())  # 「3(降)」は降着後の着順
+        link = cols[3].find('a', href=re.compile(r'/horse/')) if len(cols) > 3 else None
+        m_id = re.search(r'/horse/(\w+)', link.get('href', '')) if link else None
+        if m_rank and m_id:
+            results[m_id.group(1)] = int(m_rank.group(1))
+    return results
+
+
 def record_stats_system(conn, race_id, race_name, actual_results):
     """stats_prediction(現行システム) → race_specific_accuracy に data_source='stats' で記録。
-    予想の取得・既存記録の置換とも race_id 基準（同名別開催の誤記録・二重計上を防ぐ）。"""
+    予想の取得・既存記録の置換とも race_id 基準（同名別開催の誤記録・二重計上を防ぐ）。
+    actual_results は {horse_id: 着順}。
+
+    取得が不完全（1着が無い・予想馬の大半と突合できない）なら記録しない。
+    記録済みになると二度と取り直されないため、半端な結果で確定させず次回に再試行させる。"""
     if not actual_results:
         return 0
     cur = conn.cursor()
     cur.execute("""
-        SELECT horse_name, rank_position, score
+        SELECT horse_name, rank_position, score, horse_id
         FROM stats_prediction
         WHERE race_id = %s
         ORDER BY rank_position
@@ -360,18 +394,34 @@ def record_stats_system(conn, race_id, race_name, actual_results):
         cur.close()
         return 0
 
-    top5_names    = [p[0] for p in predictions[:5]]
-    actual_winner = next((name for name, rank in actual_results.items() if rank == 1), None)
-    top5_hit      = actual_winner in top5_names if actual_winner else False
-    hit_1st       = (predictions[0][0] == actual_winner) if actual_winner else False
+    # 保存してよいのは結果が「完全」なときだけ（一度記録すると再取得されないため）:
+    #   ・1〜3着がそろっている（同着なら 1,1,3 など）
+    #   ・1〜3着の馬がすべて予想に含まれ、horse_id で突合できる（買い目判定に必須）
+    #   ・着順の付いた馬の8割以上と突合できる（馬名変更・HTML部分取得などの異常検知）
+    # 予想にいて結果表にいない馬は出走しなかった馬なので、actual_rank=NULL が正しい
+    pred_ids = {p[3] for p in predictions if p[3]}
+    podium = sorted((rank, hid) for hid, rank in actual_results.items() if rank <= 3)
+    podium_ok = len(podium) >= 3 and podium[0][0] == 1
+    podium_matched = all(hid in pred_ids for _, hid in podium)
+    field_matched = sum(1 for hid in actual_results if hid in pred_ids)
+    if not (podium_ok and podium_matched and field_matched >= len(actual_results) * 0.8):
+        print(f"    [保留] 結果が不完全（1〜3着の突合={'OK' if podium_ok and podium_matched else 'NG'}"
+              f"・出走{len(actual_results)}頭中{field_matched}頭一致）→ 記録せず次回再試行")
+        cur.close()
+        return 0
+
+    top5_ids      = [p[3] for p in predictions[:5]]
+    winner_ids    = {hid for hid, rank in actual_results.items() if rank == 1}  # 同着は複数
+    top5_hit      = any(hid in winner_ids for hid in top5_ids)
+    hit_1st       = predictions[0][3] in winner_ids
 
     # 再実行時は同一開催の既存記録を置き換える（二重計上防止）
     cur.execute("""
         DELETE FROM race_specific_accuracy
         WHERE race_id = %s AND data_source = 'stats'
     """, (race_id,))
-    for horse_name, pred_rank, score in predictions:
-        actual_rank = actual_results.get(horse_name)
+    for horse_name, pred_rank, score, horse_id in predictions:
+        actual_rank = actual_results.get(horse_id)
         # top5_hit は手動記録(AccuracyController)と同じ規約で「上位5頭の行のみ」保存
         cur.execute("""
             INSERT INTO race_specific_accuracy
@@ -537,13 +587,12 @@ def main():
             if dry_run:
                 print(f"    [dry-run]")
                 continue
-            actual = scrape_actual_results(race_id)
+            actual = scrape_actual_results_by_id(race_id)
             if not actual:
                 print(f"    [スキップ] 結果取得失敗")
                 time.sleep(1)
                 continue
-            winner = next((n for n, r in actual.items() if r == 1), '不明')
-            print(f"    実際の1着: {winner}  ({len(actual)}頭分取得)")
+            print(f"    {len(actual)}頭分の着順を取得")
             n = record_stats_system(conn, race_id, race_name, actual)
             print(f"    → {n}件記録完了")
             time.sleep(1.5)

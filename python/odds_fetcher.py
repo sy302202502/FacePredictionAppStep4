@@ -153,16 +153,25 @@ def main():
                 cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry WHERE race_name ILIKE %s",
                             (f"%{query}%",))
             else:
-                cur.execute("SELECT DISTINCT race_id, race_name FROM race_entry ORDER BY race_name")
+                # 既定は JST の今日・明日の開催だけ（前日発売〜当日）。
+                # 旧実装は race_entry の全開催（過去分を含む数百レース）を毎回取りに行き、
+                # 土日の当日オッズ更新が遅れる・アクセス過多になっていた
+                cur.execute("""
+                    SELECT DISTINCT race_id, race_name FROM race_entry
+                    WHERE race_date BETWEEN (NOW() AT TIME ZONE 'Asia/Tokyo')::date
+                                        AND (NOW() AT TIME ZONE 'Asia/Tokyo')::date + 1
+                    ORDER BY race_name
+                """)
             races = cur.fetchall()
         finally:
             cur.close()
 
         if not races:
-            print("対象レースが見つかりません。先に entry_fetcher.py を実行してください。")
+            print("対象レースがありません（今日・明日の開催なし）。")
             return
 
         print(f"=== オッズ取得: {len(races)}レース ===")
+        saved = 0
         for race_id, race_name in races:
             print(f"  [{race_name}] race_id={race_id}")
             odds_map  = fetch_odds_api(race_id)
@@ -173,6 +182,7 @@ def main():
                 print("  [警告] 馬番マッピング取得失敗")
                 continue
             save_odds(conn, race_id, race_name, horse_map, odds_map)
+            saved += 1
             for horse_num in sorted(odds_map.keys()):
                 odds_val, pop = odds_map[horse_num]
                 name = horse_map.get(horse_num, ('不明',))[0]
@@ -180,7 +190,10 @@ def main():
             time.sleep(1.5)
     finally:
         conn.close()
-    print("=== 完了 ===")
+    print(f"=== 完了: {saved}/{len(races)}レース保存 ===")
+    # 対象があるのに1件も取れなかった＝API変更・遮断の疑い。cron側で検知できるよう非0終了
+    if races and saved == 0:
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

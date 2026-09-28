@@ -505,9 +505,11 @@ def main():
 
     # Discord通知（成功/失敗サマリ）
     today_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-    icon = '✅' if fails == 0 else '⚠️'
+    # アイコンは overall_success から出す（重賞の顔面分析未完了でも ✅ になっていた）
+    icon = '✅' if overall_success else '⚠️'
     lines = [f"{icon} **週次予想パイプライン完了** ({today_str})",
-             f"成功: {done}件 / 失敗: {fails}件"]
+             f"成功: {done}件 / 失敗: {fails}件"
+             + (f" / 重賞未完了: {len(graded_problems)}件" if graded_problems else "")]
     for r in results:
         mark = '✅' if r['status'] == 'done' else f"❌ {r['status']}"
         lines.append(f"{mark} {r['race']}")

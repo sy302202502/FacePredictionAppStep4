@@ -1,6 +1,8 @@
 package com.faceprediction.service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -49,6 +51,8 @@ public class FaceRankingService {
         List<RaceSpecificResult> analyzed = new ArrayList<>();
         List<RaceSpecificResult> unanalyzed = new ArrayList<>();
         List<Double> composites = new ArrayList<>();
+        // 同点時の並びを決定的にするため、クリップ前の合成スコアを覚えておく
+        Map<RaceSpecificResult, Double> rawComposite = new IdentityHashMap<>();
 
         for (Map<String, Object> row : rows) {
             RaceSpecificResult r = new RaceSpecificResult();
@@ -73,6 +77,7 @@ public class FaceRankingService {
             double stats = ss != null ? ((Number) ss).doubleValue() : face;
             double composite = face * FACE_WEIGHT + stats * STATS_WEIGHT;
             r.setScore(composite); // 一旦合成スコアを格納（後で引き伸ばす）
+            rawComposite.put(r, composite);
             analyzed.add(r);
             composites.add(composite);
         }
@@ -87,8 +92,15 @@ public class FaceRankingService {
             }
         }
 
-        // 3. スコア降順に並べ替え、順位を振り直す（未分析馬は末尾）
-        analyzed.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
+        // 3. スコア降順に並べ替え、順位を振り直す（未分析馬は末尾）。
+        //    40/99点のクリップや丸めで同点になった場合は、クリップ前の合成スコア → 馬番の順で
+        //    決める（SQLの返却順に任せると、アクセスのたびに◎や買い目が入れ替わり得る）
+        Comparator<RaceSpecificResult> order = Comparator
+            .comparing(RaceSpecificResult::getScore, Comparator.reverseOrder())
+            .thenComparing(r -> rawComposite.get(r), Comparator.reverseOrder())
+            .thenComparing(RaceSpecificResult::getHorseNumber, Comparator.nullsLast(Comparator.naturalOrder()))
+            .thenComparing(RaceSpecificResult::getHorseName, Comparator.nullsLast(Comparator.naturalOrder()));
+        analyzed.sort(order);
         List<RaceSpecificResult> results = new ArrayList<>();
         results.addAll(analyzed);
         results.addAll(unanalyzed);

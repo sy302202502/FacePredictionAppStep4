@@ -9,4 +9,6 @@ import com.faceprediction.entity.RaceOdds;
 public interface RaceOddsRepository extends JpaRepository<RaceOdds, Long> {
 
     List<RaceOdds> findByRaceNameOrderByPopularityAsc(String raceName);
+
+    List<RaceOdds> findByRaceIdOrderByPopularityAsc(String raceId);
 }

@@ -1,6 +1,7 @@
 package com.faceprediction.service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -31,7 +32,16 @@ public class BettingService {
             .collect(Collectors.toList());
         if (picks.size() < PICK_COUNT) return List.of();
 
-        boolean settled = ranked.stream().anyMatch(r -> Integer.valueOf(1).equals(r.getActualRank()));
+        // 結果確定の判定: 1〜3着に当たる着順がそろっていること（1着だけ取れた半端な状態で
+        // ワイドや三連系を「外れ」と確定させない）。同着なら 1,1,3 のように並ぶ
+        List<Integer> podiumRanks = ranked.stream()
+            .map(RaceSpecificResult::getActualRank)
+            .filter(r -> r != null && r <= 3)
+            .sorted()
+            .collect(Collectors.toList());
+        boolean settled = podiumRanks.size() >= 3 && podiumRanks.get(0) == 1;
+        // 三連単の正解の着順列（同着時は 1,1,3 など。3着同着でも先頭3つで判定できる）
+        List<Integer> trifectaRanks = settled ? podiumRanks.subList(0, 3) : List.of();
         long starters = ranked.stream().filter(r -> r.getActualRank() != null).count();
         int placeLimit = starters > 0 && starters <= SMALL_FIELD ? 2 : 3;
 
@@ -70,8 +80,11 @@ public class BettingService {
         for (int a = 1; a <= 2; a++) {
             for (int b = 1; b <= 4; b++) {
                 if (b == a) continue;
+                // 着順列が正解と一致すれば的中。同着(1着同着なら A→B→C と B→A→C の両方)にも対応
                 addCombo(trifecta, picks, settled, " → ",
-                         c -> exactly(c[0], 1) && exactly(c[1], 2) && exactly(c[2], 3), 0, a, b);
+                         c -> trifectaRanks.equals(Arrays.asList(
+                                  c[0].getActualRank(), c[1].getActualRank(), c[2].getActualRank())),
+                         0, a, b);
             }
         }
         lines.add(trifecta);
@@ -108,7 +121,4 @@ public class BettingService {
         return r.getActualRank() != null && r.getActualRank() <= rank;
     }
 
-    private static boolean exactly(RaceSpecificResult r, int rank) {
-        return r.getActualRank() != null && r.getActualRank() == rank;
-    }
 }

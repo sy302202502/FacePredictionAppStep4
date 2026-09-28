@@ -84,25 +84,17 @@ sudo systemctl start fail2ban
 echo "  → fail2ban 起動完了"
 
 # ── 7. cron（Python スクリプト定期実行） ─────────────────────
+# cron の正本は deploy/conoha_crontab.txt の1ファイルだけ。
+# 以前はここで /etc/cron.d/faceprediction（旧フロー: 全レースのオッズを30分おき・
+# docker compose run で別コンテナ生成）を作っていたため、正本と二重稼働していた。
 echo ""
-echo "[7/7] cron スケジュール設定..."
-CRON_FILE="/etc/cron.d/faceprediction"
-sudo tee "$CRON_FILE" > /dev/null <<'CRON'
-SHELL=/bin/bash
-PATH=/usr/local/bin:/usr/bin:/bin
-
-# オッズ取得: 土日 9:00〜15:00 に30分おき
-*/30 9-15 * * 6,0 ubuntu cd /opt/faceprediction && docker compose run --rm python python python/odds_fetcher.py >> /opt/faceprediction/logs/odds.log 2>&1
-
-# 週次パイプライン: 毎週月曜 6:00（レース翌日に結果記録）
-0 6 * * 1 ubuntu cd /opt/faceprediction && docker compose run --rm python python python/result_auto_fetcher.py >> /opt/faceprediction/logs/result.log 2>&1
-
-# DBバックアップ: 毎日 3:00
-0 3 * * * ubuntu bash /opt/faceprediction/deploy/backup.sh >> /opt/faceprediction/logs/backup.log 2>&1
-CRON
-sudo chmod 644 "$CRON_FILE"
+echo "[7/7] cron の準備..."
+if [ -f /etc/cron.d/faceprediction ]; then
+    sudo rm -f /etc/cron.d/faceprediction
+    echo "  → 旧 /etc/cron.d/faceprediction を削除（正本と二重稼働するため）"
+fi
 mkdir -p /opt/faceprediction/logs
-echo "  → cron 設定完了"
+echo "  → clone 後に crontab /opt/faceprediction/deploy/conoha_crontab.txt で登録してください"
 
 echo ""
 echo "======================================================"

@@ -296,7 +296,7 @@
                          th:classappend="${h.actualRank != null and h.actualRank == 1 ? 'win' : (h.actualRank != null and h.actualRank <= 3 ? 'place' : '')}">
                         <span th:if="${h.actualRank != null and h.actualRank == 1}">🏆 本命的中！ </span>
                         ◎ <span th:text="${h.horseName}">馬名</span> は
-                        <strong th:text="${h.actualRank != null ? h.actualRank + '着' : '着順不明（取消・除外など）'}">1着</strong>
+                        <strong th:text="${h.actualRank != null ? h.actualRank + '着' : '着順なし（取消・除外・中止、または結果未取得）'}">1着</strong>
                         <span th:if="${!#lists.isEmpty(selected.hitTypes)}"
                               th:text="${' ／ 的中: ' + #strings.listJoin(selected.hitTypes, '・')}"></span>
                     </div>
@@ -329,10 +329,10 @@
                                           th:text="${c.label}">◎3 - ○7</span>
                                 </div>
                             </div>
-                            <div class="bet-result" th:text="${b.hit} ? '✅' : '❌'">❌</div>
+                            <div class="bet-result" th:text="${b.hit == null ? '…' : (b.hit ? '✅' : '❌')}">❌</div>
                         </div>
                         <div class="bet-note">
-                            各100円・合計 <span th:text="${betPoints}">20</span> 点の鬼眼買い目（予想画面と同じ組み方）。金色が的中した組です。配当は含みません。
+                            各100円・合計 <span th:text="${betPoints}">20</span> 点の鬼眼買い目（予想画面と同じ組み方）。金色が的中した組です。1〜3着の着順がそろっていないレースは「…」（判定保留）になります。配当は含みません。
                         </div>
                     </div>
                 </div>

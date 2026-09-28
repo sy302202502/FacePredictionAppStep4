@@ -262,6 +262,7 @@ def setup():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS race_specific_accuracy (
             id SERIAL PRIMARY KEY,
+            race_id VARCHAR(20),
             race_name VARCHAR(200),
             horse_name VARCHAR(100),
             predicted_rank INTEGER,

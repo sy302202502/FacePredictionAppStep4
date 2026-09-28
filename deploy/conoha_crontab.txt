@@ -31,5 +31,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # ── uploads の古い画像GC（月曜5時: race_specific=180日/paddock=30日）──
 0 5 * * 1 cd /opt/faceprediction && docker compose exec -T python python3 python/cleanup_uploads.py --apply >> logs/cleanup.log 2>&1
 
+# ── cronログの世代交代（毎週月曜2:30）──
+# 追記され続ける *_cron.log は mtime が更新され続けるため下の削除に掛からず、
+# 永久に肥大化していた。週1で日付付きに退避し、30日後に下の行で消す。
+30 2 * * 1 cd /opt/faceprediction/logs && for f in *_cron.log; do [ -s "$f" ] && mv "$f" "$f.$(date +\%Y\%m\%d)"; done
+
 # ── 古いcronログ削除（毎日3時: 30日以前）──
 0 3 * * * find /opt/faceprediction/logs -name "*_cron.log*" -mtime +30 -delete

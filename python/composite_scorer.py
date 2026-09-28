@@ -125,11 +125,15 @@ def main():
             cur.execute("""
                 SELECT r.id, r.horse_name, r.score, o.win_odds, o.popularity
                 FROM race_specific_result r
-                LEFT JOIN race_odds o ON o.race_name ILIKE '%%' || r.race_name || '%%'
+                -- オッズはこのレース名の最新開催(race_id)に限定する。
+                -- 部分一致の race_name 結合だと前年の同名重賞のオッズまで結合されていた
+                LEFT JOIN race_odds o ON o.race_id = (
+                                          SELECT race_id FROM race_entry WHERE race_name = %s
+                                          ORDER BY race_date DESC, race_id DESC LIMIT 1)
                                       AND o.horse_name = r.horse_name
                 WHERE r.race_name = %s
                 ORDER BY r.rank_position
-            """, (race_name,))
+            """, (race_name, race_name))
             rows = cur.fetchall()
 
             if not rows:

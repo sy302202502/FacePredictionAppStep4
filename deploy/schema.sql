@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS public.race_odds (
 
 CREATE TABLE IF NOT EXISTS public.race_specific_accuracy (
     id integer NOT NULL DEFAULT nextval('public.race_specific_accuracy_id_seq'::regclass),
+    race_id character varying(20),
     race_name character varying(200),
     horse_name character varying(100),
     predicted_rank integer,
@@ -258,6 +259,7 @@ CREATE TABLE IF NOT EXISTS public.races (
 
 CREATE TABLE IF NOT EXISTS public.stats_prediction (
     id integer NOT NULL DEFAULT nextval('public.stats_prediction_id_seq'::regclass),
+    race_id character varying(20),
     race_name character varying(200),
     horse_name character varying(100),
     horse_id character varying(20),
@@ -350,3 +352,12 @@ DO $$ BEGIN
         ADD CONSTRAINT prediction_accuracy_prediction_id_fkey
         FOREIGN KEY (prediction_id) REFERENCES public.prediction_result(id);
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+-- race_id 移行（python/migrate_race_id.py）後の最終形。既存DBにも冪等に適用できる
+ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS race_id character varying(20);
+ALTER TABLE public.race_specific_accuracy ADD COLUMN IF NOT EXISTS race_id character varying(20);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_stats_prediction_race_horse
+    ON public.stats_prediction(race_id, horse_id)
+    WHERE race_id IS NOT NULL AND horse_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_stats_prediction_race_id ON public.stats_prediction(race_id);
+CREATE INDEX IF NOT EXISTS idx_rsa_race_id ON public.race_specific_accuracy(race_id);

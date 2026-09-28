@@ -38,7 +38,9 @@ public class ReviewController {
     public String show(@RequestParam(required = false) String raceId, Model model) {
 
         // 結果記録済みの直近レースについて、予想と着順をまとめて取得する。
-        // 馬は horse_id、開催は race_id で厳密突合（同名別年の混入を防ぐ）
+        // 開催は race_id、予想と出走表は horse_id で突合（同名別年の混入を防ぐ）。
+        // 着順(race_specific_accuracy)は result_auto_fetcher が stats_prediction の馬名を
+        // そのまま写して保存している（着順自体は horse_id で突合済み）ので horse_name で結べる
         List<Map<String, Object>> rows = jdbc.queryForList(
             "WITH recorded AS ( " +
             "  SELECT rsa.race_id, MAX(re.race_date) AS race_date " +
@@ -102,7 +104,8 @@ public class ReviewController {
             Integer rank = r.getHonmei().getActualRank();
             if (rank != null && rank == 1) honmeiWin++;
             if (rank != null && rank <= 3) honmeiPlace++;
-            if (r.getBets().isEmpty()) continue;
+            // 1〜3着がそろっていない（判定保留の）レースは券種の集計に入れない
+            if (r.getBets().isEmpty() || r.getBets().get(0).getHit() == null) continue;
             betRaces++;
             for (BetLine line : r.getBets()) {
                 betHits.merge(line.getType(), Boolean.TRUE.equals(line.getHit()) ? 1 : 0, Integer::sum);

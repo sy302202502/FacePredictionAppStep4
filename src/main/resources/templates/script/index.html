@@ -193,7 +193,7 @@
                     的中記録 自動取得
                     <span id="result_fetch-badge" class="status-badge status-idle">待機中</span>
                 </div>
-                <div class="card-desc">レース後にnetkeibaから実際の着順を取得して的中率を自動更新します。毎週月曜に実行推奨。</div>
+                <div class="card-desc">レース後にnetkeibaから実際の着順を取得して的中率を更新します。通常はcronが土日18時・22時と毎朝10時に自動実行します。</div>
                 <button type="button" id="result_fetchBtn" class="btn btn-purple"
                         onclick="runScript('result_fetch')">自動取得</button>
                 <div id="result_fetch-log" class="log-box"></div>
@@ -396,7 +396,7 @@
                 }
                 if (line.includes('=== 完了 ===')) {
                     div.className = 'log-line-done';
-                } else if (line.includes('[エラー]') || line.toLowerCase().includes('error') || line.toLowerCase().includes('traceback')) {
+                } else if (line.includes('=== 失敗') || line.includes('[エラー]') || line.toLowerCase().includes('error') || line.toLowerCase().includes('traceback')) {
                     div.className = 'log-line-error';
                 }
                 div.textContent = line;

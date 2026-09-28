@@ -88,18 +88,24 @@ public class RacePredictionV2Controller {
             model.addAttribute("bets", bets);
             model.addAttribute("betPoints", bettingService.totalPoints(bets));
 
-            // 結果が記録済みなら答え合わせページへの導線を出す（最新開催の race_id で判定）
-            List<String> reviewIds = jdbc.queryForList(
-                "SELECT rsa.race_id FROM race_specific_accuracy rsa " +
-                "WHERE rsa.data_source = 'stats' AND rsa.race_id = " +
-                "  (SELECT race_id FROM race_entry WHERE race_name = ? " +
-                "   ORDER BY race_date DESC, race_id DESC LIMIT 1) " +
-                "LIMIT 1",
+            // 表示中の開催（この race_name の最新開催）
+            List<String> latestIds = jdbc.queryForList(
+                "SELECT race_id FROM race_entry WHERE race_name = ? " +
+                "ORDER BY race_date DESC, race_id DESC LIMIT 1",
                 String.class, selected);
-            model.addAttribute("reviewRaceId", reviewIds.isEmpty() ? null : reviewIds.get(0));
+            String latestRaceId = latestIds.isEmpty() ? null : latestIds.get(0);
 
-            // オッズデータ（馬名→RaceOdds）。レース当日以外は空マップになる
-            List<RaceOdds> oddsList = oddsRepo.findByRaceNameOrderByPopularityAsc(selected);
+            // 結果が記録済みなら答え合わせページへの導線を出す
+            Integer recorded = latestRaceId == null ? 0 : jdbc.queryForObject(
+                "SELECT COUNT(*) FROM race_specific_accuracy " +
+                "WHERE data_source = 'stats' AND race_id = ?",
+                Integer.class, latestRaceId);
+            model.addAttribute("reviewRaceId", recorded != null && recorded > 0 ? latestRaceId : null);
+
+            // オッズデータ（馬名→RaceOdds）。レース当日以外は空マップになる。
+            // race_name で引くと前年の同名重賞のオッズが混ざるため、開催(race_id)で限定する
+            List<RaceOdds> oddsList = latestRaceId == null ? List.of()
+                : oddsRepo.findByRaceIdOrderByPopularityAsc(latestRaceId);
             Map<String, RaceOdds> oddsMap = oddsList.stream()
                 .collect(Collectors.toMap(RaceOdds::getHorseName, o -> o, (a, b) -> a));
             model.addAttribute("oddsMap", oddsMap);

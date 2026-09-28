@@ -195,8 +195,9 @@ public class ScriptController {
                         sendLog(key, line);
                     }
                 }
-                proc.waitFor();
-                sendLog(key, "=== 完了 ===");
+                // 終了コードを見ずに「完了」と出すと、失敗したスクリプトも成功に見える
+                int exit = proc.waitFor();
+                sendLog(key, exit == 0 ? "=== 完了 ===" : "=== 失敗（終了コード " + exit + "）===");
             } catch (Exception e) {
                 sendLog(key, "[エラー] " + e.getMessage());
             } finally {

@@ -9,7 +9,9 @@ services:
     container_name: faceprediction-app
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-8081}:8081"
+      # アプリはサーバー内部（127.0.0.1）でだけ待ち受け、外からは Caddy（HTTPS）経由で入る。
+      # 外の 8081 番は Caddy が https へ転送する（deploy/enable_https.sh）
+      - "127.0.0.1:${APP_HOST_PORT:-8082}:8081"
     environment:
       TZ:                         Asia/Tokyo
       SPRING_DATASOURCE_URL:      jdbc:postgresql://${DB_HOST}:${DB_PORT:-5432}/${DB_NAME}

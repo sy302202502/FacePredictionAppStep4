@@ -22,6 +22,8 @@
 # ============================================================
 set -uo pipefail
 cd /opt/faceprediction
+# アプリの待ち受け（サーバー内部）。docker-compose.yml の APP_HOST_PORT と同じ
+PORT=$(grep -s '^APP_HOST_PORT=' .env | cut -d= -f2); PORT=${PORT:-8082}
 hr() { echo "=============================================="; }
 
 hr; echo "現在のコミット"; git log --oneline -1
@@ -69,7 +71,7 @@ hr; echo "起動待ち（最大120秒）"
 up=0
 for i in $(seq 1 24); do
     code=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 5 \
-           http://localhost:8081/actuator/health 2>/dev/null || echo 000)
+           http://127.0.0.1:${PORT}/actuator/health 2>/dev/null || echo 000)
     if [ "$code" = "200" ]; then echo "  ✅ app 起動完了（${i}回目）"; up=1; break; fi
     sleep 5
 done

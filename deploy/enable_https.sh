@@ -7,7 +7,9 @@
 # ・ホスト名は <IPのドットをハイフンに>.sslip.io（例: 160-251-251-73.sslip.io）。
 #   sslip.io は名前に含まれる IP をそのまま返す無料の DNS サービスで、登録は不要。
 # ・Caddy が Let's Encrypt の証明書を自動で取得・更新する（80番と443番が外から届く必要あり）。
-# ・既存の http://<IP>:8081 はこのスクリプトでは閉じない（HTTPS の動作を確認してから別途閉じる）。
+# ・アプリはサーバー内部（127.0.0.1:8082）でだけ待ち受けるようにし、外の 8081 番は Caddy が
+#   https へ転送する（古い http://<IP>:8081 のリンクもそのまま開ける／パスワードは平文で流れない）。
+# ・再実行しても同じ状態になる（何度実行してもよい）。
 # ・80番を Caddy 以外が使っている場合は、何も変更せずに中止する。
 # ・元の Caddyfile は /etc/caddy/Caddyfile.bak.<日時> に退避する。
 # ============================================================
@@ -46,13 +48,15 @@ fi
 echo "  Caddy: $(caddy version | head -1)"
 
 # ── 3. Caddyfile ────────────────────────────────────
+PORT=$(grep -s '^APP_HOST_PORT=' .env | cut -d= -f2); PORT=${PORT:-8082}
+
 hr; echo "Caddyfile を設定"
 [ -f /etc/caddy/Caddyfile ] && cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%Y%m%d%H%M%S)"
 cat > /etc/caddy/Caddyfile <<EOF
 # faceprediction: deploy/enable_https.sh が生成（手で編集した場合は再実行で上書きされる）
 $HOST {
     encode gzip
-    reverse_proxy localhost:8081
+    reverse_proxy 127.0.0.1:$PORT
     header {
         X-Content-Type-Options nosniff
         Referrer-Policy strict-origin-when-cross-origin
@@ -60,8 +64,8 @@ $HOST {
     }
 }
 
-# IP 直打ちの http は HTTPS のホスト名へ転送
-http://$IP {
+# IP 直打ちの http と、旧入口の 8081 番は HTTPS のホスト名へ転送
+http://$IP, http://$IP:8081, http://$HOST:8081 {
     redir https://$HOST{uri} permanent
 }
 EOF
@@ -70,11 +74,20 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1
 
 # ── 4. ファイアウォール ─────────────────────────────
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-    ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
-    echo "  ufw: 80/443 を許可"
+    ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; ufw allow 8081/tcp >/dev/null
+    echo "  ufw: 80/443/8081 を許可"
 fi
 
-# ── 5. 起動と証明書取得 ─────────────────────────────
+# ── 5. アプリを内部待ち受けに切り替え → Caddy を起動 ──────
+hr; echo "アプリを内部（127.0.0.1:$PORT）での待ち受けに切り替え"
+docker compose up -d app >/dev/null 2>&1
+for i in $(seq 1 24); do
+    curl -sf --max-time 5 -o /dev/null "http://127.0.0.1:$PORT/actuator/health" && break
+    sleep 5
+done
+curl -sf --max-time 5 -o /dev/null "http://127.0.0.1:$PORT/actuator/health" \
+    && echo "  ✅ アプリ起動（127.0.0.1:$PORT）" || { echo "❌ アプリが起動しません: docker compose logs --tail=60 app"; exit 1; }
+
 hr; echo "Caddy を起動（証明書の取得に最大2分）"
 systemctl enable caddy >/dev/null 2>&1
 systemctl restart caddy
@@ -103,4 +116,5 @@ docker compose up -d python app >/dev/null 2>&1 && echo "  ✅ APP_PUBLIC_URL=ht
 hr
 echo "完了。これからはこのURLを使ってください:"
 echo "  https://$HOST/predict-v2"
-echo "（http://$IP:8081 もまだ使えます。HTTPS で問題が無いのを確認したら閉じる手順をご案内します）"
+printf '旧入口 http://%s:8081 → ' "$IP"
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' --max-time 10 "http://$IP:8081/predict-v2"

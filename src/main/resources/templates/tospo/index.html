@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>📰 東スポ参考 — 鬼眼競馬予想</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        /* 配色は predict-v2 と共通 */
+        :root {
+            --neon: #7dff4f; --neon-dim: #3a7d22; --neon-glow: rgba(125,255,79,0.32);
+            --gold-light: #f5d878; --orange: #ff8000; --crimson: #ff2244;
+            --deep: #050708; --surface2: #111811; --panel: rgba(10,14,10,0.93);
+            --text: #d4e8cc; --text-muted: #607860;
+        }
+        body { font-family: 'Noto Sans JP', sans-serif; background: var(--deep); color: var(--text); min-height: 100vh; }
+        .page-body { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 5px;
+            color: var(--neon); text-shadow: 0 0 22px var(--neon-glow); text-align: center; margin: 10px 0 2px;
+        }
+        .page-sub { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.7; }
+        .glass-card {
+            background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px;
+            padding: 14px 16px; margin-bottom: 16px; overflow-x: auto;
+        }
+        /* style.css の汎用 form 装飾（白背景・中央寄せ）を打ち消す */
+        form.race-bar { max-width: none; margin: 0; background: transparent; border: none; padding: 0;
+                        display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .race-bar label { font-family: 'Bebas Neue', sans-serif; letter-spacing: 3px; color: var(--neon); }
+        .race-bar select { background: var(--surface2); color: var(--text); border: 1px solid var(--neon-dim);
+                           border-radius: 3px; padding: 7px 12px; font-size: 13px; max-width: 100%; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: right; color: var(--text-muted); font-weight: 400; padding: 6px; font-size: 11px;
+             border-bottom: 1px solid rgba(125,255,79,0.15); white-space: nowrap; }
+        th.l, td.l { text-align: left; }
+        td { padding: 7px 6px; border-bottom: 1px solid rgba(125,255,79,0.06); text-align: right;
+             font-variant-numeric: tabular-nums; }
+        .oni { color: var(--orange); font-weight: 900; }
+        .top { color: var(--gold-light); font-weight: 700; }
+        .muted { color: var(--text-muted); }
+        tr.withdrawn td { opacity: 0.4; text-decoration: line-through; }
+        .notice { font-size: 12px; line-height: 1.8; color: var(--text-muted); }
+        .notice strong { color: var(--crimson); }
+        .error { color: var(--crimson); font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <h1 class="page-title">TOSPO REFERENCE</h1>
+        <div class="page-sub">
+            📰 東スポ競馬の指数・記者印（管理者のみ・自分の参考用）<br>
+            東スポのデータは保存せず、開いたときに取得しています（10分間は再取得しません）
+        </div>
+
+        <div class="glass-card notice">
+            <strong>取り扱い注意：</strong>東スポ競馬の利用規約は、コンテンツの転載・二次利用・商業利用を禁止しています。
+            この画面の内容をスクリーンショットで共有したり、配信やSNSに載せたりしないでください。
+        </div>
+
+        <div th:if="${!enabled}" class="glass-card notice">
+            東スポ連携は無効です（.env の TOSPO_ENABLED=1 で有効になります）。
+        </div>
+
+        <div th:if="${enabled}">
+            <div class="glass-card">
+                <form class="race-bar" method="get" th:action="@{/tospo}">
+                    <label>⛩ SELECT RACE</label>
+                    <select name="raceId" onchange="this.form.submit()">
+                        <option th:each="r : ${raceOptions}" th:value="${r.race_id}" th:text="${r.label}"
+                                th:selected="${r.race_id == selectedRaceId}"></option>
+                    </select>
+                </form>
+            </div>
+
+            <div th:if="${error != null}" class="glass-card error" th:text="${error}">エラー</div>
+
+            <div class="glass-card" th:if="${!#lists.isEmpty(rows)}">
+                <div class="notice" style="margin-bottom:8px;"
+                     th:text="${(loggedIn ? '会員ログイン中' : '未ログイン（公開範囲のデータ）') + ' ／ 記者印の多い順'}">会員ログイン中</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="l">馬番</th><th class="l">馬名</th><th class="l">鬼眼</th>
+                            <th>過去1年</th><th>当該距離</th><th>当該コース</th><th>ベスト</th>
+                            <th>記者◎</th><th>○</th><th>▲</th><th>△</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="r : ${rows}" th:classappend="${r.withdrawn} ? 'withdrawn'">
+                            <td class="l" th:text="${r.num != null ? r.num : '-'}">1</td>
+                            <td class="l" th:text="${r.name}">馬名</td>
+                            <td class="l oni" th:text="${r.oni != null ? r.oni : ''}">◎</td>
+                            <td th:text="${r.yearly != null ? r.yearly : '—'}">88</td>
+                            <td th:text="${r.length != null ? r.length : '—'}">87</td>
+                            <td th:text="${r.course != null ? r.course : '—'}">77</td>
+                            <td th:text="${r.best != null ? r.best : '—'}">89</td>
+                            <td th:classappend="${r.marks[0] > 0} ? 'top'" th:text="${r.marks[0]}">3</td>
+                            <td th:text="${r.marks[1]}">2</td>
+                            <td th:text="${r.marks[2]}">1</td>
+                            <td class="muted" th:text="${r.marks[3]}">4</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="notice" style="margin-top:8px;">
+                    指数が「—」のときは、東スポ側でまだ公開されていません（枠順確定の木曜以降）。
+                    記者印は土曜のレースが金曜18時、日曜のレースが土曜15時（G1は金曜18時）に公開されます。
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

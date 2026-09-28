@@ -343,6 +343,145 @@ def find_unrecorded_stats(conn):
     cur.close()
     return rows
 
+# ------------------------------------------------------------------
+# Discord への答え合わせ投稿
+#   判定は画面（/review）と同じ Java 側の結果を /review/api から受け取る
+#   （固定保存の印・払戻表・買い目で判定済み。Python で同じ計算を持たない）
+# ------------------------------------------------------------------
+APP_URL = os.getenv('APP_INTERNAL_URL', 'http://app:8081')
+PUBLIC_URL = os.getenv('APP_PUBLIC_URL', 'http://160.251.251.73:8081')
+
+
+def fetch_review(race_id):
+    try:
+        r = requests.get(f"{APP_URL}/review/api", params={'raceId': race_id}, timeout=20)
+        data = r.json() if r.status_code == 200 else {}
+        return data if data.get('available') else None
+    except Exception as e:
+        print(f"    [通知] 答え合わせの取得に失敗 {race_id}: {e}")
+        return None
+
+
+def _review_line(v):
+    rank = v.get('honmeiRank')
+    hits = v.get('hitTypes') or []
+    if not v.get('settled'):
+        icon = '⏳'
+    elif rank == 1:
+        icon = '🏆'
+    elif hits:
+        icon = '✅'
+    else:
+        icon = '❌'
+    num = f"{v['honmeiNumber']}番" if v.get('honmeiNumber') else ''
+    line = f"{icon} **{v['raceName']}** ◎{num}{v['honmeiName']} " + (f"{rank}着" if rank else '着順なし')
+    if hits:
+        line += f" ｜ 的中: {'・'.join(hits)}"
+    if v.get('payoutKnown') and v.get('invested'):
+        ret = v.get('returnTotal') or 0
+        line += f" ｜ 払戻 {ret:,}円（{round(ret * 100 / v['invested'])}%）"
+    return line
+
+
+def _discord_post(url, content):
+    """1投稿を送る。429 は指示どおり待って再送、それ以外の失敗は例外にする（送信済み扱いにしない）"""
+    for _ in range(3):
+        resp = requests.post(url, json={'content': content}, timeout=10)
+        if resp.status_code == 429:
+            try:
+                wait = min(30.0, float(resp.json().get('retry_after', 2)))
+            except Exception:
+                wait = 2.0
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return
+    raise RuntimeError('Discord 429 が続いたため送信できませんでした')
+
+
+def _send_discord(text):
+    """Discord へ送る。1投稿2000字の上限に合わせ、行単位（長すぎる行はさらに分割）で送る。
+    送れなかった場合は例外（呼び出し側で「未送信」のまま残し、次回再送する）。"""
+    url = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
+    if not url:
+        raise RuntimeError('DISCORD_WEBHOOK_URL 未設定')
+    limit = 1800
+    pieces = []
+    for line in text.split('\n'):
+        while len(line) > limit:
+            pieces.append(line[:limit])
+            line = line[limit:]
+        pieces.append(line)
+    chunk = ''
+    for line in pieces:
+        if chunk and len(chunk) + len(line) + 1 > limit:
+            _discord_post(url, chunk)
+            chunk = ''
+        chunk += line + '\n'
+    if chunk.strip():
+        _discord_post(url, chunk)
+
+
+def _this_weekend():
+    """「この週末」の土曜・日曜（JST）。平日に実行したら直前の週末を指す"""
+    from datetime import datetime, timedelta, timezone
+    today = datetime.now(timezone(timedelta(hours=9))).date()
+    sat = today - timedelta(days=(today.weekday() - 5) % 7)
+    return sat, sat + timedelta(days=1)
+
+
+def notify_results(conn):
+    """まだ Discord に送っていない答え合わせ（直近の週末分）と、週末の通算を送る。
+    送信に成功したレースだけ discord_notified に記録するので、失敗しても次回の実行で再送される。"""
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS discord_notified (
+            race_id     VARCHAR(20) PRIMARY KEY,
+            notified_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    conn.commit()
+    sat, sun = _this_weekend()
+    cur.execute("""
+        SELECT DISTINCT rsa.race_id FROM race_specific_accuracy rsa
+        JOIN race_entry re ON re.race_id = rsa.race_id
+        WHERE rsa.data_source = 'stats' AND re.race_date BETWEEN %s AND %s
+    """, (sat, sun))
+    weekend_ids = [r[0] for r in cur.fetchall()]
+    cur.execute("SELECT race_id FROM discord_notified WHERE race_id = ANY(%s)", (weekend_ids,))
+    done = {r[0] for r in cur.fetchall()}
+    pending = [r for r in weekend_ids if r not in done]
+    if not pending:
+        cur.close()
+        return
+
+    reviews = {r: fetch_review(r) for r in weekend_ids}
+    new = [(r, reviews[r]) for r in pending if reviews.get(r)]
+    if not new:
+        cur.close()
+        return
+    lines = [f"🎯 **鬼眼 答え合わせ速報**（{len(new)}レース）"]
+    lines += [_review_line(v) for _, v in new]
+    week = [v for v in reviews.values() if v]
+    win = sum(1 for v in week if v.get('honmeiRank') == 1)
+    place = sum(1 for v in week if v.get('honmeiRank') and v['honmeiRank'] <= 3)
+    paid = [v for v in week if v.get('payoutKnown')]
+    inv = sum(v['invested'] for v in paid)
+    ret = sum(v.get('returnTotal') or 0 for v in paid)
+    summary = f"\n📊 この週末（{sat.month}/{sat.day}〜{sun.month}/{sun.day}）{len(week)}レース: ◎1着 {win}・3着内 {place}"
+    if inv:
+        summary += f" ／ 投資 {inv:,}円 → 払戻 {ret:,}円（回収率 {round(ret * 100 / inv)}%）"
+    lines.append(summary)
+    lines.append(f"{PUBLIC_URL}/review")
+
+    _send_discord('\n'.join(lines))   # 失敗したら例外 → 記録しない（次回再送）
+    for r, _ in new:
+        cur.execute("INSERT INTO discord_notified (race_id) VALUES (%s) ON CONFLICT DO NOTHING", (r,))
+    conn.commit()
+    cur.close()
+    print(f"    [通知] Discord に {len(new)}レースの答え合わせを送信")
+
+
 # 払戻の組番を正規化する。順序に意味がある券種（馬単・三連単）以外は昇順に並べる
 ORDERED_BET_TYPES = ('馬単', '三連単')
 
@@ -743,6 +882,13 @@ def main():
             nb = backfill_horse_numbers(conn, rid, soup) if soup else 0
             print(f"  {rid}: 払戻 {np_}件" + (f"・馬番 {nb}頭を補完" if nb else ""))
             time.sleep(1.5)
+
+        if not dry_run:
+            try:
+                notify_results(conn)
+            except Exception as e:
+                conn.rollback()
+                print(f"    [通知] 送信に失敗（記録は完了済み。次回の実行で再送）: {e}")
 
         if not dry_run:
             show_report(conn)

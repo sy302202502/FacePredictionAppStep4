@@ -18,6 +18,10 @@ services:
       UPLOAD_DIR:                 /data/uploads
       PYTHON_SCRIPT_DIR:          /python-scripts
       THYMELEAF_CACHE:            "true"
+      # 東スポ参考パネル（管理者のみ・保存しない）。python 側と同じ値を使う
+      TOSPO_ENABLED:              ${TOSPO_ENABLED:-0}
+      TOSPO_LOGIN_EMAIL:          ${TOSPO_LOGIN_EMAIL:-}
+      TOSPO_PASSWORD:             ${TOSPO_PASSWORD:-}
     volumes:
       - uploads:/data/uploads
       - ./python:/python-scripts

@@ -76,6 +76,17 @@ TASK = """以下の「材料」だけを使って、{race}の鬼眼コラムを�
 """
 
 
+def notify_discord(text):
+    url = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
+    if not url:
+        return
+    try:
+        import requests
+        requests.post(url, json={'content': text[:1900]}, timeout=10)
+    except Exception as e:
+        print(f"  [通知] Discord送信に失敗: {e}")
+
+
 def get_conn():
     return psycopg2.connect(
         host=os.getenv('DB_HOST', 'localhost'), port=os.getenv('DB_PORT', '5432'),
@@ -98,6 +109,7 @@ def ensure_table(conn):
             updated_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    cur.execute("ALTER TABLE race_column ADD COLUMN IF NOT EXISTS tweet TEXT")
     conn.commit()
     cur.close()
 
@@ -216,13 +228,18 @@ def _valid(col, facts):
         return '形式不正'
     body, title = col['body'], col['title']
     text = title + '\n' + body
-    material = json.dumps(_public(facts), ensure_ascii=False)
-    roster = facts['_roster']
     if not 350 <= len(body) <= 1300:
         return f'文字数 {len(body)}'
     top = facts['鬼眼の印'][0]
     if top['馬名'] not in body:
         return '◎の馬名がない'
+    return _check_facts(text, facts)
+
+
+def _check_facts(text, facts):
+    """本文・X投稿文に共通の事実検査。問題があれば理由、なければ None。"""
+    material = json.dumps(_public(facts), ensure_ascii=False)
+    roster = facts['_roster']
     for w in ('絶対', '確実', '鉄板', '必ず勝', '東スポ', '東京スポーツ'):
         if w in text:
             return f'禁止語「{w}」'
@@ -273,6 +290,79 @@ def write_with_llm(facts):
     col['title'] = col['title'].strip()[:60]
     col['body'] = col['body'].strip()
     return col, None
+
+
+# ------------------------------------------------------------------
+# X（旧Twitter）投稿文: コラムを告知用に要約する。投稿はユーザーが手動で行う
+# ------------------------------------------------------------------
+PUBLIC_URL = os.getenv('APP_PUBLIC_URL', 'http://160.251.251.73:8081')
+X_LIMIT = 280       # X の上限（重み付き文字数）
+X_URL_WEIGHT = 23   # URL は長さに関係なく23として数えられる
+
+TWEET_TASK = """次の鬼眼コラムを、X（旧Twitter）の告知ポスト用に要約してください。
+- 舞鬼法師の語り口（一人称「僕」、熱くノリよく）
+- 本文は日本語90〜110字。レース名・◎の馬番と馬名・展開の見どころを入れる
+- 馬名を出すときは「10番ウェイワードアクト」のように馬番を付ける
+- コラムに書かれていない事実は書かない。「絶対」「確実」など断定しない
+- ハッシュタグとURLは付けない（後でこちらで付ける）
+出力はJSONのみ: {{"text": "本文"}}
+
+コラム:
+{column}
+"""
+
+
+def x_weight(text):
+    """X の文字数の数え方（日本語などは2、半角英数記号は1、URLは23）"""
+    n = 0
+    for token in re.split(r'(https?://\S+)', text):
+        if token.startswith('http'):
+            n += X_URL_WEIGHT
+        else:
+            n += sum(1 if ord(c) < 0x1100 else 2 for c in token)
+    return n
+
+
+def build_tweet(text, facts, race_id, race_tag=True):
+    tags = '#鬼眼競馬' + (' #' + re.sub(r'[^\w]', '', facts['レース']) if race_tag else '')
+    return f"{text.strip()}\n{tags}\n{PUBLIC_URL}/predict-v2?raceId={race_id}"
+
+
+def write_tweet(col, facts, race_id):
+    """(投稿文, 生成方法)。AI が検査に通らなければ定型文。"""
+    out = generate_text(TWEET_TASK.format(column=col['body']), system=PERSONA,
+                        json_output=True, temperature=0.8, max_tokens=2048)
+    try:
+        text = json.loads(out[out.find('{'): out.rfind('}') + 1])['text'] if out else None
+    except (ValueError, KeyError, TypeError):
+        text = None
+    if text:
+        tweet = build_tweet(text, facts, race_id)
+        top = facts['鬼眼の印'][0]
+        if (x_weight(tweet) <= X_LIMIT and top['馬名'] in text
+                and not _check_facts(text, facts)):
+            return tweet, 'gemini'
+    top = facts['鬼眼の印'][0]
+    pace = facts['想定ペース'].split('（')[0]
+    dark = facts['展開の穴']
+    head = f"【鬼眼コラム】{facts['レース']}の僕の◎は{top['馬番']}番{top['馬名']}！"
+    # 長い場合は 穴馬 → ペース の順に削って上限に収める
+    candidates = [
+        head + f"想定は{pace}。" + (f"展開の穴は{dark['馬番']}番{dark['馬名']}。" if dark else '') + "続きはこちら👇",
+        head + f"想定は{pace}。続きはこちら👇",
+        head + "続きはこちら👇",
+    ]
+    # 長い場合は 穴馬 → ペース → レース名のハッシュタグ の順に削る。URL は必ず残す
+    for race_tag in (True, False):
+        for text in candidates:
+            tweet = build_tweet(text, facts, race_id, race_tag)
+            if x_weight(tweet) <= X_LIMIT:
+                return tweet, 'template'
+    # それでも超える（レース名・馬名が極端に長い）ときは本文を縮める
+    text = head
+    while text and x_weight(build_tweet(text + '…', facts, race_id, False)) > X_LIMIT:
+        text = text[:-1]
+    return build_tweet(text + '…', facts, race_id, False), 'template'
 
 
 def write_template(facts):
@@ -340,9 +430,20 @@ def main():
         print(f"RESULT:{json.dumps({'success': True, 'skipped': why}, ensure_ascii=False)}")
         return
     h = _facts_hash(facts)
-    cur.execute("SELECT facts_hash, generator FROM race_column WHERE race_id = %s", (race_id,))
+    cur.execute("SELECT facts_hash, generator, tweet FROM race_column WHERE race_id = %s", (race_id,))
     row = cur.fetchone()
     same = bool(row) and row[0] == h
+    # X投稿案の機能より前に書いたコラムには投稿案が無い → 本文はそのままで投稿案だけ作る
+    if same and row[1] != 'template' and not force and row[2] is None and not dry:
+        cur.execute("SELECT title, body FROM race_column WHERE race_id = %s", (race_id,))
+        title, body = cur.fetchone()
+        tweet, tweet_gen = write_tweet({'title': title, 'body': body}, facts, race_id)
+        cur.execute("UPDATE race_column SET tweet = %s WHERE race_id = %s", (tweet, race_id))
+        conn.commit()
+        print(f"既存コラムにX投稿案を追加（{tweet_gen}）")
+        notify_discord(f"📝 **X投稿案**: {facts['レース']}\n```\n{tweet}\n```")
+        print(f"RESULT:{json.dumps({'success': True, 'tweet_added': True})}")
+        return
     # 材料が同じでも、前回がテンプレート（AIの一時失敗）なら AI で書き直しを試みる
     if same and row[1] != 'template' and not force:
         print("材料に変化なし → 既存のコラムを維持")
@@ -360,15 +461,20 @@ def main():
         col, generator = write_template(facts), 'template'
 
     print(f"\n【{col['title']}】（{generator}・{len(col['body'])}字）\n{col['body']}\n")
+    tweet, tweet_gen = write_tweet(col, facts, race_id)
+    print(f"X投稿案（{tweet_gen}・{x_weight(tweet)}/{X_LIMIT}）:\n{tweet}\n")
     if not dry:
         cur.execute("""
-            INSERT INTO race_column (race_id, race_name, title, body, generator, facts_hash, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            INSERT INTO race_column (race_id, race_name, title, body, generator, facts_hash, tweet, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT (race_id) DO UPDATE
               SET race_name = EXCLUDED.race_name, title = EXCLUDED.title, body = EXCLUDED.body,
-                  generator = EXCLUDED.generator, facts_hash = EXCLUDED.facts_hash, updated_at = NOW()
-        """, (race_id, facts['レース'], col['title'], col['body'], generator, h))
+                  generator = EXCLUDED.generator, facts_hash = EXCLUDED.facts_hash,
+                  tweet = EXCLUDED.tweet, updated_at = NOW()
+        """, (race_id, facts['レース'], col['title'], col['body'], generator, h, tweet))
         conn.commit()
+        notify_discord(f"📝 **鬼眼コラムを{'更新' if row else '公開'}**: {facts['レース']}\n"
+                       f"X投稿案（コピーして使ってください）:\n```\n{tweet}\n```")
     cur.close()
     conn.close()
     print(f"RESULT:{json.dumps({'success': True, 'generator': generator}, ensure_ascii=False)}")

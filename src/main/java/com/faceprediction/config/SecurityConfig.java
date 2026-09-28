@@ -61,9 +61,9 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                              "/calendar", "/horse", "/horse/**",
                              // 万馬券チャレンジは閲覧のみ公開（厳選実行 /run-stream は下でADMIN必須のまま）
                              "/high-dividend", "/high-dividend/result",
-                             "/accuracy", "/review").permitAll()
+                             "/accuracy", "/review", "/review/api").permitAll()
                 // 管理機能はADMINロール必須
-                .antMatchers("/script/**", "/health/**", "/entry/**", "/paddock/**", "/jobs", "/jobs/**",
+                .antMatchers("/script/**", "/health/**", "/entry/**", "/paddock/**", "/jobs", "/jobs/**", "/tospo", "/tospo/**",
                              "/accuracy/record", "/accuracy/record-v2",
                              "/stats-predict/run", "/stats-predict/run-face",
                              "/weekly/run-pipeline", "/high-dividend/run-stream",

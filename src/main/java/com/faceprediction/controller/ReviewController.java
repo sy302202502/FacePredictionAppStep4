@@ -77,6 +77,59 @@ public class ReviewController {
         return "prediction/review";
     }
 
+    /**
+     * 1レースの答え合わせ要約（JSON）。Discord 通知（result_auto_fetcher.py）が使う。
+     * 画面と同じ固定保存・払戻表・買い目で判定するので、通知と画面の結果が食い違わない。
+     */
+    @GetMapping("/api")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public Map<String, Object> api(@RequestParam String raceId) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        // 公開範囲は /review 画面と同じ（結果記録済みの直近レース）。形式外の ID や範囲外は返さない
+        if (!raceId.matches("\\d{12}")) {
+            out.put("available", false);
+            return out;
+        }
+        Integer inRange = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM (" +
+            "  SELECT rsa.race_id FROM race_specific_accuracy rsa " +
+            "  JOIN race_entry re ON re.race_id = rsa.race_id " +
+            "  WHERE rsa.data_source = 'stats' AND rsa.race_id IS NOT NULL " +
+            "  GROUP BY rsa.race_id ORDER BY MAX(re.race_date) DESC, rsa.race_id DESC " +
+            "  LIMIT " + RECENT_RACES + ") t WHERE t.race_id = ?",
+            Integer.class, raceId);
+        if (inRange == null || inRange == 0) {
+            out.put("available", false);
+            return out;
+        }
+        List<Map<String, Object>> race = jdbc.queryForList(
+            "SELECT MIN(race_name) AS race_name, MAX(race_date) AS race_date FROM race_entry WHERE race_id = ?",
+            raceId);
+        List<RaceSpecificResult> ranked = snapshotService.rankedFor(raceId);
+        if (race.isEmpty() || race.get(0).get("race_name") == null
+                || ranked.isEmpty() || ranked.get(0).getScore() == null) {
+            out.put("available", false);
+            return out;
+        }
+        RaceReview r = new RaceReview(raceId, (String) race.get(0).get("race_name"),
+            String.valueOf(race.get(0).get("race_date")), ranked,
+            bettingService.suggest(ranked, snapshotService.payoutsFor(raceId)));
+        RaceSpecificResult h = r.getHonmei();
+        out.put("available", true);
+        out.put("raceId", raceId);
+        out.put("raceName", r.getRaceName());
+        out.put("raceDate", r.getRaceDate());
+        out.put("honmeiName", h.getHorseName());
+        out.put("honmeiNumber", h.getHorseNumber());
+        out.put("honmeiRank", h.getActualRank());
+        out.put("settled", !r.getBets().isEmpty() && r.getBets().get(0).getHit() != null);
+        out.put("hitTypes", r.getHitTypes());
+        out.put("payoutKnown", r.isPayoutKnown());
+        out.put("returnTotal", r.getReturnTotal());
+        out.put("invested", r.getInvested());
+        return out;
+    }
+
     /** 直近レース全体での ◎の成績と券種別の的中レース数 */
     private Map<String, Object> summarize(List<RaceReview> reviews) {
         int honmeiWin = 0;

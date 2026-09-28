@@ -1182,6 +1182,13 @@
         }
         .column-p { font-size: 14px; line-height: 1.95; margin-bottom: 12px; }
         .column-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.6; }
+        .tweet-box { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(125,255,79,0.2); }
+        .tweet-head { font-size: 12px; color: var(--neon); margin-bottom: 6px; }
+        .tweet-box textarea {
+            width: 100%; background: var(--surface2); color: var(--text);
+            border: 1px solid var(--neon-dim); border-radius: 3px; padding: 8px;
+            font-size: 13px; line-height: 1.6; resize: vertical; margin-bottom: 8px;
+        }
         @media (max-width: 640px) { .column-inner { padding: 14px; } .column-p { font-size: 13.5px; } }
         .bet-jump {
             display: block; text-align: right; margin: -6px 0 14px;
@@ -1351,6 +1358,12 @@
                              th:text="${'※ 馬場・枠順・脚質などアプリのデータをもとに'
                                  + (column.generator == 'template' ? '自動で組み立てた' : 'AIが文章化した')
                                  + 'コラムです（' + #temporals.format(column.updated_at.toLocalDateTime(), 'M/d HH:mm') + ' 更新）。馬券の購入は自己判断で。'}">注記</div>
+                        <!-- X投稿案（管理者のみ。投稿は手動） -->
+                        <div class="tweet-box" sec:authorize="hasRole('ADMIN')" th:if="${column.tweet != null}">
+                            <div class="tweet-head">𝕏 投稿案（管理者のみ表示）</div>
+                            <textarea id="tweetText" readonly rows="5" th:text="${column.tweet}"></textarea>
+                            <button type="button" class="btn btn-neon" onclick="copyTweet()">コピー</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1489,6 +1502,13 @@
     <div class="toast" id="toast"></div>
 
     <script>
+        function copyTweet() {
+            const t = document.getElementById('tweetText');
+            navigator.clipboard.writeText(t.value)
+                .then(() => showToast('📋 X投稿案をコピーしました'))
+                .catch(() => { t.select(); document.execCommand('copy'); showToast('📋 コピーしました'); });
+        }
+
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.textContent = msg;

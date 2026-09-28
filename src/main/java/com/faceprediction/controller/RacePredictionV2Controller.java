@@ -117,7 +117,7 @@ public class RacePredictionV2Controller {
     private Map<String, Object> loadColumn(String raceId) {
         try {
             List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT title, body, generator, updated_at FROM race_column WHERE race_id = ?", raceId);
+                "SELECT title, body, generator, updated_at, tweet FROM race_column WHERE race_id = ?", raceId);
             if (rows.isEmpty()) return null;
             Map<String, Object> c = new java.util.HashMap<>(rows.get(0));
             c.put("paragraphs", java.util.Arrays.stream(((String) c.get("body")).split("\\n\\s*\\n"))

@@ -150,6 +150,12 @@ class BettingServiceTest {
         pay.put("三連単:2-1-3", 28000);
         pay.put("単勝:1", 400);
         pay.put("単勝:2", 380);
+        pay.put("複勝:1", 130);
+        pay.put("複勝:2", 140);
+        pay.put("複勝:3", 300);
+        pay.put("ワイド:1-2", 500);
+        pay.put("馬連:1-2", 900);
+        pay.put("三連複:1-2-3", 4000);
         List<BetLine> lines = betting.suggest(race(Map.of("A", 1, "B", 1, "C", 3)), pay);
         assertEquals(true, line(lines, "三連単").getHit());
         assertEquals(30000, line(lines, "三連単").getReturnAmount());   // ◎→○→▲ のみ購入
@@ -162,5 +168,19 @@ class BettingServiceTest {
         assertEquals("三連複:2-5-9", BettingService.payoutKey("三連複", 9, 2, 5));
         assertEquals("三連単:9-2-5", BettingService.payoutKey("三連単", 9, 2, 5));
         assertEquals("馬単:12-3", BettingService.payoutKey("馬単", 12, 3));
+    }
+
+    @Test
+    void 券種が欠けた払戻表は使わず着順で判定する() {
+        // 三連単の行が欠けた部分取得。払戻表だけで判定すると三連単が「外れ」になってしまう
+        Map<String, Integer> pay = new HashMap<>();
+        pay.put("単勝:1", 350);
+        pay.put("複勝:1", 150);
+        pay.put("ワイド:1-2", 500);
+        pay.put("馬連:1-2", 900);
+        pay.put("三連複:1-2-3", 4000);
+        List<BetLine> lines = betting.suggest(race(Map.of("A", 1, "B", 2, "C", 3)), pay);
+        assertEquals(true, line(lines, "三連単").getHit());       // 着順で判定
+        assertNull(line(lines, "三連単").getReturnAmount());      // 払戻額は不明
     }
 }

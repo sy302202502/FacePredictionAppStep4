@@ -97,6 +97,23 @@ ok = r == [('ダート', 1700), ('芝', 2000), ('障害', 4260)]
 print('  ✅ 読み取りOK' if ok else f'  ❌ 読み取り異常: {r}')
 " 2>&1 | tail -3
 
+hr; echo "専門紙補正（東スポ競馬）の状態"
+docker compose exec -T python python3 -c "
+import sys, os; sys.path.insert(0,'python')
+import tospo_client as t
+if not t.enabled():
+    print('  ⏸ 無効（.env の TOSPO_ENABLED=1 で有効化）')
+else:
+    print('  ✅ 有効' + ('（会員ログイン設定あり）' if os.getenv('TOSPO_LOGIN_EMAIL') else '（ログイン未設定: 公開範囲のみ）'))
+" 2>&1 | tail -3
+
+hr; echo "cron の実行記録（job_runner）"
+if crontab -l 2>/dev/null | grep -q job_runner.py; then
+    echo "  ✅ crontab は job_runner 経由（/jobs に履歴が出ます）"
+else
+    echo "  ⚠️ crontab が旧形式です。反映: crontab /opt/faceprediction/deploy/conoha_crontab.txt"
+fi
+
 hr; echo "cron の二重登録チェック"
 if [ -f /etc/cron.d/faceprediction ]; then
     echo "  ⚠️ 旧 /etc/cron.d/faceprediction が残っています（正本 crontab と二重稼働）。"

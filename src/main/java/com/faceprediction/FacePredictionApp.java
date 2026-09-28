@@ -2,6 +2,7 @@ package com.faceprediction;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * FacePredictionApp
@@ -17,6 +18,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * このクラスの main メソッドから Spring Boot アプリが起動する。
  */
 @SpringBootApplication
+@EnableScheduling  // SnapshotService の予想の固定保存（10分おき）
 public class FacePredictionApp {
 
     /**

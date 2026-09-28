@@ -7,14 +7,17 @@ job_runner.py — cron ジョブの実行履歴を job_run テーブルに記録
 
 ・子スクリプトの出力はそのまま標準出力へ流す（cron のログファイルは従来どおり）
 ・開始/終了時刻・終了コード・最後の RESULT 行（無ければ末尾の1行）を記録する
-・DB に書けなくてもジョブ自体は必ず実行し、子の終了コードをそのまま返す
+・DB に書けなくてもジョブ自体は必ず実行し、子の終了コードを返す
+  （3時間で打ち切りは 124、シグナル終了は 128+番号）
 ・管理画面 /jobs で一覧できる
 """
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
+import threading
 from collections import deque
 
 import psycopg2
@@ -86,26 +89,45 @@ def main():
     run_id = _start(job, ' '.join([script] + args))
 
     tail = deque(maxlen=40)
-    result_line = None
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1)
-        for line in proc.stdout:
+    state = {'result': None}
+
+    def pump(stream):
+        # 出力の転送は別スレッドで行い、本体は wait(timeout) で期限を監視する
+        # （本体で readline を回すと、子が黙ったままハングしたときに期限が効かない）
+        for line in stream:
             sys.stdout.write(line)
             sys.stdout.flush()
             line = line.rstrip()
             if line:
                 tail.append(line)
             if 'RESULT:' in line:
-                result_line = line.strip()
-        exit_code = proc.wait(timeout=TIMEOUT_SEC)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        exit_code = -9
-        tail.append(f"タイムアウト（{TIMEOUT_SEC // 60}分）で打ち切り")
+                state['result'] = line.strip()
+
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1, start_new_session=True)
+        reader = threading.Thread(target=pump, args=(proc.stdout,), daemon=True)
+        reader.start()
+        try:
+            rc = proc.wait(timeout=TIMEOUT_SEC)
+            # シグナルで落ちた子（rc<0）はシェルの慣例どおり 128+シグナル番号にする
+            exit_code = rc if rc >= 0 else 128 - rc
+        except subprocess.TimeoutExpired:
+            # 子が起動した孫プロセスごと止める（TERM → 猶予 → KILL）
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(proc.pid, sig)
+                    proc.wait(timeout=15)
+                    break
+                except (subprocess.TimeoutExpired, ProcessLookupError):
+                    continue
+            exit_code = 124  # timeout(1) と同じ慣例
+            tail.append(f"タイムアウト（{TIMEOUT_SEC // 60}分）で打ち切り")
+        reader.join(timeout=5)
     except Exception as e:
-        exit_code = -1
+        exit_code = 1
         tail.append(f"起動失敗: {e}")
+    result_line = state['result']
 
     summary = result_line or (tail[-1] if tail else '')
     if exit_code != 0 and tail:

@@ -25,6 +25,8 @@ public class BettingService {
 
     /** 買い目を組むのに必要な顔面分析済みの頭数（◎〜注） */
     private static final int PICK_COUNT = 5;
+    /** 買い目に使う券種（払戻表の完全性チェックにも使う） */
+    private static final List<String> BET_TYPES = List.of("単勝", "複勝", "ワイド", "馬連", "三連複", "三連単");
     /** 複勝が2着までになる出走頭数の上限（JRA: 7頭以下は2着まで） */
     private static final int SMALL_FIELD = 7;
 
@@ -42,8 +44,10 @@ public class BettingService {
             .collect(Collectors.toList());
         if (picks.size() < PICK_COUNT) return List.of();
 
-        // 払戻表で判定できるのは、払戻があり、買い目の5頭すべてに馬番があるとき
-        boolean usePayout = payouts != null && !payouts.isEmpty()
+        // 払戻表で判定できるのは、買い目の6券種すべての払戻があり（部分取得でない）、
+        // 買い目の5頭すべてに馬番があるとき。それ以外は着順で判定する
+        boolean usePayout = payouts != null
+            && BET_TYPES.stream().allMatch(t -> payouts.keySet().stream().anyMatch(k -> k.startsWith(t + ":")))
             && picks.stream().allMatch(r -> r.getHorseNumber() != null);
 
         // 結果確定の判定: 1〜3着に当たる着順がそろっていること（1着だけ取れた半端な状態で

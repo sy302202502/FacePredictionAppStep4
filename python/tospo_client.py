@@ -22,8 +22,8 @@ tospo_client.py — 東スポ競馬（有料会員）から予想の補正材料
 """
 from __future__ import annotations
 
+import json
 import os
-import pickle
 import re
 
 import requests
@@ -34,7 +34,7 @@ from constants import HEADERS
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 BASE = 'https://tospo-keiba.jp'
-_COOKIE_FILE = os.path.join(os.path.dirname(__file__), '../.tospo_cookies.pkl')
+_COOKIE_FILE = os.path.join(os.path.dirname(__file__), '../.tospo_cookies.json')
 _XHR = {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}
 
 # 記者印の種類 → 重み。2=◎ 3=○ 4=▲、5・6 は△系（各記者とも2〜4は1頭ずつ、5・6は複数頭）
@@ -50,19 +50,42 @@ def enabled():
 
 
 def _session():
+    """保存済みの Cookie（JSON）を読み込んだセッション。
+    Cookie は pickle ではなく JSON で保存する（改ざんされた pickle は読み込み時にコード実行され得る）"""
     s = requests.Session()
     s.headers.update(HEADERS)
     try:
         if os.path.exists(_COOKIE_FILE):
-            with open(_COOKIE_FILE, 'rb') as f:
-                s.cookies.update(pickle.load(f))
+            with open(_COOKIE_FILE, encoding='utf-8') as f:
+                for c in json.load(f):
+                    s.cookies.set(c['name'], c['value'], domain=c.get('domain'), path=c.get('path', '/'))
     except Exception:
         pass
     return s
 
 
-def _login(s):
-    """会員ログイン（Laravel のフォーム: _token / email / password）。成功で True。"""
+def _save_cookies(s):
+    """Cookie を所有者のみ読み書きできる権限(0600)で原子的に保存する。"""
+    data = [{'name': c.name, 'value': c.value, 'domain': c.domain, 'path': c.path} for c in s.cookies]
+    tmp = _COOKIE_FILE + '.tmp'
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        json.dump(data, f)
+    os.replace(tmp, _COOKIE_FILE)
+
+
+def _notify_discord(msg):
+    url = os.getenv('DISCORD_WEBHOOK_URL', '').strip()
+    if url:
+        try:
+            requests.post(url, json={'content': msg[:1900]}, timeout=10)
+        except Exception:
+            pass
+
+
+def _login(s, race_id):
+    """会員ログイン（Laravel のフォーム: _token / email / password）。
+    POST が返っただけでは成功とみなさず、API の isLogin で実際にログインできたか確かめる。"""
     email = os.getenv('TOSPO_LOGIN_EMAIL', '').strip()
     password = os.getenv('TOSPO_PASSWORD', '').strip()
     if not email or not password:
@@ -72,11 +95,16 @@ def _login(s):
         m = re.search(r'name="_token"\s+value="([^"]+)"', r.text)
         if not m:
             print("  [東スポ] ログインフォームを解析できません")
+            _notify_discord("⚠️ **東スポ競馬のログインフォームを解析できません**\n専門紙補正は公開範囲のデータで続行します。")
             return False
         s.post(f'{BASE}/login', data={'_token': m.group(1), 'email': email, 'password': password,
                                       'callBackUrl': ''}, timeout=15)
-        with open(_COOKIE_FILE, 'wb') as f:
-            pickle.dump(s.cookies, f)
+        body = _get_json(s, race_id, 'rating') or {}
+        if not body.get('isLogin'):
+            print("  [東スポ] ログイン失敗（メールアドレス・パスワードを確認してください）")
+            _notify_discord("⚠️ **東スポ競馬のログイン失敗**\n専門紙補正は公開範囲のデータで続行します。")
+            return False
+        _save_cookies(s)
         return True
     except Exception as e:
         print(f"  [東スポ] ログイン例外: {e}")
@@ -110,7 +138,7 @@ def fetch_adjustments(race_id):
         s = _session()
         rating = _get_json(s, race_id, 'rating')
         if rating is not None and not rating.get('isLogin') and os.getenv('TOSPO_LOGIN_EMAIL'):
-            if _login(s):
+            if _login(s, race_id):
                 rating = _get_json(s, race_id, 'rating') or rating
         card = _get_json(s, race_id, 'card')
     except Exception as e:

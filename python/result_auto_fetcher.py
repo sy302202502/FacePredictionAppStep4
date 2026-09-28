@@ -396,9 +396,20 @@ def ensure_payout_table(conn):
     cur.close()
 
 
+# 買い目（単勝・複勝・ワイド・馬連・三連複・三連単）の判定に必要な券種。
+# 1つでも欠けた払戻表は部分取得とみなして保存しない（欠けた券種が「外れ」扱いになるため）
+REQUIRED_BET_TYPES = ('単勝', '複勝', 'ワイド', '馬連', '三連複', '三連単')
+
+
 def save_payouts(conn, race_id, payouts):
-    """払戻を入れ替え保存。払戻が確定していない（空）ときは何もしない。"""
+    """払戻を入れ替え保存（1トランザクション）。
+    必要な券種がそろっていない払戻表は部分取得とみなし、既存の保存内容を残して何もしない。"""
     if not payouts:
+        return 0
+    got = {p[0] for p in payouts}
+    missing = [t for t in REQUIRED_BET_TYPES if t not in got]
+    if missing:
+        print(f"    [保留] 払戻表に {'・'.join(missing)} がありません → 保存せず次回再取得")
         return 0
     cur = conn.cursor()
     cur.execute("DELETE FROM race_payout WHERE race_id = %s", (race_id,))
@@ -446,6 +457,9 @@ def fetch_result_page(race_id):
     """db.netkeiba の結果ページの soup。取れなければ None。"""
     try:
         resp = requests.get(f"https://db.netkeiba.com/race/{race_id}/", headers=HEADERS, timeout=15)
+        if resp.status_code != 200:
+            print(f"    [スキップ] 結果ページ HTTP {resp.status_code}")
+            return None
         resp.encoding = 'EUC-JP'
         return BeautifulSoup(resp.text, 'lxml')
     except Exception as e:

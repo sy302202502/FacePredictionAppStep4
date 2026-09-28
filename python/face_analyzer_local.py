@@ -87,8 +87,8 @@ def _clamp_score(v):
 def parse_llava_response(raw):
     """
     レスポンスからJSONを抽出してスコアを計算。
-    必須キー(eyes/coat/muscle/vitality)が1つも取れなければ分析失敗としてNoneを返す
-    （= 偽の50.0点を生成しない）。
+    必須キー(eyes/coat/muscle/vitality)が3つ以上取れなければ分析失敗としてNoneを返す
+    （= 偽の点数を生成しない）。
     """
     if not raw:
         return None
@@ -114,12 +114,14 @@ def parse_llava_response(raw):
                   for k in ('eyes', 'coat', 'muscle', 'vitality')}
     valid = {k: v for k, v in raw_scores.items() if v is not None}
 
-    # 1つも有効スコアが取れなければ失敗扱い
-    if not valid:
-        print(f"[警告] 有効なスコアキーがありません: {list(data.keys())}")
+    # 4項目中3項目以上そろわなければ失敗扱い（次のプロバイダーで再試行される）。
+    # 旧実装は1項目でも取れれば残りをその値で補完して成功扱いにしており、
+    # 「eyes:10 だけ」の応答が100点満点として保存され得た
+    if len(valid) < 3:
+        print(f"[警告] 有効なスコアが{len(valid)}項目のみ: {list(data.keys())}")
         return None
 
-    # 欠落キーは有効スコアの平均で補完（極端な偏りを避ける）
+    # 欠落した1項目は有効スコアの平均で補完
     fill = sum(valid.values()) / len(valid)
     eyes     = raw_scores['eyes']     if raw_scores['eyes']     is not None else fill
     coat     = raw_scores['coat']     if raw_scores['coat']     is not None else fill

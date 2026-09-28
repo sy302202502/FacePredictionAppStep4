@@ -179,7 +179,7 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-num" th:text="${top5HitRate} + '%'">0%</div>
-                        <div class="stat-label">TOP5 HIT RATE</div>
+                        <div class="stat-label">TOP5 HIT RATE<br><small style="opacity:.7">勝ち馬が予想上位5頭</small></div>
                     </div>
                 </div>
             </div>
@@ -198,7 +198,7 @@
                     </div>
                     <div class="stat-card highlight">
                         <div class="stat-num" th:text="${v2Top5HitRate} + '%'">0%</div>
-                        <div class="stat-label">TOP5 HIT RATE</div>
+                        <div class="stat-label">TOP5 HIT RATE<br><small style="opacity:.7">勝ち馬が予想上位5頭</small></div>
                     </div>
                 </div>
             </div>
@@ -224,7 +224,7 @@
                         <th>CATEGORY</th>
                         <th>RACES</th>
                         <th>WIN HIT RATE</th>
-                        <th>TOP5 HIT RATE</th>
+                        <th title="勝ち馬が予想上位5頭に入った割合">TOP5 HIT RATE</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -280,7 +280,7 @@
                         <th>RACE</th>
                         <th>PREDICTED #1</th>
                         <th>WIN</th>
-                        <th>TOP5</th>
+                        <th title="勝ち馬が予想上位5頭に入ったか">TOP5</th>
                         <th>SCORE</th>
                     </tr>
                 </thead>
@@ -383,7 +383,7 @@
                         <th>PREDICTED #1</th>
                         <th>ACTUAL RANK</th>
                         <th>WIN</th>
-                        <th>TOP5</th>
+                        <th title="勝ち馬が予想上位5頭に入ったか">TOP5</th>
                         <th>SCORE</th>
                         <th>DATA</th>
                     </tr>

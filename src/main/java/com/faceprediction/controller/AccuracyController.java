@@ -115,10 +115,14 @@ public class AccuracyController {
 
             // 新システム 直近記録（予想1位のみ表示）
             List<Map<String, Object>> v2Recent = jdbc.queryForList(
-                "SELECT DISTINCT ON (race_name) race_name, predicted_rank, horse_name," +
-                " actual_rank, hit, top5_hit, score, data_source, recorded_at" +
-                " FROM race_specific_accuracy WHERE predicted_rank = 1" +
-                " ORDER BY race_name, recorded_at DESC LIMIT 30");
+                // 開催(race_id)単位で1行。race_name 単位だと別年の同名重賞が1行に潰れていた
+                "SELECT * FROM (" +
+                " SELECT DISTINCT ON (COALESCE(race_id, race_name), data_source)" +
+                "  race_name, predicted_rank, horse_name," +
+                "  actual_rank, hit, top5_hit, score, data_source, recorded_at" +
+                "  FROM race_specific_accuracy WHERE predicted_rank = 1" +
+                "  ORDER BY COALESCE(race_id, race_name), data_source, recorded_at DESC" +
+                ") t ORDER BY recorded_at DESC LIMIT 30");
             model.addAttribute("v2RecentResults", v2Recent);
 
             // 未記録レース（予想はあるが的中記録がないもの）
@@ -269,9 +273,10 @@ public class AccuracyController {
                 .limit(5).map(p -> (String) p.get("horse_name")).collect(Collectors.toList());
 
             boolean hit1st  = predictions.get(0).get("horse_name").equals(first_);
-            boolean top5Hit = top5Names.contains(first_)
-                           || (!second_.isEmpty() && top5Names.contains(second_))
-                           || (!third_.isEmpty() && top5Names.contains(third_));
+            // TOP5的中 = 勝ち馬が予想上位5頭に入っている（自動記録 result_auto_fetcher と同じ定義）。
+            // 旧実装は2・3着が上位5頭にいても的中としており、着順を何着まで入力したかで
+            // 判定が変わる別指標になっていた
+            boolean top5Hit = top5Names.contains(first_);
 
             // 既存レコードを削除して上書き（race_id が分かる場合はその開催のみ削除。
             // race_name 一括削除だと同名の過去開催の記録まで消してしまう）

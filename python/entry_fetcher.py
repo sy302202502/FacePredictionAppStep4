@@ -6,6 +6,7 @@ netkeibaから直近の重賞レースの出走馬一覧を自動取得してDB�
   python entry_fetcher.py              # 今週末の重賞を全て取得
   python entry_fetcher.py "日本ダービー"  # レース名で絞り込み
 """
+import subprocess
 import sys
 import os
 import re
@@ -321,7 +322,8 @@ def sync_with_latest_shutuba():
             return
 
         print(f"{len(races)}件のレースを確認します\n")
-        failed = []  # 出馬表を取れなかった・異常スキップしたレース
+        failed = []   # 出馬表を取れなかった・異常スキップしたレース
+        changed = []  # 出走馬が増減したレース（予想の再計算が必要）
 
         for race_id, race_name, race_date in races:
             print(f"【{race_name}】{race_date} race_id={race_id}")
@@ -395,6 +397,8 @@ def sync_with_latest_shutuba():
             if added:
                 print(f"  直前追加:   {', '.join(sorted(added))}")
 
+            changed.append((race_id, race_name))
+
             # race_entry を出馬表の内容で丸ごと更新
             category = classify_race(distance, surface)
             save_entries(conn, race_id, scraped_name or race_name,
@@ -436,6 +440,23 @@ def sync_with_latest_shutuba():
                 conn.commit()
 
             polite_sleep(2.0, 4.0)
+
+        # 出走馬が増減したレースは予想を再計算する。
+        # 旧実装は除外馬を消して順位を詰めるだけで、追加馬の予想・顔面分析、残存馬の
+        # 馬番・騎手・スコア（展開想定は出走メンバーで変わる）が更新されなかった。
+        # --update なので顔面データは保持され、LLM を使うのは未分析の追加馬だけ
+        for race_id, race_name in changed:
+            print(f"\n【再予想】{race_name} race_id={race_id}（出走馬の変更を反映）", flush=True)
+            try:
+                rc = subprocess.run(
+                    [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                  'predict_by_race_id.py'), race_id, '--update'],
+                    timeout=1800).returncode
+            except subprocess.TimeoutExpired:
+                rc = -1
+            if rc != 0:
+                print(f"  ⚠️ 再予想に失敗（rc={rc}）")
+                failed.append(f"{race_name}(再予想)")
 
         print(f"\n=== 同期完了: {len(races) - len(failed)}/{len(races)}レース ===")
         if failed:

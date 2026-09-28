@@ -146,7 +146,18 @@ public class HighDividendController {
                         }
                     }
                 }
-                proc.waitFor();
+                // 終了コードを画面に伝える（無視すると異常終了でも正常完了に見えていた）
+                int exit = proc.waitFor();
+                if (exit != 0) {
+                    String msg = "❌ 厳選処理が失敗しました（終了コード " + exit + "）。結果は更新されていない可能性があります";
+                    List<String> l = logs.get(key);
+                    if (l != null) l.add(msg);
+                    SseEmitter em = emitters.get(key);
+                    if (em != null) {
+                        try { em.send(SseEmitter.event().data(msg)); }
+                        catch (Exception e) { log.warn("SSEログ送信失敗: {}", e.getMessage()); }
+                    }
+                }
             } catch (Exception e) {
                 List<String> l = logs.get(key);
                 if (l != null) l.add("エラー: " + e.getMessage());

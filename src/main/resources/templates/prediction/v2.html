@@ -1170,6 +1170,11 @@
             white-space: nowrap;
         }
         .bet-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+        .entry-notice {
+            margin: -4px 0 14px; padding: 9px 12px; border-radius: 4px;
+            font-size: 12px; line-height: 1.7; color: var(--text);
+            background: rgba(255,128,0,0.08); border: 1px solid rgba(255,128,0,0.35);
+        }
         .bet-jump {
             display: block; text-align: right; margin: -6px 0 14px;
             font-size: 12px; color: var(--gold-light); text-decoration: none;
@@ -1333,6 +1338,12 @@
             <!-- 1位スーパーチャット風バナー -->
             <div th:if="${results != null and !#lists.isEmpty(results)}" class="superchat-banner">
                 🏆 本命 ◎ — <span th:text="${results[0].horseName}">馬名</span>
+            </div>
+
+            <div th:if="${results != null and !#lists.isEmpty(results) and !entriesFinal}" class="entry-notice">
+                📋 枠順確定前（登録馬 <span th:text="${#lists.size(results)}">22</span>頭）の予想です。
+                登録馬がフルゲート（最大18頭・コースによってはそれ未満）を超える場合は除外・抽選があり、
+                確定メンバーと馬番はレース前日の出馬表確定後に反映されます。
             </div>
 
             <a th:if="${bets != null and !#lists.isEmpty(bets)}" href="#bets" class="bet-jump">🎫 鬼眼買い目（<span th:text="${betPoints}">20</span>点）を見る ↓</a>

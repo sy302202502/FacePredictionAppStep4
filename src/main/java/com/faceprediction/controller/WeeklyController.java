@@ -50,15 +50,20 @@ public class WeeklyController {
         // 蓄積済みレース一覧（日付降順）
         List<Map<String, Object>> raceList = jdbc.queryForList(
             "SELECT sp.race_name," +
-            "  MIN(re.race_date) AS race_date," +
+            "  MAX(re.race_date) AS race_date," +
             "  COUNT(DISTINCT sp.horse_name) AS horse_count," +
             "  COUNT(DISTINCT CASE WHEN sp.face_comment IS NOT NULL THEN sp.horse_name END) AS face_done," +
             "  MAX(sp.created_at) AS updated_at" +
             " FROM stats_prediction sp" +
             // race_name JOINだと同名の過去開催×全頭に行が膨らむため、IDで厳密に突合
             " LEFT JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id" +
+            // 選択時の表示（同名レースの最新開催）と同じ行だけを数える。
+            // 絞らないと前年の同名重賞の頭数・分析数が合算されていた
+            " WHERE sp.race_id IS NULL OR sp.race_id =" +
+            "   (SELECT race_id FROM race_entry WHERE race_name = sp.race_name" +
+            "    ORDER BY race_date DESC, race_id DESC LIMIT 1)" +
             " GROUP BY sp.race_name" +
-            " ORDER BY MIN(re.race_date) DESC NULLS LAST, MAX(sp.created_at) DESC");
+            " ORDER BY MAX(re.race_date) DESC NULLS LAST, MAX(sp.created_at) DESC");
 
         model.addAttribute("raceList",  raceList);
         model.addAttribute("selected",  raceName);

@@ -15,39 +15,38 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
-import com.faceprediction.repository.RaceEntryRepository;
 
 @Controller
 @RequestMapping("/calendar")
 public class CalendarController {
 
-    @Autowired private RaceEntryRepository entryRepo;
     @Autowired private JdbcTemplate        jdbc;
 
     @GetMapping
     public String show(Model model) {
-        // race_entry から今後 21日以内のレース一覧を取得
-        List<Object[]> upcoming = entryRepo.findDistinctRaces();
-
         LocalDate today = LocalDate.now();
         LocalDate limit = today.plusDays(21);
 
-        // 分析済みレース名の集合（顔面分析が1頭でも完了したレース = stats_prediction）
-        List<String> analyzedNames = jdbc.queryForList(
-            "SELECT race_name FROM stats_prediction WHERE face_comment IS NOT NULL GROUP BY race_name",
-            String.class);
-
-        // 出走頭数を1クエリで取得（N+1防止）
-        Map<String, Long> entryCountMap = new java.util.HashMap<>();
-        for (Object[] ec : entryRepo.countEntriesByRaceName()) {
-            if (ec[0] != null) {
-                entryCountMap.put(ec[0].toString(), ((Number) ec[1]).longValue());
-            }
-        }
+        // 表示期間（過去3日〜未来21日）の開催を race_id 単位で1クエリ取得。
+        // 旧実装は race_name 単位で、前年の同名重賞の頭数が合算され（18頭＋16頭＝34頭など）、
+        // 分析済み判定も名前の部分一致だったため前年の分析で「分析済み」になっていた
+        List<Object[]> upcoming = jdbc.query(
+            "SELECT MIN(re.race_name), MIN(re.race_date), MIN(re.race_category), MIN(re.distance), " +
+            "       MIN(re.surface), MIN(re.venue), re.race_id, COUNT(*), " +
+            "       EXISTS (SELECT 1 FROM stats_prediction sp " +
+            "               WHERE sp.race_id = re.race_id AND sp.face_comment IS NOT NULL) " +
+            "FROM race_entry re " +
+            "WHERE re.race_date BETWEEN ? AND ? " +
+            "GROUP BY re.race_id",
+            (rs, i) -> new Object[] {
+                rs.getString(1), rs.getDate(2), rs.getString(3), rs.getObject(4),
+                rs.getString(5), rs.getString(6), rs.getString(7), rs.getLong(8), rs.getBoolean(9)
+            },
+            java.sql.Date.valueOf(today.minusDays(3)), java.sql.Date.valueOf(limit));
 
         List<Map<String, Object>> events = new ArrayList<>();
         for (Object[] row : upcoming) {
-            // [race_name, race_date, race_category, distance, surface, venue]
+            // [race_name, race_date, race_category, distance, surface, venue, race_id, 頭数, 分析済み]
             String    raceName    = row[0] != null ? row[0].toString() : "";
             LocalDate raceDate    = null;
             if (row[1] != null) {
@@ -68,12 +67,10 @@ public class CalendarController {
             if (raceDate.isAfter(limit)) continue;
 
             long daysLeft = ChronoUnit.DAYS.between(today, raceDate);
-            boolean isAnalyzed = !raceName.isBlank() && analyzedNames.stream()
-                .filter(n -> n != null && !n.isBlank())
-                .anyMatch(n -> n.contains(raceName) || raceName.contains(n));
+            boolean isAnalyzed = (Boolean) row[8];
             boolean isPast = raceDate.isBefore(today);
 
-            long entryCount = entryCountMap.getOrDefault(raceName, 0L);
+            long entryCount = (Long) row[7];
 
             String urgency;
             if (isPast) {
@@ -127,7 +124,7 @@ public class CalendarController {
 
         model.addAttribute("groupedEvents", grouped);
         model.addAttribute("today",         today.toString());
-        model.addAttribute("analyzedCount", analyzedNames.size());
+        model.addAttribute("analyzedCount", events.stream().filter(e -> Boolean.TRUE.equals(e.get("isAnalyzed"))).count());
         model.addAttribute("totalEvents",   events.size());
 
         return "calendar/index";

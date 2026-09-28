@@ -2,7 +2,9 @@
 predict_by_race_id.py — race_id 指定で 統計予想 + 顔面分析を一括実行
 
 使い方:
-  python predict_by_race_id.py 202605021212
+  python predict_by_race_id.py 202605021212            # 統計予想を作り直し＋顔面分析
+  python predict_by_race_id.py 202605021212 --update   # 顔面データを残してスコア再計算＋未分析馬だけ顔面分析
+                                                       # （出馬表同期で馬が増減したレース向け。LLM呼び出しは追加馬のみ）
 """
 import sys
 import subprocess
@@ -15,6 +17,7 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 race_id = sys.argv[1]
+update_mode = '--update' in sys.argv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 conn = psycopg2.connect(
@@ -40,7 +43,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 # 1. 統計予想（race_id を渡す: stats_predictor 側で開催を一意特定できる）
 print("\n[1/3] 統計予想を実行...")
 r1 = subprocess.run(
-    ['python3', os.path.join(script_dir, 'stats_predictor.py'), race_id],
+    ['python3', os.path.join(script_dir, 'stats_predictor.py'), race_id]
+    + (['--update'] if update_mode else []),
     cwd=script_dir
 )
 if r1.returncode != 0:

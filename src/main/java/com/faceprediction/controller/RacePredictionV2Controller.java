@@ -64,7 +64,11 @@ public class RacePredictionV2Controller {
                 " AND re.race_id = (SELECT race_id FROM race_entry WHERE race_name = sp.race_name " +
                 "                   ORDER BY race_date DESC, race_id DESC LIMIT 1) " +
                 "WHERE sp.race_name = ? " +
-                "  AND (sp.race_id = re.race_id OR sp.race_id IS NULL) " +
+                "  AND (sp.race_id = re.race_id " +
+                // 旧コード由来の race_id NULL 行は、同じ馬の最新開催の行が無いときだけ使う
+                // （両方あると同じ馬が二重に表示されていた）
+                "       OR (sp.race_id IS NULL AND NOT EXISTS (SELECT 1 FROM stats_prediction sp2 " +
+                "           WHERE sp2.race_id = re.race_id AND sp2.horse_id = sp.horse_id))) " +
                 "ORDER BY sp.rank_position ASC",
                 selected);
 
@@ -82,6 +86,11 @@ public class RacePredictionV2Controller {
 
             List<RaceSpecificResult> results = rankingService.rank(rows);
             model.addAttribute("results", results);
+            // 枠順確定前（特別登録の段階）は馬番が無く、18頭を超える登録馬が並ぶこともある。
+            // 確定メンバーはレース前日の出馬表同期で反映される
+            boolean entriesFinal = !results.isEmpty()
+                && results.stream().allMatch(r -> r.getHorseNumber() != null);
+            model.addAttribute("entriesFinal", entriesFinal);
 
             // 買い目提案（◎〜注の5頭が顔面分析済みのときだけ）
             List<BetLine> bets = bettingService.suggest(results);

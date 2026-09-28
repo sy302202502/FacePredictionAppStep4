@@ -29,8 +29,9 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleW
 # chaos_score の重み
 W_FAVORITE_ODDS = 3.0    # 1番人気オッズ
 W_HORSE_COUNT   = 1.5    # 出走頭数
-W_ODDS_STD      = 2.0    # オッズ標準偏差
+W_SPLIT         = 60.0   # 人気の割れ具合（単勝オッズから求めた勝率分布の正規化エントロピー 0〜1）
 W_MID_ODDS      = 1.0    # 3〜5番人気の平均オッズ
+MID_ODDS_CAP    = 20.0   # 3〜5番人気の平均オッズの評価上限（倍）
 
 # 重賞ペナルティ
 GRADE_PENALTY = {'G1': -20, 'G2': -10, 'G3': -5}
@@ -359,8 +360,9 @@ def fetch_odds_info(race_id):
     if not results:
         return None
 
-    # 人気順でソート（0は末尾）
-    results.sort(key=lambda x: x['popularity'] if x['popularity'] > 0 else 999)
+    # 人気順＝単勝オッズの低い順。発売初期は人気順位が0（未確定）で返るため、
+    # 人気順位ではなくオッズで並べる（旧実装は全頭0のとき先頭の馬番を1番人気と誤認していた）
+    results.sort(key=lambda x: x['odds'])
     return results
 
 
@@ -386,14 +388,26 @@ def calc_chaos_score(odds_list, grade):
     # 1番人気オッズ（人気順1位）
     favorite_odds = odds_list[0]['odds']
 
-    # オッズ標準偏差
+    # オッズ分散（DB互換のため記録のみ。スコアには使わない）
     mean = sum(odds_values) / horse_count
     variance = sum((o - mean) ** 2 for o in odds_values) / horse_count
     std_dev = math.sqrt(variance)
 
-    # 3〜5番人気の平均オッズ
+    # 人気の割れ具合: 単勝オッズ→勝率(1/オッズを合計1に正規化)のエントロピーを頭数で正規化。
+    # 1.0 に近いほど「どの馬にも勝つ可能性がある」混戦。
+    # 標準偏差は、1〜2頭が抜けた人気で残りが大穴という本命決着型でも大きくなり、
+    # 混戦の指標としては逆向きになり得たため置き換えた
+    implied = [1.0 / o for o in odds_values]
+    total = sum(implied)
+    probs = [p / total for p in implied]
+    split = -sum(p * math.log(p) for p in probs if p > 0) / math.log(horse_count)
+
+    # 3〜5番人気の平均オッズ（上限 MID_ODDS_CAP 倍で頭打ち）。
+    # 3〜5番人気が20倍を超えるのは上位2頭の一騎打ち＝本命決着型で、混戦ではない。
+    # 上限なしだと大穴ぞろいの本命レースほど加点されていた
     mid_range = odds_list[2:5]  # index 2,3,4 = 3〜5番人気
     mid_avg = sum(h['odds'] for h in mid_range) / len(mid_range) if mid_range else 0
+    mid_avg = min(mid_avg, MID_ODDS_CAP)
 
     # 重賞ペナルティ
     grade_pen = GRADE_PENALTY.get(grade, 0)
@@ -401,7 +415,7 @@ def calc_chaos_score(odds_list, grade):
     score = (
         (favorite_odds * W_FAVORITE_ODDS)
         + (horse_count * W_HORSE_COUNT)
-        + (std_dev * W_ODDS_STD)
+        + (split * W_SPLIT)
         + (mid_avg * W_MID_ODDS)
         + grade_pen
     )
@@ -410,6 +424,7 @@ def calc_chaos_score(odds_list, grade):
         'favorite_odds': favorite_odds,
         'horse_count': horse_count,
         'odds_std': std_dev,
+        'odds_split': split,
         'odds_variance': variance,
         'mid_avg': mid_avg,
         'grade_penalty': grade_pen,
@@ -434,7 +449,7 @@ def build_selection_reason(race_name, detail, odds_list, grade):
     parts = []
     fav = detail['favorite_odds']
     count = detail['horse_count']
-    std = detail['odds_std']
+    split = detail['odds_split']
 
     if fav >= 10.0:
         parts.append(f"1番人気が{fav:.1f}倍の大混戦")
@@ -445,10 +460,10 @@ def build_selection_reason(race_name, detail, odds_list, grade):
 
     parts.append(f"{count}頭立て")
 
-    if std >= 15.0:
-        parts.append("オッズ分散も最大級")
-    elif std >= 8.0:
-        parts.append("オッズのばらつき大")
+    if split >= 0.9:
+        parts.append("人気が大きく割れている")
+    elif split >= 0.8:
+        parts.append("人気が割れ気味")
 
     if grade in GRADE_PENALTY:
         parts.append(f"({grade}重賞・重賞補正適用)")

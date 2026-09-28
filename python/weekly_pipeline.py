@@ -385,7 +385,8 @@ def main():
                     cur_n.close()
                 if needs_reeval:
                     log(f"  → 統計予想: 直前再評価（最新の調教評価を反映）")
-                    ok2, _ = run_script('stats_predictor.py', [race_name, '--update'],
+                    # race_id で開催を固定する（race_name だと同名の別開催を更新し得る）
+                    ok2, _ = run_script('stats_predictor.py', [race_id, '--update'],
                                         '統計予想（再評価）')
                     reeval_count += 1
                     if not ok2:
@@ -398,7 +399,7 @@ def main():
                 log(f"  → 統計予想: スキップ（DB既存）")
                 ok2 = True
         else:
-            ok2, _ = run_script('stats_predictor.py', [race_name], '統計予想')
+            ok2, _ = run_script('stats_predictor.py', [race_id], '統計予想')
             if not ok2:
                 log(f"  ⚠️ {race_name} の統計予想に失敗、スキップ")
                 results.append({'race': race_name, 'status': 'stats_failed'})
@@ -421,6 +422,8 @@ def main():
                 log(f"  ⚠️ [重賞] {race_name} の顔面分析が未完了 → 即時リトライ")
                 polite_sleep(3.0, 5.0)
                 ok3, _ = run_script('face_analyzer_local.py', [race_name, race_id], '顔面分析リトライ（重賞）')
+            # 終了コードだけでなく DB 上の完了も確認する（重賞以外も同じ基準で判定）
+            ok3 = ok3 and face_analysis_done(conn, race_id)
 
         results.append({
             'race': race_name,

@@ -525,7 +525,7 @@ def main():
     for r in results:
         mark = '✅' if r['status'] == 'done' else f"❌ {r['status']}"
         lines.append(f"{mark} {r['race']}")
-    lines.append("\nhttp://160.251.251.73:8081/predict-v2")
+    lines.append(f"\n{os.getenv('APP_PUBLIC_URL', 'http://160.251.251.73:8081')}/predict-v2")
     send_discord("\n".join(lines))
 
     # デッドマンズスイッチ: 重賞未完了 or 失敗レースありなら /fail（外部監視も赤にする）。

@@ -73,6 +73,8 @@ services:
       TOSPO_ENABLED:         ${TOSPO_ENABLED:-0}
       TOSPO_LOGIN_EMAIL:     ${TOSPO_LOGIN_EMAIL:-}
       TOSPO_PASSWORD:        ${TOSPO_PASSWORD:-}
+      # 通知・X投稿案に載せる公開URL（HTTPS化すると deploy/enable_https.sh が .env に設定する）
+      APP_PUBLIC_URL:        ${APP_PUBLIC_URL:-http://160.251.251.73:8081}
       PGCONNECT_TIMEOUT:     ${PGCONNECT_TIMEOUT:-15}
       HEALTHCHECK_URL:       ${HEALTHCHECK_URL:-}
     volumes:

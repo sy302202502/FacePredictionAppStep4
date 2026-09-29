@@ -408,6 +408,9 @@ CREATE TABLE IF NOT EXISTS public.race_column (
     facts_hash character varying(64),
     updated_at timestamp without time zone DEFAULT now()
 );
+ALTER TABLE public.race_column ADD COLUMN IF NOT EXISTS tweet text;
+-- 2026-09-29 追加: コラムの展開想定図（python/race_diagram.py が計算した配置の JSON）
+ALTER TABLE public.race_column ADD COLUMN IF NOT EXISTS diagram text;
 
 -- 2026-09-28 追加: 顔面分析の項目別の点数（face_analyzer_local.py が保存。検証用）
 ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_eyes double precision;

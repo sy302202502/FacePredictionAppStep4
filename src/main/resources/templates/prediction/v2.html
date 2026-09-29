@@ -1190,6 +1190,11 @@
             margin-bottom: 12px; line-height: 1.5;
         }
         .column-p { font-size: 14px; line-height: 1.95; margin-bottom: 12px; }
+        .diagram { margin: 14px 0 6px; }
+        .diagram-title { font-size: 13px; font-weight: 700; color: var(--neon); margin-bottom: 6px; }
+        .diagram-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+        .diagram svg { width: 100%; min-width: 600px; height: auto; display: block; border-radius: 8px; background: #0a120b; }
+        .diagram-note { font-size: 11px; color: var(--text-muted); line-height: 1.7; margin: 4px 0 8px; }
         .column-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.6; }
         .tweet-box { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(125,255,79,0.2); }
         .tweet-head { font-size: 12px; color: var(--neon); margin-bottom: 6px; }
@@ -1367,6 +1372,33 @@
                     <div class="column-inner">
                         <h2 class="column-title" th:text="${column.title}">見出し</h2>
                         <p class="column-p" th:each="p : ${column.paragraphs}" th:text="${p}">本文</p>
+                        <!-- 展開の想定図（図1: スタート〜1コーナー / 図2: 最後の直線） -->
+                        <div class="diagram" th:if="${column.scenes != null}" th:each="sc, st : ${column.scenes}">
+                            <div class="diagram-title" th:text="${'図' + (st.index + 1) + '　' + sc.title}">図1 スタート〜1コーナー（想定）</div>
+                            <div class="diagram-scroll"><svg viewBox="0 0 800 250" role="img" th:attr="aria-label=${sc.title}">
+                                <rect x="10" y="40" width="780" height="180" rx="10" fill="#123a1c"/>
+                                <!-- 内ラチ（太線）と外ラチ -->
+                                <line x1="10" x2="790" th:attr="y1=${sc.railY},y2=${sc.railY}" stroke="#e8f5e0" stroke-width="5"/>
+                                <line x1="10" x2="790" th:attr="y1=${sc.outerY},y2=${sc.outerY}" stroke="#7fa58a" stroke-width="2" stroke-dasharray="8 6"/>
+                                <text x="20" th:attr="y=${sc.railY > 100 ? sc.railY + 22 : sc.railY - 10}" fill="#9bb592" font-size="14">内ラチ</text>
+                                <!-- 進行方向 / ゴール -->
+                                <text x="785" y="30" text-anchor="end" fill="#f5d878" font-size="16" font-weight="700"
+                                      th:text="${sc.goal + ' ▶'}">1コーナーへ ▶</text>
+                                <line th:if="${sc.finish}" x1="770" x2="770" y1="40" y2="220" stroke="#ff2244" stroke-width="4"/>
+                                <g th:each="h : ${sc.horses}">
+                                    <circle r="16" th:attr="cx=${h.cx},cy=${h.cy},fill=${h.fill},stroke=${h.stroke},stroke-width=${h.strokeWidth}"/>
+                                    <text text-anchor="middle" font-size="15" font-weight="900" dominant-baseline="central"
+                                          th:attr="x=${h.cx},y=${h.cy},fill=${h.textFill}" th:text="${h.num}">1</text>
+                                    <text th:if="${h.mark != null}" text-anchor="middle" font-size="15" font-weight="900" fill="#f5d878"
+                                          th:attr="x=${h.cx},y=${h.cy - 22}" th:text="${h.mark}">◎</text>
+                                    <title th:text="${h.num + '番 ' + h.name}">1番 馬名</title>
+                                </g>
+                            </svg></div>
+                        </div>
+                        <div class="diagram-note" th:if="${column.scenes != null}">
+                            丸の数字は馬番、色は枠の色、上の記号は鬼眼の印。近走の位置取りと想定ペースから描いたイメージで、
+                            実際の展開は出遅れや騎手の判断で変わります。
+                        </div>
                         <div class="column-note"
                              th:text="${'※ 馬場・枠順・脚質などアプリのデータをもとに'
                                  + (column.generator == 'template' ? '自動で組み立てた' : 'AIが文章化した')

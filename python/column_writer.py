@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 
 from llm_client import generate_text
 from race_condition import place_from_race_id
+import race_diagram
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -68,6 +69,8 @@ TASK = """以下の「材料」だけを使って、{race}の鬼眼コラムを�
 7. 締め（鬼眼の決め台詞で）
 
 馬名を出すときは必ず「10番ウェイワードアクト」のように馬番を前に付ける。
+コラムには展開の想定図が2枚付く（図1=スタート〜1コーナー、図2=最後の直線。中身は材料の「図1_…」「図2_…」）。
+3と4の段落では「図1のように」「図2を見てほしい」と自然に触れてよい。図の並びと違うことは書かない。
 
 出力はJSONのみ: {{"title": "30字以内の見出し", "body": "本文（段落は改行2つで区切る）"}}
 
@@ -110,6 +113,7 @@ def ensure_table(conn):
         )
     """)
     cur.execute("ALTER TABLE race_column ADD COLUMN IF NOT EXISTS tweet TEXT")
+    cur.execute("ALTER TABLE race_column ADD COLUMN IF NOT EXISTS diagram TEXT")
     conn.commit()
     cur.close()
 
@@ -187,6 +191,10 @@ def load_facts(conn, race_id, grade=None):
             '距離適性': h['detail'].get('距離適性'),
         }
 
+    # 展開の想定図（本文と同じ材料から作る。図の要点は本文の材料にも入れて文章と図をそろえる）
+    pace_label = (d0.get('想定ペース') or '').split('（')[0]
+    diagram = race_diagram.build(horses, pace_label, race_diagram.course_direction(race_id))
+
     roster = {h['num']: h for h in horses}
     facts = {
         'レース': race_name,
@@ -201,7 +209,11 @@ def load_facts(conn, race_id, grade=None):
             {'馬番': h['num'], '枠番': h['waku'], '馬名': h['name'], '脚質': h['style']} for h in front],
         '鬼眼の印': [horse_facts(h) for h in horses if h['mark']],
         '展開の穴': (dict(horse_facts(dark), **{'展開の見立て': dark['detail'].get('展開')}) if dark else None),
+        '回り': (diagram or {}).get('direction'),
+        '図1_1コーナーの隊列想定（前から）': race_diagram.summary(diagram, 'start'),
+        '図2_直線での想定（前から）': race_diagram.summary(diagram, 'stretch'),
     }
+    facts['_diagram'] = diagram
     # 検査用（ハッシュ・LLMには渡さない）: 馬番 → 馬名・印
     facts['_roster'] = {num: {'name': h['name'], 'mark': h['mark']} for num, h in roster.items()}
     return facts, None
@@ -384,7 +396,8 @@ def write_template(facts):
     elif front:
         paras.append("はっきりした逃げ馬はいなくて、先行勢の" + '、'.join(label(h) for h in front[:3])
                      + "が隊列を作る形になりそう。")
-    paras.append(f"想定ペースは{facts['想定ペース']}。この流れが結果を左右しそうだ！")
+    paras.append(f"想定ペースは{facts['想定ペース']}。この流れが結果を左右しそうだ！"
+                 + ("図1と図2に、スタート直後と直線の隊列の想定を描いておいたよ。" if facts.get('_diagram') else ''))
     reason = top['顔面の見立て'] or '顔つきに勝負気配'
     paras.append(f"僕の◎は{top['馬番']}番{top['馬名']}！ {reason}。"
                  + (f"データ面でも{top['統計の根拠']}。" if top['統計の根拠'] else ''))
@@ -430,19 +443,24 @@ def main():
         print(f"RESULT:{json.dumps({'success': True, 'skipped': why}, ensure_ascii=False)}")
         return
     h = _facts_hash(facts)
-    cur.execute("SELECT facts_hash, generator, tweet FROM race_column WHERE race_id = %s", (race_id,))
+    cur.execute("SELECT facts_hash, generator, tweet, diagram FROM race_column WHERE race_id = %s", (race_id,))
     row = cur.fetchone()
     same = bool(row) and row[0] == h
-    # X投稿案の機能より前に書いたコラムには投稿案が無い → 本文はそのままで投稿案だけ作る
-    if same and row[1] != 'template' and not force and row[2] is None and not dry:
-        cur.execute("SELECT title, body FROM race_column WHERE race_id = %s", (race_id,))
-        title, body = cur.fetchone()
-        tweet, tweet_gen = write_tweet({'title': title, 'body': body}, facts, race_id)
-        cur.execute("UPDATE race_column SET tweet = %s WHERE race_id = %s", (tweet, race_id))
+    # 投稿案・図の機能より前に書いたコラムには無い → 本文はそのままで足りない分だけ作る
+    if same and row[1] != 'template' and not force and (row[2] is None or row[3] is None) and not dry:
+        if row[2] is None:
+            cur.execute("SELECT title, body FROM race_column WHERE race_id = %s", (race_id,))
+            title, body = cur.fetchone()
+            tweet, tweet_gen = write_tweet({'title': title, 'body': body}, facts, race_id)
+            cur.execute("UPDATE race_column SET tweet = %s WHERE race_id = %s", (tweet, race_id))
+            print(f"既存コラムにX投稿案を追加（{tweet_gen}）")
+            notify_discord(f"📝 **X投稿案**: {facts['レース']}\n```\n{tweet}\n```")
+        if row[3] is None and facts.get('_diagram'):
+            cur.execute("UPDATE race_column SET diagram = %s WHERE race_id = %s",
+                        (json.dumps(facts['_diagram'], ensure_ascii=False), race_id))
+            print("既存コラムに展開の想定図を追加")
         conn.commit()
-        print(f"既存コラムにX投稿案を追加（{tweet_gen}）")
-        notify_discord(f"📝 **X投稿案**: {facts['レース']}\n```\n{tweet}\n```")
-        print(f"RESULT:{json.dumps({'success': True, 'tweet_added': True})}")
+        print(f"RESULT:{json.dumps({'success': True, 'filled': True})}")
         return
     # 材料が同じでも、前回がテンプレート（AIの一時失敗）なら AI で書き直しを試みる
     if same and row[1] != 'template' and not force:
@@ -454,6 +472,11 @@ def main():
     generator = 'gemini'
     if not col:
         if same:
+            # 本文は既存を維持。図は計算だけで作れるので最新にしておく
+            if facts.get('_diagram') and not dry:
+                cur.execute("UPDATE race_column SET diagram = %s WHERE race_id = %s",
+                            (json.dumps(facts['_diagram'], ensure_ascii=False), race_id))
+                conn.commit()
             print(f"  AI文章化に失敗（{reason}）→ 既存のコラムを維持")
             print(f"RESULT:{json.dumps({'success': True, 'skipped': 'llm_failed'})}")
             return
@@ -465,13 +488,14 @@ def main():
     print(f"X投稿案（{tweet_gen}・{x_weight(tweet)}/{X_LIMIT}）:\n{tweet}\n")
     if not dry:
         cur.execute("""
-            INSERT INTO race_column (race_id, race_name, title, body, generator, facts_hash, tweet, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            INSERT INTO race_column (race_id, race_name, title, body, generator, facts_hash, tweet, diagram, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT (race_id) DO UPDATE
               SET race_name = EXCLUDED.race_name, title = EXCLUDED.title, body = EXCLUDED.body,
                   generator = EXCLUDED.generator, facts_hash = EXCLUDED.facts_hash,
-                  tweet = EXCLUDED.tweet, updated_at = NOW()
-        """, (race_id, facts['レース'], col['title'], col['body'], generator, h, tweet))
+                  tweet = EXCLUDED.tweet, diagram = EXCLUDED.diagram, updated_at = NOW()
+        """, (race_id, facts['レース'], col['title'], col['body'], generator, h, tweet,
+              json.dumps(facts['_diagram'], ensure_ascii=False) if facts.get('_diagram') else None))
         conn.commit()
         notify_discord(f"📝 **鬼眼コラムを{'更新' if row else '公開'}**: {facts['レース']}\n"
                        f"X投稿案（コピーして使ってください）:\n```\n{tweet}\n```")

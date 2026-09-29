@@ -34,6 +34,7 @@ public class RacePredictionV2Controller {
     @Autowired private FaceRankingService rankingService;
     @Autowired private BettingService     bettingService;
     @Autowired private RaceSelectionService selectionService;
+    @Autowired private com.faceprediction.service.RaceDiagramService diagramService;
 
     @GetMapping
     public String show(@RequestParam(required = false) String raceId,
@@ -117,11 +118,13 @@ public class RacePredictionV2Controller {
     private Map<String, Object> loadColumn(String raceId) {
         try {
             List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT title, body, generator, updated_at, tweet FROM race_column WHERE race_id = ?", raceId);
+                "SELECT title, body, generator, updated_at, tweet, diagram FROM race_column WHERE race_id = ?", raceId);
             if (rows.isEmpty()) return null;
             Map<String, Object> c = new java.util.HashMap<>(rows.get(0));
             c.put("paragraphs", java.util.Arrays.stream(((String) c.get("body")).split("\\n\\s*\\n"))
                 .map(String::trim).filter(p -> !p.isEmpty()).collect(Collectors.toList()));
+            // 展開の想定図（無ければ null）
+            c.put("scenes", diagramService.scenes((String) c.get("diagram")));
             return c;
         } catch (Exception e) {
             return null;  // race_column 未作成（コラムがまだ一度も書かれていない環境）

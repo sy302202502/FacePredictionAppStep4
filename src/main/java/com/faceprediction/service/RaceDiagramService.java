@@ -36,6 +36,45 @@ public class RaceDiagramService {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * 図の根拠（想定ペースの根拠・コースの傾向・この図の作り方の検証成績）。無ければ null。
+     * キー: pace, leaders（逃げ候補の馬番「3・10番」）, paceAccuracy（その判定の的中率 %）, course,
+     *       modelRaces, modelKind（試算/検証）, startTop4, stretchTop4（平均 x/4）, baseStretchTop4（従来の方法）,
+     *       paceTotal（想定ペースの的中率 %）, withData, total
+     */
+    public Map<String, Object> evidence(String diagramJson) {
+        if (diagramJson == null || diagramJson.isBlank()) return null;
+        try {
+            JsonNode root = mapper.readTree(diagramJson);
+            JsonNode ev = root.path("evidence");
+            if (ev.isMissingNode()) return null;
+            Map<String, Object> m = new LinkedHashMap<>();
+            String pace = ev.path("pace").path("label").asText(root.path("pace").asText(""));
+            m.put("pace", pace);
+            List<String> leaders = new ArrayList<>();
+            ev.path("pace").path("leaders").forEach(n -> leaders.add(n.asText()));
+            m.put("leaders", leaders.isEmpty() ? "いない（0頭）" : String.join("・", leaders) + "番（" + leaders.size() + "頭）");
+            m.put("basis", ev.path("pace").path("basis").asText("逃げ候補"));
+            JsonNode acc = ev.path("pace").path("accuracy").path(pace);
+            m.put("paceAccuracy", acc.isNumber() ? Math.round(acc.asDouble() * 100) : null);
+            m.put("course", ev.path("course").isTextual() ? ev.path("course").asText() : null);
+            JsonNode model = ev.path("model");
+            m.put("modelRaces", model.path("races").isNumber() ? model.path("races").asInt() : null);
+            m.put("startTop4", model.path("start_top4").isNumber() ? String.format("%.1f", model.path("start_top4").asDouble()) : null);
+            m.put("stretchTop4", model.path("stretch_top4").isNumber() ? String.format("%.1f", model.path("stretch_top4").asDouble()) : null);
+            m.put("modelKind", model.path("kind").asText("検証"));
+            m.put("baseStretchTop4", model.path("base_stretch_top4").isNumber() ? String.format("%.1f", model.path("base_stretch_top4").asDouble()) : null);
+            m.put("paceTotal", model.path("pace_total").isNumber() ? Math.round(model.path("pace_total").asDouble() * 100) : null);
+            m.put("withData", ev.path("with_data").asInt());
+            int total = 0;
+            for (JsonNode s : root.path("scenes")) { total = s.path("horses").size(); break; }
+            m.put("total", total);
+            return m;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** diagram の JSON → 画面用の場面リスト。壊れていれば null */
     public List<Map<String, Object>> scenes(String diagramJson) {
         if (diagramJson == null || diagramJson.isBlank()) return null;
@@ -58,6 +97,7 @@ public class RaceDiagramService {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("num", h.path("num").asInt());
                     m.put("name", h.path("name").asText(""));
+                    m.put("why", h.path("why").isTextual() ? h.path("why").asText() : null);
                     m.put("cx", Math.round(x));
                     m.put("cy", Math.round(y));
                     m.put("fill", WAKU_FILL[waku]);
@@ -69,6 +109,7 @@ public class RaceDiagramService {
                     horses.add(m);
                 }
                 Map<String, Object> scene = new LinkedHashMap<>();
+                scene.put("key", s.path("key").asText());
                 scene.put("title", s.path("title").asText());
                 scene.put("goal", s.path("goal").asText());
                 scene.put("horses", horses);

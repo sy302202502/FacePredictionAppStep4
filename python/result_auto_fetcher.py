@@ -24,6 +24,8 @@ from bs4 import BeautifulSoup
 from datetime import date
 from dotenv import load_dotenv
 
+import tenkai_check
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
@@ -859,6 +861,8 @@ def main():
                 np_ = save_payouts(conn, race_id, parse_payouts(soup))
                 nb = backfill_horse_numbers(conn, race_id, soup)
                 print(f"    払戻 {np_}件を保存" + (f"・馬番 {nb}頭を補完" if nb else ""))
+                # 展開図の答え合わせ（同じ結果ページを使う。追加のアクセスなし。失敗しても記録には影響しない）
+                tenkai_check.record(conn, race_id, soup)
             print(f"    → {n}件記録完了")
             time.sleep(1.5)
 

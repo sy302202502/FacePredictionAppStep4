@@ -125,6 +125,7 @@ public class RacePredictionV2Controller {
                 .map(String::trim).filter(p -> !p.isEmpty()).collect(Collectors.toList()));
             // 展開の想定図（無ければ null）
             c.put("scenes", diagramService.scenes((String) c.get("diagram")));
+            c.put("evidence", diagramService.evidence((String) c.get("diagram")));
             return c;
         } catch (Exception e) {
             return null;  // race_column 未作成（コラムがまだ一度も書かれていない環境）

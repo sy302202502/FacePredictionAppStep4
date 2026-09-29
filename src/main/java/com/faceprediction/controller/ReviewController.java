@@ -34,6 +34,7 @@ public class ReviewController {
     @Autowired private JdbcTemplate    jdbc;
     @Autowired private BettingService  bettingService;
     @Autowired private SnapshotService snapshotService;
+    @Autowired private com.faceprediction.service.RaceDiagramService diagramService;
 
     @GetMapping
     public String show(@RequestParam(required = false) String raceId, Model model) {
@@ -71,10 +72,70 @@ public class ReviewController {
         model.addAttribute("selected", selected);
         if (selected != null) {
             model.addAttribute("betPoints", bettingService.totalPoints(selected.getBets()));
+            model.addAttribute("tenkai", loadTenkaiCheck(selected.getRaceId()));
         }
+        model.addAttribute("tenkaiSummary", tenkaiSummary());
 
         model.addAttribute("summary", summarize(reviews));
         return "prediction/review";
+    }
+
+    /**
+     * 展開想定図の答え合わせ（tenkai_check.py が保存）。想定図と実際の隊列を同じ形で描けるようにする。
+     * 図の無いレース・未チェック・テーブル未作成なら null。
+     */
+    private Map<String, Object> loadTenkaiCheck(String raceId) {
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT tc.pace_pred, tc.pace_actual, tc.front3f, tc.back3f, tc.front_m, tc.start_top4, tc.stretch_top4, " +
+                "       tc.actual, rc.diagram " +
+                "FROM tenkai_check tc JOIN race_column rc ON rc.race_id = tc.race_id WHERE tc.race_id = ?", raceId);
+            if (rows.isEmpty()) return null;
+            Map<String, Object> r = new LinkedHashMap<>(rows.get(0));
+            List<Map<String, Object>> predicted = diagramService.scenes((String) r.get("diagram"));
+            List<Map<String, Object>> actual = null;
+            try {
+                com.fasterxml.jackson.databind.JsonNode a =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree((String) r.get("actual"));
+                actual = diagramService.scenes(a.path("diagram").toString());
+            } catch (Exception ignore) { }
+            if (predicted == null || actual == null || predicted.size() != actual.size()) return null;
+            // 図1・図2 それぞれ「想定」と「実際」を並べる
+            List<Map<String, Object>> pairs = new ArrayList<>();
+            for (int i = 0; i < predicted.size(); i++) {
+                Map<String, Object> p = new LinkedHashMap<>();
+                p.put("predicted", predicted.get(i));
+                p.put("actual", actual.get(i));
+                p.put("hits", i == 0 ? r.get("start_top4") : r.get("stretch_top4"));
+                p.put("hitLabel", i == 0 ? "図1で前の4頭のうち、実際に最初のコーナーを4番手以内で回った馬"
+                                         : "図2で前の4頭のうち、実際に4着以内だった馬");
+                pairs.add(p);
+            }
+            r.put("pairs", pairs);
+            r.put("paceHit", r.get("pace_pred") != null && r.get("pace_pred").equals(r.get("pace_actual")));
+            return r;
+        } catch (Exception e) {
+            return null;   // tenkai_check 未作成（まだ一度も答え合わせしていない環境）
+        }
+    }
+
+    /** 展開図の答え合わせの通算（レース数・前4頭の平均的中・ペース的中率）。無ければ null */
+    private Map<String, Object> tenkaiSummary() {
+        try {
+            Map<String, Object> m = jdbc.queryForMap(
+                "SELECT COUNT(*) AS races, AVG(start_top4) AS start_top4, AVG(stretch_top4) AS stretch_top4, " +
+                "       AVG(CASE WHEN pace_pred = pace_actual THEN 1.0 ELSE 0.0 END) AS pace_hit " +
+                "FROM tenkai_check WHERE start_top4 IS NOT NULL");
+            if (((Number) m.get("races")).intValue() == 0) return null;
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("races", ((Number) m.get("races")).intValue());
+            out.put("startTop4", String.format("%.1f", ((Number) m.get("start_top4")).doubleValue()));
+            out.put("stretchTop4", String.format("%.1f", ((Number) m.get("stretch_top4")).doubleValue()));
+            out.put("paceHit", Math.round(((Number) m.get("pace_hit")).doubleValue() * 100));
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

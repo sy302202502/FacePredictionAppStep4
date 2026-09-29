@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, surface_of_distance_cell
 from race_condition import resolve_condition
 from pace_analyzer import running_style, predict_pace, pace_adjustment
+import tenkai
 from tospo_client import fetch_adjustments as fetch_tospo_adjustments
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
@@ -653,6 +654,25 @@ def build_comment(results, dist, surf, detail, today_condition=None):
 
     return "。".join(parts) if parts else "特徴的なポイントなし"
 
+def save_tenkai(conn, race_id, scored):
+    """展開想定図の材料（tenkai.horse_features）を stats_prediction.tenkai に保存する。
+    本体の保存とは別に行い、列が追加できない・保存に失敗しても予想そのものは止めない"""
+    if not tenkai.ensure_column(conn):
+        return
+    cur = conn.cursor()
+    try:
+        for h in scored:
+            if h.get('horse_id') and h.get('tenkai'):
+                cur.execute("UPDATE stats_prediction SET tenkai = %s WHERE race_id = %s AND horse_id = %s",
+                            (json.dumps(h['tenkai'], ensure_ascii=False), race_id, h['horse_id']))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"  [警告] 展開図の材料を保存できませんでした（予想は保存済み）: {e}")
+    finally:
+        cur.close()
+
+
 # ----------------------------------------------------------------
 # メイン
 # ----------------------------------------------------------------
@@ -739,6 +759,7 @@ def main():
                                             blood=blood,
                                             today_condition=today_condition)
         style_info = running_style(results)
+        feats = tenkai.horse_features(results)
         if style_info:
             detail['脚質'] = (f"{style_info['style']}（直近{style_info['samples']}走の平均通過"
                              f"{style_info['ratio']:.0%}"
@@ -752,11 +773,18 @@ def main():
             'score': score, 'detail': detail, 'comment': comment,
             'results_count': len(results),
             'style': style_info,
+            'tenkai': feats,
         })
         polite_sleep(1.5, 3.0)
 
     # ── 2パス目: 全頭の脚質が出そろってから展開を想定し、補正を適用 ──
     pace_info = predict_pace([h['style']['style'] if h.get('style') else None for h in scored])
+    rule = tenkai.pace_rule()
+    if rule:
+        # 過去レースの検証で従来の判定より当たった「逃げ候補の頭数」による判定に切り替える
+        # （展開図の根拠に出す逃げ候補も同じ基準: race_diagram.pace_forecast）
+        pace, leaders = tenkai.pace_by_leaders([h.get('tenkai') for h in scored], rule)
+        pace_info = dict(pace_info, pace=pace, reason=f"逃げ候補（近走でハナ・序盤ごく前）{len(leaders)}頭")
     c = pace_info['counts']
     print(f"\n展開想定: {pace_info['pace']}"
           f"（逃げ{c['逃げ']}・先行{c['先行']}・差し{c['差し']}・追込{c['追込']}）")
@@ -766,7 +794,8 @@ def main():
     # 画面の SCORE DETAIL と、レース見出しのバナー表示の両方で使う。
     cond_label = (f"{today_condition}（{cond_info['source']}）" if today_condition
                   else f"不明（{cond_info['reason']}）")
-    pace_label = (f"{pace_info['pace']}（逃げ{c['逃げ']}・先行{c['先行']}"
+    pace_label = (f"{pace_info['pace']}（{pace_info['reason']}）" if rule else
+                  f"{pace_info['pace']}（逃げ{c['逃げ']}・先行{c['先行']}"
                   f"・差し{c['差し']}・追込{c['追込']}）")
 
     # 専門紙補正（東スポ競馬の指数・記者印。TOSPO_ENABLED=1 のときだけ）。
@@ -861,6 +890,7 @@ def main():
             raise
         finally:
             cur.close()
+        save_tenkai(conn, race_id, scored)
         print(f"   → /stats-predict?raceName={race_name} で確認")
 
     conn.close()

@@ -73,6 +73,17 @@
         }
         .page-sub { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
 
+.diagram-title { font-size: 13px; font-weight: 700; color: var(--neon); margin: 12px 0 6px; }
+        .diagram-title.actual { color: #f5d878; margin-top: 6px; }
+        .diagram-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+        .diagram-scroll svg { width: 100%; min-width: 600px; height: auto; display: block; border-radius: 8px; background: #0a120b; }
+        .tk-pace { font-size: 13px; margin-bottom: 6px; }
+        .tk-pace b, .tk-hit { color: var(--neon); }
+        .tk-hit { font-size: 13px; font-weight: 700; margin-top: 14px; }
+        .tk-badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-left: 6px;
+                    background: rgba(255,255,255,0.08); color: var(--text-muted); }
+        .tk-badge.ok { background: rgba(125,255,79,0.18); color: var(--neon); }
+        .tk-sub { font-size: 11px; color: var(--text-muted); line-height: 1.7; margin-top: 8px; }
         .section-heading {
             display: flex;
             align-items: center;
@@ -386,6 +397,33 @@
                     </table>
                 </div>
             </div>
+
+            <!-- 展開想定図の答え合わせ（コラムに図を付けたレースのみ） -->
+            <th:block th:if="${tenkai != null}">
+                <div class="section-heading">TENKAI CHECK — 展開図の答え合わせ</div>
+                <div class="glass-card">
+                    <div class="card-inner">
+                        <div class="tk-pace">
+                            <b>ペース</b>
+                            <span th:text="${'想定 ' + (tenkai.pace_pred != null ? tenkai.pace_pred : '—') + ' → 実際 ' + (tenkai.pace_actual != null ? tenkai.pace_actual : '—')}"></span>
+                            <span class="tk-badge" th:classappend="${tenkai.paceHit} ? 'ok'" th:text="${tenkai.paceHit ? '的中' : 'ハズレ'}"></span>
+                            <span class="tk-sub" th:if="${tenkai.front3f != null}"
+                                  th:text="${'（前半' + (tenkai.front_m != null ? tenkai.front_m : 600) + 'm ' + tenkai.front3f + '秒・後半600m ' + tenkai.back3f + '秒）'}"></span>
+                        </div>
+                        <div class="tk-pair" th:each="pr, st : ${tenkai.pairs}">
+                            <div class="tk-hit" th:text="${pr.hitLabel + '： ' + pr.hits + ' / 4頭'}"></div>
+                            <div class="diagram-title" th:text="${'図' + (st.index + 1) + '　' + pr.predicted.title}">想定</div>
+                            <div th:replace="~{fragments/diagram :: svg(${pr.predicted}, ${st.index})}"></div>
+                            <div class="diagram-title actual" th:text="${'　　' + pr.actual.title}">実際</div>
+                            <div th:replace="~{fragments/diagram :: svg(${pr.actual}, ${st.index + 10})}"></div>
+                        </div>
+                        <div class="tk-sub">上が想定、下が実際。実際の図の内外（上下の位置）は分からないため、並び順だけを比べてください。</div>
+                        <div class="tk-sub" th:if="${tenkaiSummary != null}"
+                             th:text="${'通算' + tenkaiSummary.races + 'レース：図1の前4頭が最初のコーナー4番手以内 平均' + tenkaiSummary.startTop4
+                                 + '頭・図2の前4頭が4着以内 平均' + tenkaiSummary.stretchTop4 + '頭・ペース的中率 ' + tenkaiSummary.paceHit + '%'}"></div>
+                    </div>
+                </div>
+            </th:block>
 
             <!-- 直近レース一覧 -->
             <div class="section-heading">RECENT RACES</div>

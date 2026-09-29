@@ -411,6 +411,22 @@ CREATE TABLE IF NOT EXISTS public.race_column (
 ALTER TABLE public.race_column ADD COLUMN IF NOT EXISTS tweet text;
 -- 2026-09-29 追加: コラムの展開想定図（python/race_diagram.py が計算した配置の JSON）
 ALTER TABLE public.race_column ADD COLUMN IF NOT EXISTS diagram text;
+-- 2026-09-29 追加: 展開図の材料（近走の通過順・上がり。python/tenkai.py）と、レース後の答え合わせ（python/tenkai_check.py）
+ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS tenkai text;
+CREATE TABLE IF NOT EXISTS public.tenkai_check (
+    race_id      character varying(20) PRIMARY KEY,
+    pace_pred    character varying(20),
+    pace_actual  character varying(20),
+    front3f      double precision,
+    back3f       double precision,
+    front_m      integer,
+    start_top4   integer,
+    stretch_top4 integer,
+    start_corr   double precision,
+    finish_corr  double precision,
+    actual       text,
+    checked_at   timestamp without time zone DEFAULT now()
+);
 
 -- 2026-09-28 追加: 顔面分析の項目別の点数（face_analyzer_local.py が保存。検証用）
 ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_eyes double precision;

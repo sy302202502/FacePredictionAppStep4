@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 from llm_client import generate_text
 from race_condition import place_from_race_id
 import race_diagram
+import tenkai
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -69,8 +70,9 @@ TASK = """以下の「材料」だけを使って、{race}の鬼眼コラムを�
 7. 締め（鬼眼の決め台詞で）
 
 馬名を出すときは必ず「10番ウェイワードアクト」のように馬番を前に付ける。
-コラムには展開の想定図が2枚付く（図1=スタート〜1コーナー、図2=最後の直線。中身は材料の「図1_…」「図2_…」）。
+コラムには展開の想定図が2枚付く（図1=スタート〜最初のコーナー、図2=最後の直線。中身は材料の「図1_…」「図2_…」）。
 3と4の段落では「図1のように」「図2を見てほしい」と自然に触れてよい。図の並びと違うことは書かない。
+図の位置には「図1の根拠」「図2の根拠」に近走の数字がある。1〜2個を選んで「近6走の最初のコーナーは平均2.1番手相当」のように根拠として添えてよい（数字は材料のとおりに。材料に無い数字は書かない）。
 
 出力はJSONのみ: {{"title": "30字以内の見出し", "body": "本文（段落は改行2つで区切る）"}}
 
@@ -116,6 +118,8 @@ def ensure_table(conn):
     cur.execute("ALTER TABLE race_column ADD COLUMN IF NOT EXISTS diagram TEXT")
     conn.commit()
     cur.close()
+    # 展開図の材料の列（stats_predictor が保存）。統計予想の再実行より先にコラムを書いても失敗しないように
+    tenkai.ensure_column(conn)
 
 
 def _style(detail):
@@ -128,13 +132,24 @@ def _first_sentence(text):
     return (text or '').split('。')[0].strip() or None
 
 
+def _pace_confidence():
+    """想定ペースの的中率（tenkai_stats.json の試算）。低ければ本文で断定させないための一文"""
+    m = tenkai.load_stats().get('model') or {}
+    total = m.get('pace_total')
+    if total is None:
+        return None
+    if total < 0.5:
+        return f"過去{m.get('races')}レースの{m.get('kind', '検証')}で的中{total:.0%}。ペースは断定せず「〜になりそう」「〜なら」の書き方にする"
+    return f"過去{m.get('races')}レースの{m.get('kind', '検証')}で的中{total:.0%}"
+
+
 def load_facts(conn, race_id, grade=None):
     """コラムの材料（辞書）。書けない条件なら (None, 理由)"""
     cur = conn.cursor()
     cur.execute("""
         SELECT sp.horse_name, re.horse_number, re.post_position, sp.face_score, sp.score,
                sp.score_detail, sp.comment, sp.face_comment,
-               re.race_name, re.race_date, re.distance, re.surface
+               re.race_name, re.race_date, re.distance, re.surface, sp.tenkai
         FROM stats_prediction sp
         JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id
         WHERE sp.race_id = %s
@@ -150,17 +165,23 @@ def load_facts(conn, race_id, grade=None):
     if all(r[3] is None for r in rows):
         return None, '顔面分析が未完了'
 
+    shutuba = race_diagram.shutuba_info(race_id)   # 回り・騎手（展開図の材料）
     horses = []
-    for name, num, waku, face, stats, detail_json, comment, face_comment, *_ in rows:
+    for name, num, waku, face, stats, detail_json, comment, face_comment, *_, tenkai_json in rows:
         try:
             detail = json.loads(detail_json) if detail_json else {}
         except ValueError:
             detail = {}
+        try:
+            feats = json.loads(tenkai_json) if tenkai_json else None
+        except ValueError:
+            feats = None
         composite = None if face is None else face * FACE_WEIGHT + (stats if stats is not None else face) * STATS_WEIGHT
         horses.append({
             'name': name, 'num': num, 'waku': waku, 'composite': composite,
             'style': _style(detail), 'detail': detail,
             'stats_comment': comment, 'face_comment': face_comment,
+            'tenkai': feats, 'jockey_id': shutuba['jockeys'].get(num),
         })
     # 顔面分析済み → 合成スコア降順（同点は馬番順）、未分析は末尾
     horses.sort(key=lambda h: (h['composite'] is None, -(h['composite'] or 0), h['num']))
@@ -193,7 +214,9 @@ def load_facts(conn, race_id, grade=None):
 
     # 展開の想定図（本文と同じ材料から作る。図の要点は本文の材料にも入れて文章と図をそろえる）
     pace_label = (d0.get('想定ペース') or '').split('（')[0]
-    diagram = race_diagram.build(horses, pace_label, race_diagram.course_direction(race_id))
+    diagram = race_diagram.build(horses, pace_label, shutuba['direction'],
+                                 tenkai.course_key(tenkai.venue_of_race_id(race_id), surface, distance))
+    evidence = race_diagram.evidence_lines(diagram)
 
     roster = {h['num']: h for h in horses}
     facts = {
@@ -210,8 +233,12 @@ def load_facts(conn, race_id, grade=None):
         '鬼眼の印': [horse_facts(h) for h in horses if h['mark']],
         '展開の穴': (dict(horse_facts(dark), **{'展開の見立て': dark['detail'].get('展開')}) if dark else None),
         '回り': (diagram or {}).get('direction'),
-        '図1_1コーナーの隊列想定（前から）': race_diagram.summary(diagram, 'start'),
+        '図1_最初のコーナーの隊列想定（前から）': race_diagram.summary(diagram, 'start'),
         '図2_直線での想定（前から）': race_diagram.summary(diagram, 'stretch'),
+        '図1の根拠（近走の実績）': evidence.get('start'),
+        '図2の根拠（近走の実績）': evidence.get('stretch'),
+        'コースの傾向': ((diagram or {}).get('evidence') or {}).get('course'),
+        'ペース想定の確かさ': _pace_confidence(),
     }
     facts['_diagram'] = diagram
     # 検査用（ハッシュ・LLMには渡さない）: 馬番 → 馬名・印

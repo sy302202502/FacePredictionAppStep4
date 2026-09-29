@@ -132,17 +132,6 @@ def _first_sentence(text):
     return (text or '').split('。')[0].strip() or None
 
 
-def _pace_confidence():
-    """想定ペースの的中率（tenkai_stats.json の試算）。低ければ本文で断定させないための一文"""
-    m = tenkai.load_stats().get('model') or {}
-    total = m.get('pace_total')
-    if total is None:
-        return None
-    if total < 0.5:
-        return f"過去{m.get('races')}レースの{m.get('kind', '検証')}で的中{total:.0%}。ペースは断定せず「〜になりそう」「〜なら」の書き方にする"
-    return f"過去{m.get('races')}レースの{m.get('kind', '検証')}で的中{total:.0%}"
-
-
 def load_facts(conn, race_id, grade=None):
     """コラムの材料（辞書）。書けない条件なら (None, 理由)"""
     cur = conn.cursor()
@@ -179,6 +168,7 @@ def load_facts(conn, race_id, grade=None):
         composite = None if face is None else face * FACE_WEIGHT + (stats if stats is not None else face) * STATS_WEIGHT
         horses.append({
             'name': name, 'num': num, 'waku': waku, 'composite': composite,
+            'stats_score': stats,   # 展開図の位置に使うのはこちら（顔面を含まない）
             'style': _style(detail), 'detail': detail,
             'stats_comment': comment, 'face_comment': face_comment,
             'tenkai': feats, 'jockey_id': shutuba['jockeys'].get(num),
@@ -238,7 +228,6 @@ def load_facts(conn, race_id, grade=None):
         '図1の根拠（近走の実績）': evidence.get('start'),
         '図2の根拠（近走の実績）': evidence.get('stretch'),
         'コースの傾向': ((diagram or {}).get('evidence') or {}).get('course'),
-        'ペース想定の確かさ': _pace_confidence(),
     }
     facts['_diagram'] = diagram
     # 検査用（ハッシュ・LLMには渡さない）: 馬番 → 馬名・印

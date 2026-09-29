@@ -4,7 +4,7 @@ tenkai_backtest.py — 展開想定図の作り方を、過去レースの「実
     python3 tenkai_backtest.py [--scores <予想JSONのdir>] [--save]
 
   材料: tenkai_collect.py が保存した結果ページ（logs/tenkai_cache/results）と各馬の全成績（.../horses）。
-        鬼眼の順位は、当時の予想（--scores の <race_id>.json。horses[].face / stats）から。
+        統計スコアの順位は、当時の予想（--scores の <race_id>.json。horses[].stats）から。顔面は使わない。
   手順: 1. 各レースの前日までの成績だけで材料（tenkai.horse_features）を作る（未来の情報を混ぜない）
         2. 騎手・コースの傾向も、検証期間より前（2026/01/01 より前）の走だけで集計する
         3. レースを2つに分け、片方で重みを選び、もう片方で成績を測る（選んだデータで測ると甘くなるため）
@@ -40,9 +40,9 @@ def load_races(scores_dir):
         if sp and os.path.exists(sp):
             with open(sp, encoding='utf-8') as f:
                 for h in json.load(f).get('horses', []):
-                    face, st = h.get('face'), h.get('stats')
-                    if h.get('horse_id') and (face is not None or st is not None):
-                        scores[h['horse_id']] = (face if face is not None else st) * 0.5 + (st if st is not None else face) * 0.5
+                    # 展開図の位置には統計スコアだけを使う（顔面分析は位置取りに使わない）
+                    if h.get('horse_id') and h.get('stats') is not None:
+                        scores[h['horse_id']] = h['stats']
         horses, have = [], 0
         for h in res['horses']:
             if not h.get('num') or not h.get('rank') or not h.get('passing'):
@@ -53,7 +53,7 @@ def load_races(scores_dir):
                 have += 1
                 with open(hp, encoding='utf-8') as f:
                     feats = tenkai.horse_features(json.load(f), before=res['date'])
-            horses.append(dict(h, tenkai=feats, composite=scores.get(h['horse_id']),
+            horses.append(dict(h, tenkai=feats, stats_score=scores.get(h['horse_id']),
                                style=_style(feats), mark=None, name=''))
         if len(horses) >= 6 and have >= 0.9 * len(horses):
             res['runners'] = horses
@@ -75,7 +75,7 @@ def predict(race, w, stats, pace, baseline=False):
     hs = race['runners']
     n = len(hs)
     if baseline:
-        # 従来の方法: 平均通過順（無ければ脚質）＋ 逃げは先頭固定、直線は位置と鬼眼の順位を半々
+        # 従来の方法: 平均通過順（無ければ脚質）＋ 逃げは先頭固定、直線は位置と統計スコアの順位を半々
         early = []
         for h in hs:
             f = h['tenkai']
@@ -200,8 +200,8 @@ def main():
     held_new = score(B, w2, stats, paces)
     print(f"検証（後半 {len(B)}レース） 従来: {held_base}")
     print(f"検証（後半 {len(B)}レース） 新  : {held_new}")
-    # 参考: 鬼眼の順位だけ／位置だけ
-    print(f"参考 鬼眼の順位だけ: {score(B, dict(w2, c4=0, kick=0, pace=0, course=0, strength=1), stats, paces)}")
+    # 参考: 統計スコアの順位だけ／位置だけ
+    print(f"参考 統計スコアの順位だけ: {score(B, dict(w2, c4=0, kick=0, pace=0, course=0, strength=1), stats, paces)}")
     print(f"参考 位置と末脚だけ: {score(B, dict(w2, strength=0), stats, paces)}")
 
     if a.save:

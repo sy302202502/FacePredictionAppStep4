@@ -1405,8 +1405,6 @@
                                 <span th:text="${column.evidence.pace + '：' + column.evidence.basis + 'は ' + column.evidence.leaders}"></span>
                                 <span th:if="${column.evidence.paceAccuracy != null}"
                                       th:text="${'（過去の検証でこの判定が当たった割合 ' + column.evidence.paceAccuracy + '%）'}"></span>
-                                <span th:if="${column.evidence.paceAccuracy == null and column.evidence.paceTotal != null}"
-                                      th:text="${'※ ペースの想定は過去の' + column.evidence.modelKind + 'で的中' + column.evidence.paceTotal + '%と当たりにくいので、参考程度に。'}"></span>
                             </div>
                             <div th:if="${column.evidence.course != null}"><b>コースの傾向</b> <span th:text="${column.evidence.course}"></span></div>
                             <div th:if="${column.evidence.modelRaces != null}">

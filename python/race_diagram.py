@@ -5,7 +5,10 @@ race_diagram.py — 鬼眼コラムの「展開の想定図」（スタート〜
 内外のレーン lane（0=内ラチ沿い）、そして「なぜそこに置いたか」の根拠を決める。
 
   図1（最初のコーナー）: 近走の序盤の平均位置（tenkai.c1）を土台に、逃げた割合・騎手の先行傾向・枠を加味
-  図2（直線）    : 近走の最後のコーナーの平均位置（c4）・末脚（kick）・鬼眼の順位・想定ペース・コースの傾向
+  図2（直線）    : 近走の最後のコーナーの平均位置（c4）・末脚（kick）・統計スコアの順位・想定ペース・コースの傾向
+
+顔面分析は位置取りに一切使わない（鬼眼の印は図の上に表示するだけ）。顔面の見立てが展開の想定を
+動かすと、図が「データから描いた展開」でなくなるため。
 
 各材料の重み（W）は、過去レースの実際の通過順・着順と突き合わせる検証（tenkai_backtest.py）で決めた値。
 検証の成績は python/data/tenkai_stats.json の 'model' に入っており、画面にも「この図の作り方の実績」として出す。
@@ -33,7 +36,7 @@ W = {
     'waku': 0.0,       # 図1: 外枠ほど後ろ（+）/ 前（−）
     'c4': 0.45,        # 図2: 最後のコーナーの位置
     'kick': 0.10,      # 図2: 末脚（秒）1秒あたり
-    'strength': 0.45,  # 図2: 鬼眼の順位
+    'strength': 0.45,  # 図2: 統計スコアの順位（顔面は含めない）
     'pace': 0.10,      # 図2: ハイなら前の馬が下がり、スローなら前が残る
     'course': 0.0,     # 図2: コースの先行有利・内枠有利
 }
@@ -109,7 +112,7 @@ def early_score(h, n, w=W, stats=None):
 
 
 def late_score(h, n, early, strength, pace, trend=None, w=W):
-    """図2の位置（小さいほど前）。strength は 0=最も強い〜1"""
+    """図2の位置（小さいほど前）。strength は統計スコアの順位で 0=最も強い〜1（顔面は含めない）"""
     f = h.get('tenkai') or {}
     c4 = f.get('c4') if f.get('c4') is not None else early
     s = w['c4'] * c4 + w['strength'] * strength
@@ -129,9 +132,9 @@ def late_score(h, n, early, strength, pace, trend=None, w=W):
 
 
 def strengths(horses):
-    """鬼眼の順位 → 0（最も強い）〜1"""
+    """統計スコア（近走成績・距離・馬場・調教など。顔面分析は含まない）の順位 → 0（最も強い）〜1"""
     n = len(horses)
-    ranked = sorted(horses, key=lambda h: (h.get('composite') is None, -(h.get('composite') or 0), h['num']))
+    ranked = sorted(horses, key=lambda h: (h.get('stats_score') is None, -(h.get('stats_score') or 0), h['num']))
     return {h['num']: i / max(1, n - 1) for i, h in enumerate(ranked)}
 
 
@@ -187,7 +190,7 @@ def _why_early(h, n, stats):
 def _why_late(h, n, kick_rank):
     f = h.get('tenkai')
     if not f or f.get('c4') is None:
-        return '脚質と鬼眼の順位から想定'
+        return '脚質と統計スコアの順位から想定'
     parts = [f"最後のコーナー 平均{_pos(f['c4'], n)}相当"]
     if h['num'] in kick_rank:
         parts.append(f"上がり（各レースの後半3F比）はメンバー中{kick_rank[h['num']]}位")
@@ -214,7 +217,8 @@ def pace_forecast(horses, stats=None):
 
 # ── 本体 ─────────────────────────────────────────────
 def build(horses, pace, direction, course_key=None):
-    """horses: column_writer の馬リスト（num, waku, style, detail, composite, mark, name, tenkai, jockey_id）。
+    """horses: column_writer の馬リスト（num, waku, style, detail, stats_score, mark, name, tenkai, jockey_id）。
+    mark（鬼眼の印）は表示用で、位置の計算には使わない。
     戻り値は画面に渡す辞書（JSON にして race_column.diagram へ保存する）"""
     n = len(horses)
     if n < 2:

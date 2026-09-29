@@ -346,8 +346,8 @@
     <div class="page-body">
 
         <div class="page-header">
-            <div class="page-title">STATS PREDICT</div>
-            <div class="page-subtitle">NO-API STATISTICAL ANALYSIS / PAST RESULTS / DISTANCE / TRACK / GRADE</div>
+            <div class="page-title">統計予想</div>
+            <div class="page-subtitle">API不要の統計分析（過去成績・距離・コース・格）</div>
         </div>
 
         <div class="notice-bar">
@@ -356,7 +356,7 @@
 
         <!-- 実行パネル（python3が使えない環境=本番appコンテナでは非表示） -->
         <div th:if="${scriptExecAvailable}">
-        <div class="section-heading">RUN ANALYSIS</div>
+        <div class="section-heading">分析を実行</div>
         <div class="glass-card">
             <div class="glass-card-inner">
                 <div class="control-row">
@@ -365,7 +365,7 @@
                         <option th:each="race : ${entryRaces}" th:value="${race}" th:text="${race}"></option>
                     </select>
                     <button class="btn-run" id="run-btn" onclick="runAnalysis()" disabled>
-                        EXECUTE
+                        実行
                     </button>
                 </div>
                 <div id="log-panel"></div>
@@ -377,7 +377,7 @@
         <div class="glass-card" th:if="${!raceOptions.isEmpty()}">
             <div class="glass-card-inner">
                 <div style="margin-bottom:4px;">
-                    <label style="display:block; margin-bottom:6px;">VIEW RACE RESULTS</label>
+                    <label style="display:block; margin-bottom:6px;">レース結果を見る</label>
                     <form method="get" action="/stats-predict">
                         <div class="control-row">
                             <select name="raceId" id="view-race-select" style="flex:1;" onchange="this.form.submit()">
@@ -395,17 +395,17 @@
         <!-- 顔面分析パネル（python3が使えない環境では非表示） -->
         <div class="glass-card face-panel" th:if="${scriptExecAvailable and selectedRace != null and !results.isEmpty()}">
             <div class="glass-card-inner">
-                <div class="section-heading" style="margin-top:0;">FACE ANALYSIS (LOCAL AI)</div>
+                <div class="section-heading" style="margin-top:0;">顔面分析（ローカルAI）</div>
                 <p style="font-size:12px; color:var(--text-muted); margin:0 0 14px; letter-spacing:1px;">
                     llava:7b で各馬の写真を解析します。1頭あたり15〜30秒かかります。
                 </p>
                 <div class="control-row">
                     <span style="flex:1; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:3px; color:var(--purple);"
-                          th:text="${selectedRace} + ' — FACE ANALYSIS'"></span>
+                          th:text="${selectedRace} + ' — 顔面分析'"></span>
                     <button class="btn-face" id="face-btn"
                             th:data-race="${selectedRace}"
                             onclick="runFaceAnalysis(this.dataset.race)">
-                        EXECUTE FACE SCAN
+                        顔面分析を実行
                     </button>
                 </div>
                 <div id="face-log-panel"></div>
@@ -415,7 +415,7 @@
         <!-- 結果一覧 -->
         <div th:if="${!results.isEmpty()}">
             <div class="section-heading">
-                <span th:text="${selectedRace}"></span> PREDICTION
+                <span th:text="${selectedRace}"></span> 予想
             </div>
 
             <!-- レース単位の前提（当日馬場・想定ペース）。予想の読み筋がここで分かる -->
@@ -471,13 +471,13 @@
                     <div class="horse-body">
                         <div class="horse-meta">
                             <span th:if="${h.horse_number != null}"
-                                  th:text="'No.' + ${h.horse_number}"></span>
+                                  th:text="${h.horse_number} + '番'"></span>
                             <span th:if="${h.jockey_name != null and !#strings.isEmpty(h.jockey_name)}"
                                   th:text="'　/ ' + ${h.jockey_name}"></span>
                         </div>
                         <div class="horse-name" th:text="${h.horse_name}"></div>
                         <div class="horse-score-row">
-                            <div class="score-num" th:text="${h.score != null ? h.score + 'pt' : '-'}"></div>
+                            <div class="score-num" th:text="${h.score != null ? h.score + '点' : '-'}"></div>
                             <div class="score-bar-wrap">
                                 <div class="score-bar" th:style="'width:' + ${h.score != null ? h.score : 0} + '%'"></div>
                             </div>
@@ -490,7 +490,7 @@
                              class="face-comment">
                             <span class="face-score-badge"
                                   th:if="${h.face_score != null}"
-                                  th:text="'FACE ' + ${#numbers.formatDecimal(h.face_score, 1, 1)} + 'pt'"></span><span th:text="${h.face_comment}"></span>
+                                  th:text="'顔面 ' + ${#numbers.formatDecimal(h.face_score, 1, 1)} + '点'"></span><span th:text="${h.face_comment}"></span>
                         </div>
 
                         <!-- スコア詳細 -->
@@ -498,7 +498,7 @@
                             <button class="detail-toggle"
                                     th:data-idx="${iter.index}"
                                     onclick="toggleDetail(this.dataset.idx)">
-                                SCORE DETAIL ▼
+                                スコアの内訳 ▼
                             </button>
                             <table class="detail-table" th:id="'detail-' + ${iter.index}">
                                 <tr th:each="entry : ${h.detail}">
@@ -514,7 +514,7 @@
 
         <div th:if="${results.isEmpty() and selectedRace != null}" class="empty">
             <p style="margin-bottom:6px;">-- <span th:text="${selectedRace}"></span> の予想データがありません --</p>
-            <p style="font-size:11px; letter-spacing:2px;">上の「EXECUTE」から分析を実行してください</p>
+            <p style="font-size:11px; letter-spacing:2px;">上の「実行」から分析を実行してください</p>
         </div>
         <div th:if="${selectedRace == null and results.isEmpty()}" class="empty">
             <p style="letter-spacing:2px;">-- レースを選択するか、予想を実行してください --</p>
@@ -585,7 +585,7 @@
     function resetBtn() {
         const btn = document.getElementById('run-btn');
         btn.disabled = false;
-        btn.textContent = 'EXECUTE';
+        btn.textContent = '実行';
     }
 
     function toggleDetail(idx) {
@@ -653,7 +653,7 @@
         const btn = document.getElementById('face-btn');
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = 'EXECUTE FACE SCAN';
+            btn.innerHTML = '顔面分析を実行';
         }
     }
     </script>

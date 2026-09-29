@@ -256,7 +256,7 @@
     <div th:replace="fragments/navbar :: navbar"></div>
 
     <div class="page-body">
-        <h1 class="page-title">RESULT CHECK</h1>
+        <h1 class="page-title">答え合わせ</h1>
         <div class="page-sub">🎯 鬼眼予想の答え合わせ ― 予想した印と実際の着順を並べて確認</div>
 
         <div th:if="${selected == null}" class="glass-card">
@@ -269,7 +269,7 @@
         <div th:if="${selected != null}">
 
             <!-- 直近成績 -->
-            <div class="section-heading"><span th:text="${'RECENT FORM — 直近' + summary.races + 'レース'}">RECENT FORM — 直近30レース</span></div>
+            <div class="section-heading"><span th:text="${'直近' + summary.races + 'レース'}">直近30レースの成績</span></div>
             <div class="glass-card">
                 <div class="card-inner">
                     <div class="stat-grid">
@@ -298,7 +298,7 @@
             <!-- レース選択 -->
             <div class="glass-card">
                 <form class="race-bar" method="get" th:action="@{/review}">
-                    <label>⛩ SELECT RACE</label>
+                    <label>⛩ レース選択</label>
                     <select name="raceId" onchange="this.form.submit()">
                         <option th:each="rv : ${reviews}"
                                 th:value="${rv.raceId}"
@@ -343,7 +343,7 @@
 
             <!-- 買い目の答え合わせ -->
             <div th:if="${!#lists.isEmpty(selected.bets)}">
-                <div class="section-heading">BETTING — 買い目の結果</div>
+                <div class="section-heading">買い目の結果</div>
                 <div class="glass-card">
                     <div class="card-inner">
                         <div class="bet-row" th:each="b : ${selected.bets}">
@@ -366,7 +366,7 @@
             </div>
 
             <!-- 予想 vs 着順 -->
-            <div class="section-heading">PREDICTION vs RESULT</div>
+            <div class="section-heading">予想と着順</div>
             <div class="glass-card">
                 <div class="card-inner">
                     <table class="cmp">
@@ -375,7 +375,7 @@
                                 <th>印</th>
                                 <th>馬番</th>
                                 <th>馬名</th>
-                                <th class="num col-score">鬼眼PT</th>
+                                <th class="num col-score">鬼眼スコア</th>
                                 <th class="num">着順</th>
                             </tr>
                         </thead>
@@ -400,7 +400,7 @@
 
             <!-- 展開想定図の答え合わせ（コラムに図を付けたレースのみ） -->
             <th:block th:if="${tenkai != null}">
-                <div class="section-heading">TENKAI CHECK — 展開図の答え合わせ</div>
+                <div class="section-heading">展開図の答え合わせ</div>
                 <div class="glass-card">
                     <div class="card-inner">
                         <div class="tk-pace">
@@ -426,7 +426,7 @@
             </th:block>
 
             <!-- 直近レース一覧 -->
-            <div class="section-heading">RECENT RACES</div>
+            <div class="section-heading">最近のレース</div>
             <div class="glass-card">
                 <div class="card-inner race-list">
                     <a th:each="rv : ${reviews}"

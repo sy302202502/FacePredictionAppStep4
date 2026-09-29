@@ -299,13 +299,13 @@
     <div class="page-header">
         <div class="page-title">💰 万馬券チャレンジ</div>
         <div class="page-subtitle">単勝オッズから「人気が割れて荒れやすい」週末レースを自動厳選</div>
-        <div class="hd-badge">🎯 HIGH DIVIDEND</div>
+        <div class="hd-badge">🎯 万馬券チャレンジ</div>
     </div>
 
     <!-- 厳選ボタンエリア（python3が使えない環境=本番appコンテナでは非表示。cronが自動実行）
          /run-stream はADMIN必須のため、未ログイン時は表示しない（401でBasic認証ダイアログが出るのを防ぐ） -->
     <div th:if="${scriptExecAvailable}" sec:authorize="isAuthenticated()">
-    <div class="section-heading">RACE SELECTION</div>
+    <div class="section-heading">レース選択</div>
     <div class="glass-card">
         <div class="glass-card-inner">
             <button class="btn-run" id="run-btn" onclick="startStream()">
@@ -318,7 +318,7 @@
 
     <!-- 厳選結果エリア -->
     <div id="result-card">
-        <div class="section-heading">SELECTED RACE</div>
+        <div class="section-heading">選択中のレース</div>
         <div class="glass-card">
             <div class="result-inner">
                 <div class="result-label">🎯 今週の万馬券ターゲット</div>

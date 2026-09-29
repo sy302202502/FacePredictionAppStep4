@@ -69,8 +69,8 @@
 
     <div class="page-body">
         <div class="page-header">
-            <div class="page-title">WINNER HORSES</div>
-            <div class="page-subtitle">RACE WINNERS DATABASE — FACE FEATURE ARCHIVE</div>
+            <div class="page-title">勝ち馬</div>
+            <div class="page-subtitle">勝ち馬データベース — 顔の特徴の記録</div>
         </div>
 
         <!-- 検索フォーム -->
@@ -87,7 +87,7 @@
         <div class="horse-grid" th:unless="${horses.isEmpty()}">
             <a th:each="h : ${horses}" th:href="'/horse/' + ${h.id}" class="horse-card">
                 <img th:if="${h.imagePath != null}" th:src="${h.imagePath}" th:alt="${h.horseName}">
-                <div th:unless="${h.imagePath != null}" class="no-img">NO IMAGE</div>
+                <div th:unless="${h.imagePath != null}" class="no-img">画像なし</div>
                 <div class="horse-card-body">
                     <div class="horse-card-name" th:text="${h.horseName}">馬名</div>
                     <div class="horse-card-meta">

@@ -149,7 +149,7 @@
 
     <div class="page-body">
         <div class="page-header">
-            <div class="page-title">ACCURACY TRACKING</div>
+            <div class="page-title">的中率の記録</div>
             <div class="page-subtitle">予測精度モニタリング / 旧システム・新システム並行表示</div>
         </div>
 
@@ -161,74 +161,74 @@
             <span class="action-bar-text">レース後にnetkeibaから実際の着順を自動取得して的中率を更新します</span>
             <!-- /script/** は XHRヘッダ必須(CSRF対策)のため fetch で呼ぶ -->
             <button type="button" class="btn btn-fire"
-                    onclick="fetch('/script/result-fetch', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(){ location.href='/script?started=result_fetch'; })">AUTO FETCH RESULTS</button>
-            <a href="/accuracy" class="btn btn-muted">RELOAD</a>
+                    onclick="fetch('/script/result-fetch', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(){ location.href='/script?started=result_fetch'; })">結果を自動取得</button>
+            <a href="/accuracy" class="btn btn-muted">再読み込み</a>
         </div>
 
         <!-- システム別 精度比較 -->
-        <div class="section-heading">SYSTEM COMPARISON</div>
+        <div class="section-heading">方式の比較</div>
         <div class="compare-grid">
 
             <!-- 旧システム -->
             <div class="system-card legacy">
-                <div class="system-card-title">LEGACY SYSTEM — 類似度スコア</div>
+                <div class="system-card-title">旧方式 — 類似度スコア</div>
                 <div class="stat-row">
                     <div class="stat-card">
                         <div class="stat-num" th:text="${totalRaces}">0</div>
-                        <div class="stat-label">TOTAL RACES</div>
+                        <div class="stat-label">総レース数</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-num" th:text="${winHitRate} + '%'">0%</div>
-                        <div class="stat-label">WIN HIT RATE</div>
+                        <div class="stat-label">1着の的中率</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-num" th:text="${top5HitRate} + '%'">0%</div>
-                        <div class="stat-label">TOP5 HIT RATE<br><small style="opacity:.7">勝ち馬が予想上位5頭</small></div>
+                        <div class="stat-label">5着以内の的中率<br><small style="opacity:.7">勝ち馬が予想上位5頭</small></div>
                     </div>
                 </div>
             </div>
 
             <!-- 新システム -->
             <div class="system-card new-sys">
-                <div class="system-card-title">NEW SYSTEM — 顔面傾向分析予想</div>
+                <div class="system-card-title">新方式 — 顔面傾向分析予想</div>
                 <div class="stat-row">
                     <div class="stat-card">
                         <div class="stat-num" th:text="${v2TotalRaces}">0</div>
-                        <div class="stat-label">TOTAL RACES</div>
+                        <div class="stat-label">総レース数</div>
                     </div>
                     <div class="stat-card highlight">
                         <div class="stat-num" th:text="${v2WinHitRate} + '%'">0%</div>
-                        <div class="stat-label">WIN HIT RATE</div>
+                        <div class="stat-label">1着の的中率</div>
                     </div>
                     <div class="stat-card highlight">
                         <div class="stat-num" th:text="${v2Top5HitRate} + '%'">0%</div>
-                        <div class="stat-label">TOP5 HIT RATE<br><small style="opacity:.7">勝ち馬が予想上位5頭</small></div>
+                        <div class="stat-label">5着以内の的中率<br><small style="opacity:.7">勝ち馬が予想上位5頭</small></div>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- 詳細記録タブ -->
-        <div class="section-heading">DETAIL RECORDS</div>
+        <div class="section-heading">詳細の記録</div>
         <div class="tab-bar">
-            <button class="tab-btn active" onclick="showTab('old', this)">LEGACY SYSTEM</button>
-            <button class="tab-btn"        onclick="showTab('new', this)">NEW SYSTEM — 顔面傾向分析</button>
+            <button class="tab-btn active" onclick="showTab('old', this)">旧方式</button>
+            <button class="tab-btn"        onclick="showTab('new', this)">新方式 — 顔面傾向分析</button>
         </div>
 
         <!-- 旧システムタブ -->
         <div id="tab-old" class="tab-pane active">
 
-            <div class="sub-heading">CATEGORY ACCURACY</div>
+            <div class="sub-heading">区分別の的中率</div>
             <div th:if="${categoryRows.isEmpty()}">
                 <p class="empty-text">まだ記録データがありません。</p>
             </div>
             <table th:unless="${categoryRows.isEmpty()}">
                 <thead>
                     <tr>
-                        <th>CATEGORY</th>
-                        <th>RACES</th>
-                        <th>WIN HIT RATE</th>
-                        <th title="勝ち馬が予想上位5頭に入った割合">TOP5 HIT RATE</th>
+                        <th>区分</th>
+                        <th>レース数</th>
+                        <th>1着の的中率</th>
+                        <th title="勝ち馬が予想上位5頭に入った割合">5着以内の的中率</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -253,39 +253,39 @@
 
             <!-- 手動結果記録フォーム（管理者のみ） -->
             <div class="record-form" sec:authorize="isAuthenticated()">
-                <div class="record-form-title">MANUAL RECORD — レース結果を手動記録</div>
+                <div class="record-form-title">レース結果を手動で記録</div>
                 <form method="post" th:action="@{/accuracy/record}">
                     <div class="form-row">
                         <label>
-                            RACE NAME
+                            レース名
                             <select name="raceName" style="width:220px;">
-                                <option value="">-- SELECT --</option>
+                                <option value="">-- 選択 --</option>
                                 <option th:each="r : ${raceNames}" th:value="${r}" th:text="${r}"></option>
                             </select>
                         </label>
                         <label>
-                            ACTUAL WINNER
+                            実際の1着
                             <input type="text" name="actualWinner" placeholder="例: ドウデュース" style="width:180px;">
                         </label>
-                        <button type="submit" class="btn btn-neon" style="margin-bottom:0;">RECORD</button>
+                        <button type="submit" class="btn btn-neon" style="margin-bottom:0;">記録する</button>
                     </div>
                 </form>
             </div>
 
             <!-- 直近の記録 -->
-            <div class="sub-heading">RECENT PREDICTIONS</div>
+            <div class="sub-heading">最近の予想</div>
             <div th:if="${recentResults.isEmpty()}">
-                <p class="empty-text">まだ記録がありません。「AUTO FETCH RESULTS」を実行してください。</p>
+                <p class="empty-text">まだ記録がありません。「結果を自動取得」を実行してください。</p>
             </div>
             <table th:unless="${recentResults.isEmpty()}">
                 <thead>
                     <tr>
-                        <th>DATE</th>
-                        <th>RACE</th>
-                        <th>PREDICTED #1</th>
-                        <th>WIN</th>
-                        <th title="勝ち馬が予想上位5頭に入ったか">TOP5</th>
-                        <th>SCORE</th>
+                        <th>日付</th>
+                        <th>レース</th>
+                        <th>予想1位</th>
+                        <th>1着</th>
+                        <th title="勝ち馬が予想上位5頭に入ったか">5着以内</th>
+                        <th>スコア</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -294,14 +294,14 @@
                         <td th:text="${r.raceName}">レース名</td>
                         <td th:text="${r.horseName}" style="color: var(--text);">馬名</td>
                         <td>
-                            <span th:if="${r.hit}"     class="hit-mark">HIT</span>
-                            <span th:unless="${r.hit}" class="miss-mark">MISS</span>
+                            <span th:if="${r.hit}"     class="hit-mark">的中</span>
+                            <span th:unless="${r.hit}" class="miss-mark">ハズレ</span>
                         </td>
                         <td>
-                            <span th:if="${r.top5Hit}"     class="hit-mark">HIT</span>
-                            <span th:unless="${r.top5Hit}" class="miss-mark">MISS</span>
+                            <span th:if="${r.top5Hit}"     class="hit-mark">的中</span>
+                            <span th:unless="${r.top5Hit}" class="miss-mark">ハズレ</span>
                         </td>
-                        <td th:text="${r.finalScore != null ? #numbers.formatDecimal(r.finalScore,1,1) + 'pt' : '—'}">—</td>
+                        <td th:text="${r.finalScore != null ? #numbers.formatDecimal(r.finalScore,1,1) + '点' : '—'}">—</td>
                     </tr>
                 </tbody>
             </table>
@@ -312,13 +312,13 @@
 
             <!-- 手動結果記録フォーム（新システム用・管理者のみ） -->
             <div class="record-form" id="record-v2-form" sec:authorize="isAuthenticated()">
-                <div class="record-form-title">MANUAL RECORD — 顔面予想の結果を手動入力</div>
+                <div class="record-form-title">顔面予想の結果を手動で入力</div>
                 <form method="post" th:action="@{/accuracy/record-v2}" id="formV2">
                     <div class="form-row" style="margin-bottom: 12px;">
                         <label style="flex: 1; min-width: 200px;">
-                            RACE NAME
+                            レース名
                             <select name="raceName" id="raceSelect" onchange="updateHorseList(this.value)" style="width: 100%;">
-                                <option value="">-- SELECT --</option>
+                                <option value="">-- 選択 --</option>
                                 <optgroup label="未記録" th:if="${!#lists.isEmpty(v2PendingRaces)}">
                                     <option th:each="r : ${v2PendingRaces}"
                                             th:value="${r.race_name}"
@@ -351,7 +351,7 @@
                             <datalist id="horseList3"></datalist>
                         </label>
                         <div style="display: flex; align-items: flex-end; padding-bottom: 2px;">
-                            <button type="submit" class="btn btn-neon">RECORD</button>
+                            <button type="submit" class="btn btn-neon">記録する</button>
                         </div>
                     </div>
                 </form>
@@ -359,7 +359,7 @@
 
             <!-- 未記録レース一覧 -->
             <div th:if="${!#lists.isEmpty(v2PendingRaces)}" style="margin-bottom: 20px;">
-                <div class="sub-heading">PENDING — 結果未記録のレース</div>
+                <div class="sub-heading">結果が未記録のレース</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;">
                     <span th:each="r : ${v2PendingRaces}"
                           class="src-badge src-no_data"
@@ -373,23 +373,23 @@
             </div>
 
             <!-- 記録済み一覧 -->
-            <div class="sub-heading">RECORDED RESULTS</div>
+            <div class="sub-heading">記録済みの結果</div>
             <div th:if="${v2RecentResults == null or #lists.isEmpty(v2RecentResults)}">
                 <p class="empty-text">
                     まだ記録がありません。<br>
-                    ① 「顔面傾向分析予想」でレースを予想 → ② レース後に上のフォームか「AUTO FETCH RESULTS」で結果を入力してください。
+                    ① 「顔面傾向分析予想」でレースを予想 → ② レース後に上のフォームか「結果を自動取得」で結果を入力してください。
                 </p>
             </div>
             <table th:unless="${v2RecentResults == null or #lists.isEmpty(v2RecentResults)}">
                 <thead>
                     <tr>
-                        <th>RACE</th>
-                        <th>PREDICTED #1</th>
-                        <th>ACTUAL RANK</th>
-                        <th>WIN</th>
-                        <th title="勝ち馬が予想上位5頭に入ったか">TOP5</th>
-                        <th>SCORE</th>
-                        <th>DATA</th>
+                        <th>レース</th>
+                        <th>予想1位</th>
+                        <th>実際の着順</th>
+                        <th>1着</th>
+                        <th title="勝ち馬が予想上位5頭に入ったか">5着以内</th>
+                        <th>スコア</th>
+                        <th>データ</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -402,14 +402,14 @@
                         <td th:text="${r.actual_rank != null ? r.actual_rank + '着' : '未記録'}"
                             th:style="${r.actual_rank == 1} ? 'color: var(--gold); font-weight: bold;' : ''">—</td>
                         <td>
-                            <span th:if="${r.hit}"     class="hit-mark">✅ HIT</span>
-                            <span th:unless="${r.hit}" class="miss-mark">✗ MISS</span>
+                            <span th:if="${r.hit}"     class="hit-mark">✅ 的中</span>
+                            <span th:unless="${r.hit}" class="miss-mark">✗ ハズレ</span>
                         </td>
                         <td>
-                            <span th:if="${r.top5_hit}"     class="hit-mark">✅ HIT</span>
-                            <span th:unless="${r.top5_hit}" class="miss-mark">✗ MISS</span>
+                            <span th:if="${r.top5_hit}"     class="hit-mark">✅ 的中</span>
+                            <span th:unless="${r.top5_hit}" class="miss-mark">✗ ハズレ</span>
                         </td>
-                        <td th:text="${r.score != null ? #numbers.formatDecimal(r.score,1,1) + 'pt' : '—'}">—</td>
+                        <td th:text="${r.score != null ? #numbers.formatDecimal(r.score,1,1) + '点' : '—'}">—</td>
                         <td>
                             <span class="src-badge"
                                   th:classappend="${r.data_source == 'image' ? 'src-image' : (r.data_source == 'pedigree' ? 'src-pedigree' : 'src-no_data')}"

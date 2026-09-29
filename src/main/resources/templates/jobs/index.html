@@ -62,7 +62,7 @@
     <div th:replace="fragments/navbar :: navbar"></div>
 
     <div class="page-body">
-        <h1 class="page-title">JOB HISTORY</h1>
+        <h1 class="page-title">ジョブの実行履歴</h1>
         <div class="page-sub">🗓 cron ジョブの実行履歴（直近100件・180日保存）</div>
 
         <div th:if="${#lists.isEmpty(runs)}" class="glass-card">
@@ -73,7 +73,7 @@
         </div>
 
         <div th:unless="${#lists.isEmpty(runs)}">
-            <div class="section-heading">LATEST — ジョブごとの最新</div>
+            <div class="section-heading">ジョブごとの最新</div>
             <div class="glass-card">
                 <div class="job-grid">
                     <div class="job-box" th:each="j : ${latest}"
@@ -88,7 +88,7 @@
                 </div>
             </div>
 
-            <div class="section-heading">HISTORY</div>
+            <div class="section-heading">履歴</div>
             <div class="glass-card">
                 <table>
                     <thead><tr><th>開始</th><th>ジョブ</th><th>結果</th><th>所要</th><th>要約</th></tr></thead>

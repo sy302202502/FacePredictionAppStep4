@@ -255,7 +255,7 @@
         <!-- Page Header -->
         <div class="page-header">
             <div class="page-title">出走馬一覧</div>
-            <div class="page-subtitle">RACE ENTRY LIST — NETKEIBA AUTO FETCH</div>
+            <div class="page-subtitle">出走馬一覧 — netkeibaから自動取得</div>
         </div>
 
         <!-- Flash Messages -->
@@ -263,7 +263,7 @@
         <div th:if="${error}"   class="alert alert-error"   th:text="${error}"></div>
 
         <!-- Auto Fetch -->
-        <div class="section-heading">AUTO FETCH</div>
+        <div class="section-heading">自動取得</div>
         <div class="glass-card">
             <div class="glass-card-inner">
                 <form method="post" th:action="@{/entry/fetch}" class="fetch-bar">
@@ -278,7 +278,7 @@
         </div>
 
         <!-- Race Select -->
-        <div class="section-heading">RACE SELECT</div>
+        <div class="section-heading">レース選択</div>
         <div class="glass-card">
             <div class="glass-card-inner">
                 <form method="get" action="/entry" class="race-select-row">
@@ -297,7 +297,7 @@
 
         <!-- Entry List -->
         <div th:if="${!entries.isEmpty()}">
-            <div class="section-heading">ENTRY LIST</div>
+            <div class="section-heading">出走馬一覧</div>
 
             <!-- Race Meta -->
             <div class="glass-card">
@@ -323,7 +323,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:44px; text-align:center;">NO</th>
+                            <th style="width:44px; text-align:center;">馬番</th>
                             <th style="width:80px;">写真</th>
                             <th>馬名</th>
                             <th>騎手</th>
@@ -334,7 +334,7 @@
                             <td class="horse-num-cell" th:text="${e.horseNumber}">1</td>
                             <td>
                                 <img th:if="${e.imagePath != null}"  class="horse-img" th:src="${e.imagePath}" th:alt="${e.horseName}">
-                                <div th:unless="${e.imagePath != null}" class="no-img">NO IMG</div>
+                                <div th:unless="${e.imagePath != null}" class="no-img">画像なし</div>
                             </td>
                             <td>
                                 <div class="horse-name" th:text="${e.horseName}">馬名</div>

@@ -133,7 +133,7 @@
 
     <div class="page-body">
         <div class="page-header">
-            <div class="page-title">RACE CALENDAR</div>
+            <div class="page-title">レースカレンダー</div>
             <div class="page-subtitle">今後3週間の重賞レース一覧 / ワンクリックで分析・予想を開始</div>
         </div>
 
@@ -141,15 +141,15 @@
         <div class="summary-bar">
             <div class="summary-box">
                 <div class="summary-num" th:text="${totalEvents}">0</div>
-                <div class="summary-label">TOTAL RACES</div>
+                <div class="summary-label">総レース数</div>
             </div>
             <div class="summary-box">
                 <div class="summary-num" style="color: var(--neon);" th:text="${analyzedCount}">0</div>
-                <div class="summary-label">ANALYZED</div>
+                <div class="summary-label">分析済み</div>
             </div>
             <div class="summary-box">
                 <div class="summary-num" style="color: var(--orange);" th:text="${totalEvents - analyzedCount}">0</div>
-                <div class="summary-label">PENDING</div>
+                <div class="summary-label">未分析</div>
             </div>
         </div>
 
@@ -158,8 +158,8 @@
             <span class="action-bar-text">出走馬を最新情報に更新してからカレンダーに反映されます</span>
             <!-- /script/** は XHRヘッダ必須(CSRF対策)のため fetch で呼ぶ -->
             <button type="button" class="btn btn-fire"
-                    onclick="fetch('/script/entries', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(){ location.href='/script?started=entries'; })">REFRESH ENTRIES</button>
-            <a href="/calendar" class="btn btn-muted">RELOAD</a>
+                    onclick="fetch('/script/entries', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(){ location.href='/script?started=entries'; })">出走馬を更新</button>
+            <a href="/calendar" class="btn btn-muted">再読み込み</a>
         </div>
 
         <!-- レースなし -->
@@ -167,7 +167,7 @@
             <div class="glass-card-inner">
                 <div class="empty-state">
                     <div class="empty-state-icon">📅</div>
-                    <div class="empty-state-text">直近のレースデータがありません。<br>「REFRESH ENTRIES」ボタンを押して最新情報を取得してください。</div>
+                    <div class="empty-state-text">直近のレースデータがありません。<br>「出走馬を更新」ボタンを押して最新情報を取得してください。</div>
                 </div>
             </div>
         </div>
@@ -177,7 +177,7 @@
             <div class="date-header"
                  th:classappend="${entry.key == today ? 'date-today' : ''}">
                 <span th:text="${entry.key}"></span>
-                <span th:if="${entry.key == today}" class="today-badge">TODAY</span>
+                <span th:if="${entry.key == today}" class="today-badge">今日</span>
                 <span class="date-count" th:text="|— ${#lists.size(entry.value)} RACES|"></span>
             </div>
 
@@ -187,13 +187,13 @@
                 <!-- カウントダウン -->
                 <div class="countdown">
                     <div th:if="${ev.isPast}">
-                        <div class="countdown-num c-past" style="font-size:16px; letter-spacing:2px;">END</div>
+                        <div class="countdown-num c-past" style="font-size:16px; letter-spacing:2px;">終了</div>
                     </div>
                     <div th:unless="${ev.isPast}">
                         <div class="countdown-num"
                              th:classappend="'c-' + ${ev.urgency}"
-                             th:text="${ev.daysLeft == 0 ? 'TODAY' : ev.daysLeft}">0</div>
-                        <div class="countdown-unit" th:unless="${ev.daysLeft == 0}">DAYS</div>
+                             th:text="${ev.daysLeft == 0 ? '今日' : ev.daysLeft}">0</div>
+                        <div class="countdown-unit" th:unless="${ev.daysLeft == 0}">日間</div>
                     </div>
                 </div>
 
@@ -212,24 +212,24 @@
 
                 <!-- アクション -->
                 <div class="race-actions">
-                    <span th:if="${ev.isAnalyzed}"  class="analyzed-badge">ANALYZED</span>
-                    <span th:unless="${ev.isAnalyzed}" class="not-analyzed-badge">PENDING</span>
+                    <span th:if="${ev.isAnalyzed}"  class="analyzed-badge">分析済み</span>
+                    <span th:unless="${ev.isAnalyzed}" class="not-analyzed-badge">未分析</span>
 
                     <a th:if="${ev.isAnalyzed}"
                        th:href="@{/predict-v2(raceName=${ev.raceName})}"
-                       class="btn btn-neon">VIEW RESULT</a>
+                       class="btn btn-neon">結果を見る</a>
 
                     <a th:unless="${ev.isAnalyzed}"
                        th:href="@{/predict-v2(raceName=${ev.raceName})}"
-                       class="btn btn-fire">ANALYZE</a>
+                       class="btn btn-fire">分析する</a>
 
                     <!-- /script/odds-fetch は XHRヘッダ必須(CSRF対策)のため fetch で呼ぶ -->
                     <button th:if="${ev.daysLeft <= 1 and !ev.isPast}"
                             type="button" class="btn btn-gold" th:attr="data-race=${ev.raceName}"
-                            onclick="fetch('/script/odds-fetch', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'}, body:'raceName='+encodeURIComponent(this.dataset.race)}).then(function(){ location.href='/script?started=odds_fetch'; })">GET ODDS</button>
+                            onclick="fetch('/script/odds-fetch', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'}, body:'raceName='+encodeURIComponent(this.dataset.race)}).then(function(){ location.href='/script?started=odds_fetch'; })">オッズを取得</button>
 
                     <a th:if="${ev.isPast}"
-                       href="/accuracy" class="btn btn-purple">ACCURACY</a>
+                       href="/accuracy" class="btn btn-purple">的中率</a>
                 </div>
             </div>
         </div>

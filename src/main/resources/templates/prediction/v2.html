@@ -1258,20 +1258,20 @@
         <!-- HEADER -->
         <div class="site-header">
             <div class="stream-badge">🎙 ON AIR</div>
-            <div class="live-badge">LIVE ANALYSIS</div>
+            <div class="live-badge">ライブ分析</div>
             <img class="header-oni"
                  th:src="@{/images/chibi-honmei.png}"
                  src="/images/chibi-honmei.png"
                  alt="舞鬼法師">
             <h1 class="header-title">鬼眼競馬予想</h1>
-            <div class="header-en">MIKEY MASTER × FACE ORACLE</div>
+            <div class="header-en">MIKEY MASTER × 鬼眼の顔面予想</div>
             <div class="header-tribe">🌈🍊 CHAMU TRIBE</div>
         </div>
 
         <!-- レース選択 -->
         <div class="glass-card">
             <div class="race-bar">
-                <label>⛩ SELECT RACE</label>
+                <label>⛩ レース選択</label>
                 <form method="get" action="/predict-v2" style="display:flex; gap:8px; align-items:center;">
                     <select name="raceId" onchange="this.form.submit()">
                         <option value="">— レースを選択 —</option>
@@ -1282,20 +1282,20 @@
                         </option>
                     </select>
                 </form>
-                <a href="/predict-v2" class="btn btn-neon" style="font-size:12px; padding:6px 14px;">LATEST</a>
+                <a href="/predict-v2" class="btn btn-neon" style="font-size:12px; padding:6px 14px;">最新</a>
             </div>
         </div>
 
         <!-- 新規分析パネル（実行APIは管理者専用のため未ログイン時は非表示。python3が無い環境でも非表示） -->
         <div class="glass-card" sec:authorize="isAuthenticated()" th:if="${scriptExecAvailable}">
-            <div class="run-panel-head">🔮 NEW RACE ANALYSIS</div>
+            <div class="run-panel-head">🔮 新しいレースを分析</div>
             <div class="form-row">
                 <div>
-                    <label>RACE NAME</label>
+                    <label>レース名</label>
                     <input type="text" id="analyzeRaceName" placeholder="例: 日本ダービー">
                 </div>
                 <div>
-                    <label>YEARS</label>
+                    <label>過去の年数</label>
                     <input type="number" id="analyzeYears" value="10" min="1" max="15">
                 </div>
                 <div style="display:flex; align-items:center; gap:6px; padding-top:16px;">
@@ -1303,7 +1303,7 @@
                     <label style="font-size:12px; color:var(--text-muted);">不足時補完</label>
                 </div>
                 <button type="button" class="btn btn-fire" style="margin-top:16px;" onclick="runRaceAnalyzer()">
-                    🩸 ANALYZE
+                    🩸 分析する
                 </button>
             </div>
             <div class="progress-bar-wrap" id="progressWrap">
@@ -1333,36 +1333,36 @@
 
             <div th:if="${pattern != null}">
                 <div class="section-heading">
-                    <span th:text="${selectedRace}"></span> — ANALYSIS SUMMARY
+                    <span th:text="${selectedRace}"></span> — 分析のまとめ
                 </div>
                 <div class="glass-card">
                     <div class="glass-card-inner">
                         <div class="meta-row">
                             <div class="meta-box">
                                 <span class="val" th:text="${pattern.totalHorses}">0</span>
-                                <span class="lbl">TOTAL</span>
+                                <span class="lbl">分析頭数</span>
                             </div>
                             <div class="meta-box">
                                 <span class="val" th:text="${pattern.top5Horses}">0</span>
-                                <span class="lbl">TOP 5</span>
+                                <span class="lbl">5着以内</span>
                             </div>
                             <div class="meta-box">
                                 <span class="val" th:text="${pattern.bottomHorses}">0</span>
-                                <span class="lbl">BOTTOM</span>
+                                <span class="lbl">6着以下</span>
                             </div>
                             <div class="meta-box">
                                 <span class="val" th:text="${pattern.supplementalCount != null ? pattern.supplementalCount : 0}">0</span>
-                                <span class="lbl">SUPPL</span>
+                                <span class="lbl">補完</span>
                             </div>
                             <div class="meta-box">
                                 <span class="val" th:text="${confidenceStars}">★★★☆☆</span>
-                                <span class="lbl">TRUST Lv<span th:text="${pattern.confidenceLevel}">3</span></span>
+                                <span class="lbl">信頼度 Lv<span th:text="${pattern.confidenceLevel}">3</span></span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="section-heading">FACE TREND ANALYSIS</div>
+                <div class="section-heading">顔面傾向分析</div>
                 <div class="neon-divider"></div>
                 <div class="pattern-grid">
                     <div class="glass-card pattern-card top5" style="margin-bottom:0;">
@@ -1378,7 +1378,7 @@
 
             <!-- 鬼眼コラム（重賞・枠順確定後） -->
             <div th:if="${column != null}">
-                <div class="section-heading">ONI-EYE COLUMN — 鬼眼コラム</div>
+                <div class="section-heading">鬼眼コラム</div>
                 <div class="glass-card column-card">
                     <div class="column-inner">
                         <h2 class="column-title" th:text="${column.title}">見出し</h2>
@@ -1433,7 +1433,7 @@
                 </div>
             </div>
 
-            <div class="section-heading">RACE RANKING — 鬼眼スコア</div>
+            <div class="section-heading">鬼眼スコア ランキング</div>
             <div class="neon-divider"></div>
 
             <!-- 1位スーパーチャット風バナー -->
@@ -1483,7 +1483,7 @@
                 <div th:if="${r.imagePath != null}">
                     <img class="horse-img" th:src="${r.imagePath}" th:alt="${r.horseName}">
                 </div>
-                <div th:unless="${r.imagePath != null}" class="no-img">📷 NO IMG</div>
+                <div th:unless="${r.imagePath != null}" class="no-img">📷 画像なし</div>
 
                 <div class="horse-info">
                     <div class="horse-name-row">
@@ -1512,7 +1512,7 @@
                     <div class="score-row">
                         <span class="score-num">
                             <span th:text="${r.score != null ? #numbers.formatDecimal(r.score, 1, 1) : '-'}">0</span>
-                            <span class="score-pt">PT</span>
+                            <span class="score-pt">点</span>
                         </span>
                         <div class="score-bar-wrap">
                             <div class="score-bar-fill"
@@ -1538,7 +1538,7 @@
 
             <!-- 鬼眼買い目（◎〜注の5頭が顔面分析済みのときだけ） -->
             <div th:if="${bets != null and !#lists.isEmpty(bets)}">
-                <div class="section-heading" id="bets">BETTING — 鬼眼買い目</div>
+                <div class="section-heading" id="bets">鬼眼買い目</div>
                 <div class="glass-card">
                     <div class="bet-card-inner">
                         <div class="bet-head">
@@ -1598,7 +1598,7 @@
 
         function runRaceAnalyzer() {
             const raceName = document.getElementById('analyzeRaceName').value.trim();
-            if (!raceName) { showToast('⚠ RACE NAME を入力せよ'); return; }
+            if (!raceName) { showToast('⚠ レース名を入力せよ'); return; }
             const years = document.getElementById('analyzeYears').value;
             const supp  = document.getElementById('useSupp').checked;
 
@@ -1625,12 +1625,12 @@
                     if (_es) { _es.close(); _es = null; }
                     showToast(resp.status === 401 || resp.status === 403
                         ? '🔒 管理者ログインが必要です'
-                        : '🚨 ERROR: HTTP ' + resp.status);
+                        : '🚨 エラー: HTTP ' + resp.status);
                 }
             }).catch(err => {
                 clearInterval(interval);
                 pw.style.display = 'none';
-                showToast('🚨 ERROR: ' + err.message);
+                showToast('🚨 エラー: ' + err.message);
             });
 
             // サーバー側(ScriptController)は Math.abs(raceName.hashCode()) をキーにするため符号を揃える

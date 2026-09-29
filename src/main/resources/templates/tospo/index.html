@@ -57,7 +57,7 @@
     <div th:replace="fragments/navbar :: navbar"></div>
 
     <div class="page-body">
-        <h1 class="page-title">TOSPO REFERENCE</h1>
+        <h1 class="page-title">東スポ参考</h1>
         <div class="page-sub">
             📰 東スポ競馬の指数・記者印（管理者のみ・自分の参考用）<br>
             東スポのデータは保存せず、開いたときに取得しています（10分間は再取得しません）
@@ -75,7 +75,7 @@
         <div th:if="${enabled}">
             <div class="glass-card">
                 <form class="race-bar" method="get" th:action="@{/tospo}">
-                    <label>⛩ SELECT RACE</label>
+                    <label>⛩ レース選択</label>
                     <select name="raceId" onchange="this.form.submit()">
                         <option th:each="r : ${raceOptions}" th:value="${r.race_id}" th:text="${r.label}"
                                 th:selected="${r.race_id == selectedRaceId}"></option>

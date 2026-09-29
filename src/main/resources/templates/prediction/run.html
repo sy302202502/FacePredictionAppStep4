@@ -98,14 +98,14 @@
 
     <div class="page-body">
         <div class="page-header">
-            <div class="page-title">RUN PREDICTION</div>
-            <div class="page-subtitle">SELECT RACE &amp; HORSES — EXECUTE FACE SCORE ANALYSIS</div>
+            <div class="page-title">予想を実行</div>
+            <div class="page-subtitle">レースと馬を選んで顔面スコア分析を実行</div>
         </div>
 
         <form method="post" th:action="@{/prediction/run}" id="mainForm">
 
             <!-- ① レース選択 -->
-            <div class="section-heading">STEP 1 — RACE SELECT</div>
+            <div class="section-heading">手順1 — レースを選ぶ</div>
             <div class="glass-card">
                 <div class="glass-card-inner">
                     <div class="form-group">
@@ -129,7 +129,7 @@
 
             <!-- ② 出走馬選択テーブル -->
             <div th:if="${entries != null and !entries.isEmpty()}">
-                <div class="section-heading">STEP 2 — SELECT HORSES</div>
+                <div class="section-heading">手順2 — 馬を選ぶ</div>
                 <div class="glass-card">
                     <div class="glass-card-inner">
                         <div class="select-all-bar">
@@ -177,7 +177,7 @@
             </div>
 
             <!-- ③ 手動入力（代替手段） -->
-            <div class="section-heading">MANUAL INPUT (OPTIONAL)</div>
+            <div class="section-heading">手動入力（任意）</div>
             <div class="glass-card">
                 <div class="glass-card-inner">
                     <span class="manual-toggle" onclick="toggleManual()">
@@ -197,7 +197,7 @@
 
         <!-- ⑤ 実行結果 -->
         <div th:if="${output != null}" style="margin-top:28px;">
-            <div class="section-heading">RESULT</div>
+            <div class="section-heading">結果</div>
             <div th:if="${success}" class="alert-success">
                 予想が完了しました。
                 <a th:href="@{/prediction(raceName=${raceName})}">予想結果を見る →</a>
@@ -211,7 +211,7 @@
                  class="alert-error" th:text="${errorOutput}"></div>
             <div class="glass-card" style="margin-top:10px;">
                 <div class="glass-card-inner">
-                    <div style="font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:2px; color:var(--text-muted); margin-bottom:8px;">EXECUTION LOG</div>
+                    <div style="font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:2px; color:var(--text-muted); margin-bottom:8px;">実行ログ</div>
                     <div class="log-box" th:text="${output}"></div>
                 </div>
             </div>

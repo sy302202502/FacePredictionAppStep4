@@ -261,13 +261,13 @@
         <div class="page-header">
             <div class="hero-area">
                 <div class="page-title">競馬顔面予想システム</div>
-                <div class="page-subtitle">KEIBA FACE PREDICTION SYSTEM — POWERED BY VISION AI</div>
-                <p class="hero-sub">Vision AI（Groq / Gemini / llava）で競走馬の顔面コンディションを分析し、統計スコアと合わせて有力馬を予想します</p>
+                <div class="page-subtitle">競馬 顔面予想システム — 画像AIで分析</div>
+                <p class="hero-sub">画像AI（Groq / Gemini / llava）で競走馬の顔面コンディションを分析し、統計スコアと合わせて有力馬を予想します</p>
             </div>
         </div>
 
         <!-- Dashboard Stats -->
-        <div class="section-heading">DASHBOARD</div>
+        <div class="section-heading">ダッシュボード</div>
         <div class="glass-card">
             <div class="glass-card-inner">
                 <div class="stat-grid">
@@ -294,32 +294,32 @@
         </div>
 
         <!-- Feature Cards -->
-        <div class="section-heading">FEATURES</div>
+        <div class="section-heading">機能一覧</div>
         <div class="feature-grid">
 
             <div class="feature-card accent-crimson">
-                <div class="feature-card-label">STATS — NO API REQUIRED</div>
+                <div class="feature-card-label">統計予想（API不要）</div>
                 <div class="feature-card-title">統計予想</div>
                 <p class="feature-card-desc">過去成績・距離適性・芝ダート適性・馬場状態適性・重賞実績・調教・血統・展開を集計してスコアリング。APIクレジット不要で今すぐ使えます。</p>
                 <a href="/stats-predict" class="btn btn-crimson">今すぐ予想する</a>
             </div>
 
             <div class="feature-card accent-neon">
-                <div class="feature-card-label">ANALYSIS — FACE TREND</div>
+                <div class="feature-card-label">顔面傾向分析</div>
                 <div class="feature-card-title">傾向分析予想</div>
                 <p class="feature-card-desc">レースを選択すると過去の全着順を分析。5着内 vs 6着以下の顔の傾向から有力馬を導き出します。</p>
                 <a href="/predict-v2" class="btn btn-neon">傾向分析予想へ</a>
             </div>
 
             <div class="feature-card accent-gold">
-                <div class="feature-card-label">CALENDAR — SCHEDULE</div>
+                <div class="feature-card-label">レース日程</div>
                 <div class="feature-card-title">予想カレンダー</div>
                 <p class="feature-card-desc">今後3週間の重賞レース一覧。分析済み/未分析を一覧表示し、ワンクリックで予想を開始できます。</p>
                 <a href="/calendar" class="btn btn-fire">カレンダーを見る</a>
             </div>
 
             <div class="feature-card accent-gold">
-                <div class="feature-card-label">ACCURACY — HIT RATE</div>
+                <div class="feature-card-label">的中率</div>
                 <div class="feature-card-title">的中率チェック</div>
                 <p class="feature-card-desc">予想の的中率を追跡・確認できます。新旧システムの比較や自動記録が可能です。</p>
                 <a href="/accuracy" class="btn btn-fire">精度を確認</a>
@@ -327,21 +327,21 @@
 
             <!-- 管理者のみ表示 -->
             <div sec:authorize="isAuthenticated()" class="feature-card accent-neon">
-                <div class="feature-card-label">ENTRY — RACE LINEUP</div>
+                <div class="feature-card-label">出走馬</div>
                 <div class="feature-card-title">出走馬一覧</div>
                 <p class="feature-card-desc">直近の重賞レースの出走馬をnetkeibaから自動取得して確認できます。</p>
                 <a href="/entry" class="btn btn-neon">出走馬を確認</a>
             </div>
 
             <div sec:authorize="isAuthenticated()" th:if="${scriptExecAvailable}" class="feature-card accent-orange">
-                <div class="feature-card-label">SCRIPT — EXECUTION</div>
+                <div class="feature-card-label">スクリプト実行</div>
                 <div class="feature-card-title">スクリプト実行</div>
                 <p class="feature-card-desc">スクレイピング・顔分析・重み学習などをブラウザから実行しリアルタイムログを確認できます。</p>
                 <a href="/script" class="btn btn-fire">スクリプトを実行</a>
             </div>
 
             <div sec:authorize="isAuthenticated()" class="feature-card accent-purple">
-                <div class="feature-card-label">SYSTEM — HEALTH CHECK</div>
+                <div class="feature-card-label">動作状況の確認</div>
                 <div class="feature-card-title">ヘルスチェック</div>
                 <p class="feature-card-desc">DB接続・APIキー設定・スクリプトファイルの状態を確認します。</p>
                 <a href="/health" class="btn btn-purple">状態を確認</a>

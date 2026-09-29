@@ -78,7 +78,7 @@
                 <img class="photo" th:if="${r.imagePath != null}" th:src="${r.imagePath}" alt="">
                 <div class="num" th:text="${r.horseNumber != null ? r.horseNumber + '番' : ''}">3番</div>
                 <div class="name" th:text="${r.horseName}">馬名</div>
-                <div class="pt" th:text="${#numbers.formatDecimal(r.score, 1, 1) + ' PT'}">88.0 PT</div>
+                <div class="pt" th:text="${#numbers.formatDecimal(r.score, 1, 1) + ' 点'}">88.0 点</div>
             </div>
         </div>
         <div class="bets" th:if="${!#lists.isEmpty(bets)}">

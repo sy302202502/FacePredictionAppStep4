@@ -350,20 +350,20 @@
     <div class="page-body">
 
         <div class="page-header">
-            <div class="page-title">PADDOCK VISION</div>
-            <div class="page-subtitle">HORSE PHOTO ANALYSIS / CLAUDE VISION AI / REAL-TIME SCORING</div>
+            <div class="page-title">パドック写真分析</div>
+            <div class="page-subtitle">馬の写真を画像AIでその場で採点</div>
         </div>
 
         <!-- Upload form -->
-        <div class="section-heading">PHOTO UPLOAD</div>
+        <div class="section-heading">写真のアップロード</div>
         <div class="glass-card">
             <div class="glass-card-inner">
 
                 <!-- Upload area -->
                 <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
                     <div class="icon">🐴</div>
-                    <div class="hint">CLICK OR DROP TO SELECT PHOTO</div>
-                    <div class="hint-sub">JPG / PNG / WEBP SUPPORTED</div>
+                    <div class="hint">クリックするか写真をドロップ</div>
+                    <div class="hint-sub">JPG・PNG・WEBP に対応</div>
                 </div>
                 <input type="file" id="file-input" accept="image/*" capture="environment">
 
@@ -377,7 +377,7 @@
 
                 <!-- Race select -->
                 <div class="form-group" style="margin-top:14px;">
-                    <label for="race-select">TARGET RACE</label>
+                    <label for="race-select">対象レース</label>
                     <select id="race-select">
                         <option value="">-- レースを選択 --</option>
                         <option th:each="race : ${raceNames}" th:value="${race}" th:text="${race}"></option>
@@ -386,7 +386,7 @@
 
                 <!-- Horse name -->
                 <div class="form-group">
-                    <label for="horse-name">HORSE NAME (OPTIONAL)</label>
+                    <label for="horse-name">馬名（任意）</label>
                     <input type="text" id="horse-name" placeholder="例: ドウデュース">
                 </div>
 
@@ -402,7 +402,7 @@
 
         <!-- Result panel -->
         <div id="result-panel">
-            <div class="section-heading">ANALYSIS RESULT</div>
+            <div class="section-heading">分析結果</div>
             <div class="glass-card">
                 <div class="glass-card-inner" id="result-content"></div>
             </div>
@@ -607,7 +607,7 @@
         // 出走馬比較リスト
         if (data.entry_list && data.entry_list.length > 0) {
             const horseName = data.horse_name || 'アップロード馬';
-            html += `<div class="entry-list-title">ENTRY SCORE RANKING (TOP 10)</div>`;
+            html += `<div class="entry-list-title">出走馬のスコア順（上位10頭）</div>`;
 
             // アップロード馬を挿入
             let entries = [...data.entry_list];
@@ -623,7 +623,7 @@
                 const rankCls = displayRank <= 3 ? 'top3' : '';
                 html += `<div class="entry-item ${isYou ? 'you-horse' : ''}">
                     <div class="entry-rank ${rankCls}">${displayRank}</div>
-                    <div class="entry-name">${escHtml(e.name || '?')}${isYou ? ' <span class="entry-you">YOUR HORSE</span>' : ''}</div>
+                    <div class="entry-name">${escHtml(e.name || '?')}${isYou ? ' <span class="entry-you">あなたの馬</span>' : ''}</div>
                     <div class="entry-score">${e.score != null ? e.score.toFixed(1) : '-'}</div>
                 </div>`;
                 displayRank++;

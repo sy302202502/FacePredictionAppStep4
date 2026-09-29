@@ -368,13 +368,13 @@
 <div class="page-body">
 
     <div class="page-header">
-        <div class="page-title">WEEKLY PIPELINE</div>
-        <div class="page-subtitle">AUTO SCRAPING / ENTRY FETCH / STATS PREDICT / FACE ANALYSIS — ALL IN ONE</div>
+        <div class="page-title">週次の一括処理</div>
+        <div class="page-subtitle">出走馬の取得・統計予想・顔面分析をまとめて実行</div>
     </div>
 
     <!-- パイプライン実行パネル（python3が使えない環境=本番appコンテナでは非表示。cronが自動実行） -->
     <div th:if="${scriptExecAvailable}">
-    <div class="section-heading">PIPELINE EXECUTION</div>
+    <div class="section-heading">一括実行</div>
     <div class="glass-card">
         <div class="glass-card-inner">
             <p class="pipeline-desc">
@@ -383,8 +383,8 @@
             <button class="btn-run" id="run-btn"
                     th:disabled="${isPipelineRunning}"
                     onclick="runPipeline()">
-                <span th:if="${isPipelineRunning}"><span class="spinner"></span> RUNNING...</span>
-                <span th:unless="${isPipelineRunning}">▶ RUN PIPELINE</span>
+                <span th:if="${isPipelineRunning}"><span class="spinner"></span> 実行中…</span>
+                <span th:unless="${isPipelineRunning}">▶ 一括実行</span>
             </button>
             <div id="log-panel"></div>
         </div>
@@ -397,7 +397,7 @@
         <!-- サイドバー: レース一覧 -->
         <div class="sidebar">
             <div class="race-list">
-                <div class="race-list-header">RACE LIST</div>
+                <div class="race-list-header">レース一覧</div>
                 <div th:if="${raceList.isEmpty()}" class="race-list-empty">
                     予想がありません。<br>パイプラインを実行してください。
                 </div>
@@ -422,13 +422,13 @@
         <!-- メイン: 予想結果 -->
         <div class="main">
             <div th:if="${selected == null or results.isEmpty()}" class="empty">
-                ← SELECT A RACE
+                ← レースを選んでください
             </div>
 
             <div th:if="${selected != null and !results.isEmpty()}">
                 <div class="results-header">
                     <div class="results-title">
-                        <span th:text="${selected}"></span> PREDICTION
+                        <span th:text="${selected}"></span> 予想
                     </div>
                 </div>
 
@@ -458,13 +458,13 @@
                     <div class="horse-body">
                         <div class="horse-meta">
                             <span th:if="${h.horse_number != null}"
-                                  th:text="'No.' + ${h.horse_number}"></span>
+                                  th:text="${h.horse_number} + '番'"></span>
                             <span th:if="${h.jockey_name != null and !#strings.isEmpty(h.jockey_name)}"
                                   th:text="'　/ ' + ${h.jockey_name}"></span>
                         </div>
                         <div class="horse-name" th:text="${h.horse_name}"></div>
                         <div class="score-row">
-                            <div class="score-num" th:text="${h.score != null ? h.score + 'pt' : '-'}"></div>
+                            <div class="score-num" th:text="${h.score != null ? h.score + '点' : '-'}"></div>
                             <div class="score-bar-wrap">
                                 <div class="score-bar" th:style="'width:' + ${h.score != null ? h.score : 0} + '%'"></div>
                             </div>
@@ -474,7 +474,7 @@
                              class="face-comment">
                             <span class="face-badge"
                                   th:if="${h.face_score != null}"
-                                  th:text="'FACE ' + ${#numbers.formatDecimal(h.face_score,1,1)} + 'pt'"></span><span th:text="${h.face_comment}"></span>
+                                  th:text="'顔面 ' + ${#numbers.formatDecimal(h.face_score,1,1)} + '点'"></span><span th:text="${h.face_comment}"></span>
                         </div>
                     </div>
                 </div>
@@ -491,7 +491,7 @@ let es = null;
 function runPipeline() {
     const btn = document.getElementById('run-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> RUNNING...';
+    btn.innerHTML = '<span class="spinner"></span> 実行中…';
 
     const logPanel = document.getElementById('log-panel');
     logPanel.style.display = 'block';
@@ -532,7 +532,7 @@ function addLog(text, cls) {
 function resetBtn() {
     const btn = document.getElementById('run-btn');
     btn.disabled = false;
-    btn.innerHTML = '▶ RUN PIPELINE';
+    btn.innerHTML = '▶ 一括実行';
 }
 </script>
 </body>

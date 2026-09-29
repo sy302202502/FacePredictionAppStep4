@@ -253,7 +253,7 @@
         <!-- Page Header -->
         <div class="page-header">
             <div class="page-title">ヘルスチェック</div>
-            <div class="page-subtitle">SYSTEM HEALTH CHECK</div>
+            <div class="page-subtitle">システムの動作状況</div>
             <div class="header-meta">
                 <span class="checked-at-text">確認日時: <span th:text="${checkedAt}"></span></span>
                 <button class="btn-refresh" onclick="location.reload()">再確認</button>
@@ -261,15 +261,15 @@
         </div>
 
         <!-- System Status -->
-        <div class="section-heading">SYSTEM STATUS</div>
+        <div class="section-heading">システムの状態</div>
         <div class="glass-card">
             <div class="glass-card-inner">
 
                 <div class="check-row">
                     <span class="check-label">データベース接続</span>
                     <div class="check-value">
-                        <span th:if="${dbOk}"     class="badge badge-ok">✓ OK</span>
-                        <span th:unless="${dbOk}" class="badge badge-ng">✗ NG</span>
+                        <span th:if="${dbOk}"     class="badge badge-ok">✓ 正常</span>
+                        <span th:unless="${dbOk}" class="badge badge-ng">✗ 異常</span>
                         <span th:if="${!dbOk and dbError != null}" class="check-err" th:text="${dbError}"></span>
                     </div>
                 </div>
@@ -306,7 +306,7 @@
         </div>
 
         <!-- Script Files -->
-        <div class="section-heading">SCRIPT FILES</div>
+        <div class="section-heading">スクリプトファイル</div>
         <div class="glass-card">
             <div class="glass-card-inner">
                 <ul class="script-list">
@@ -320,7 +320,7 @@
         </div>
 
         <!-- DB Counts -->
-        <div class="section-heading">DATABASE RECORDS</div>
+        <div class="section-heading">データベースの件数</div>
         <div class="glass-card">
             <div class="glass-card-inner">
                 <div class="stat-grid">
@@ -341,7 +341,7 @@
         </div>
 
         <!-- Quick Actions -->
-        <div class="section-heading">QUICK ACTIONS</div>
+        <div class="section-heading">すぐに実行</div>
         <div class="glass-card">
             <div class="glass-card-inner">
                 <div class="action-row">

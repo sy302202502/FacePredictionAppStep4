@@ -103,7 +103,7 @@
                     <div>
                         <img th:if="${horse.imagePath != null}" class="horse-img-large"
                              th:src="${horse.imagePath}" th:alt="${horse.horseName}">
-                        <div th:unless="${horse.imagePath != null}" class="no-img-large">NO IMAGE</div>
+                        <div th:unless="${horse.imagePath != null}" class="no-img-large">画像なし</div>
                         <div class="horse-meta" th:text="'種別: ' + ${horse.raceCategory} + ' / 分析' + ${horse.analysisCount} + '回'"></div>
                     </div>
 
@@ -129,7 +129,7 @@
 
         <!-- 数値特徴量 -->
         <div th:if="${horse.eyeAspectRatio != null}">
-            <div class="section-heading">NUMERIC FEATURES</div>
+            <div class="section-heading">数値で見る特徴</div>
             <div class="glass-card">
                 <div class="glass-card-inner numeric-section">
                     <div class="bar-row">
@@ -163,13 +163,13 @@
 
         <!-- 類似馬 -->
         <div th:unless="${similar == null or similar.isEmpty()}">
-            <div class="section-heading">SIMILAR WINNERS</div>
+            <div class="section-heading">顔つきが似ている勝ち馬</div>
             <div class="glass-card">
                 <div class="glass-card-inner">
                     <div class="similar-grid">
                         <a th:each="s : ${similar}" th:href="'/horse/' + ${s.id}" class="similar-card">
                             <img th:if="${s.imagePath != null}" th:src="${s.imagePath}" th:alt="${s.horseName}">
-                            <div th:unless="${s.imagePath != null}" class="no-img-sm">NO IMAGE</div>
+                            <div th:unless="${s.imagePath != null}" class="no-img-sm">画像なし</div>
                             <div class="similar-card-body">
                                 <div class="similar-name" th:text="${s.horseName}">馬名</div>
                                 <div class="similar-cat" th:text="${s.raceCategory}">種別</div>

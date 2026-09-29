@@ -132,7 +132,7 @@
                 <!-- 管理者のみ表示 -->
                 <a sec:authorize="isAuthenticated()" href="/entry"  style="background:rgba(255,255,255,0.05);">🐴 出走馬</a>
                 <a sec:authorize="isAuthenticated()" th:if="${scriptExecAvailable}" href="/script" style="background:rgba(255,152,0,0.12);">🖥️ スクリプト</a>
-                <a sec:authorize="isAuthenticated()" href="/health" style="background:rgba(255,255,255,0.03);">🩺 ヘルス</a>
+                <a sec:authorize="isAuthenticated()" href="/health" style="background:rgba(255,255,255,0.03);">🩺 動作状況</a>
                 <a sec:authorize="isAuthenticated()" href="/jobs"   style="background:rgba(255,255,255,0.03);">🗓 実行履歴</a>
                 <a sec:authorize="isAuthenticated()" href="/tospo"  style="background:rgba(255,255,255,0.03);">📰 東スポ参考</a>
             </div>
@@ -154,7 +154,7 @@
         <!-- 管理者のみ表示 -->
         <a sec:authorize="isAuthenticated()" href="/entry">🐴 出走馬</a>
         <a sec:authorize="isAuthenticated()" th:if="${scriptExecAvailable}" href="/script">🖥️ スクリプト</a>
-        <a sec:authorize="isAuthenticated()" href="/health">🩺 ヘルス</a>
+        <a sec:authorize="isAuthenticated()" href="/health">🩺 動作状況</a>
         <a sec:authorize="isAuthenticated()" href="/jobs">🗓 実行履歴</a>
         <a sec:authorize="isAuthenticated()" href="/tospo">📰 東スポ参考</a>
     </div>

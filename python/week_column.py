@@ -19,7 +19,7 @@ import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 
-from column_writer import get_conn
+from column_writer import get_conn, VOICE, VOICE_NG, MAX_EXCLAIM
 from llm_client import generate_text
 from race_condition import place_from_race_id
 import race_facts
@@ -31,10 +31,8 @@ WEEKDAYS = '月火水木金土日'
 PERSONA = """あなたは競馬予想VTuber「舞鬼法師（まいきーほうし／MIKEY MASTER）」として、
 週末の重賞に向けた短い「週中コラム」を書く。
 
-【キャラクター】
-- 一人称は「僕」。読者への呼びかけは「みんな」
-- 熱くてノリのいい配信者。テンポよく、要所で熱量を上げる
-- 下品な言葉・煽り・他者の悪口は使わない
+【語り口】
+""" + VOICE + """
 
 【守ること（最重要）】
 - 書いてよい事実は、渡された「材料」にあるものだけ。材料にない戦績・騎手・調教・オッズ・枠順・血統を作らない
@@ -50,7 +48,7 @@ TASK = """以下の「材料」だけを使って、{race}の週中コラム（{
 1. つかみ（レース名とコース。「段階」に合わせて、出走予定の段階か出走確定かを正しく伝える）
 2. 過去の同じレースの傾向（材料の数字を2〜3個使い、そこから言えることを推測の言い方で）
 3. データ上の有力馬の近走の事実（2〜3頭。近走の着順・重賞実績・同じ条件の成績など、材料の事実で）
-4. 締め（週末が楽しみという一言と、「レース当日の鬼眼コラムでは枠順をふまえた展開図も描く」という予告）
+4. 締め（ここは熱量を上げてよい。週末が楽しみという一言と、「レース当日の鬼眼コラムでは枠順をふまえた展開図も描く」という予告）
 
 馬名は材料の表記どおりに書く（馬番は書かない）。
 「前走」は材料の「前走」の1走だけを指す。2走前・3走前のレースに触れるときは「2走前の〇〇」のように必ず区別して書き、
@@ -75,7 +73,7 @@ KATAKANA_OK = {
     'ルール', 'サプライズ', 'ダークホース', 'ストーリー', 'キャラ', 'ハイレベル', 'ペースアップ', 'スムーズ',
     'ハンデ', 'コンディション', 'ベテラン', 'ブランク', 'ロングスパート', 'ゴール前', 'フィニッシュ', 'ラストスパート',
 }
-BANNED = ('絶対', '確実', '鉄板', '必ず勝', '東スポ', '東京スポーツ', '顔', '眼差し', '目つき', '◎', '○', '▲', '△')
+BANNED = ('絶対', '確実', '鉄板', '必ず勝', '東スポ', '東京スポーツ', '顔', '眼差し', '目つき', '◎', '○', '▲', '△') + VOICE_NG
 OFF_TOPIC = ('騎手', '鞍上', 'オッズ', '調教', '追い切り', '血統', '父', '母')
 NUM_UNIT = re.compile(r'(?<![\d.])(\d+)\s*(番人気|着|勝|頭|年|枠|週|戦|回|m)')
 
@@ -204,6 +202,8 @@ def check(col, facts):
     body, text = col['body'], col['title'] + '\n' + col['body']
     if not 350 <= len(body) <= 900:
         return f'文字数 {len(body)}'
+    if body.count('！') + body.count('!') > MAX_EXCLAIM:
+        return '「！」が多い（語り口）'
     material = json.dumps(_public(facts), ensure_ascii=False)
     for w in BANNED:
         if w in text:
@@ -273,16 +273,16 @@ def write_with_llm(facts, edition):
 def write_template(facts, edition):
     """AI が使えない・検査に通らないときの文章（材料をそのまま並べる）"""
     name = facts['レース']
-    p = [f"みんな、{facts['開催日']}は{facts['競馬場']}{facts['コース']}の{name}！"
-         f"今は{facts['段階'].split('。')[0]}だ。"]
+    p = [f"みんな、{facts['開催日']}は{facts['競馬場']}{facts['コース']}の{name}です。"
+         f"今は{facts['段階'].split('。')[0]}です。"]
     t = facts['過去の同じレース']
     if isinstance(t, dict):
         agg = [t[k] for k in ('1番人気の成績', '人気', '脚質') if t.get(k)]
         if agg:
-            p.append(f"まずは{t.get('集計の対象', t['対象'])}の傾向から。" + '。'.join(agg) +
-                     "。この数字がどう出るか、今年も注目したい。")
+            p.append(f"まずは{t.get('集計の対象', t['対象'])}の傾向から見ていきましょう。" + '。'.join(agg) +
+                     "。この数字が今年どう出るか、注目したいところです。")
         else:
-            p.append(f"{t['対象']}の勝ち馬は、{'、'.join(t['年ごとの勝ち馬'])}。")
+            p.append(f"{t['対象']}の勝ち馬は、{'、'.join(t['年ごとの勝ち馬'])}です。")
     hs = facts['データ上の有力馬（アプリの統計スコア上位。近走成績・距離・馬場・調教などの集計）'][:3]
     if hs:
         lines = []
@@ -292,8 +292,8 @@ def write_template(facts, edition):
             last = h['事実'][0].replace('近走: ', '').split(' / ')[0].replace('前走 ', '', 1)
             same = next((x for x in h['事実'] if x.endswith('回') and 'の成績' in x), None)
             lines.append(f"{h['馬名']}は前走が{last}" + (f"、{same.replace('の成績: ', 'は')}" if same else ''))
-        p.append("データ上の有力馬の近走もチェックしておこう。" + '。'.join(lines) + '。')
-    p.append("レース当日の鬼眼コラムでは、枠順をふまえた展開図も描いていくよ。週末が楽しみだ！")
+        p.append("データ上の有力馬の近走もチェックしておきましょう。" + '。'.join(f"{x}です" for x in lines) + '。')
+    p.append("レース当日の鬼眼コラムでは、枠順をふまえた展開図も描いていきます。週末が楽しみです！")
     return {'title': f"{name} {EDITIONS[edition]}・過去の傾向と有力馬の近走", 'body': '\n\n'.join(p)}
 
 

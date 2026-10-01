@@ -236,6 +236,22 @@ def face_analysis_done(conn, race_id):
     finally:
         cur.close()
 
+def has_recent_facts(conn, race_id):
+    """週中コラムの材料（stats_prediction.recent＝近走の事実）が8割以上の馬にそろっているか。
+    列が無い（stats_predictor がまだ一度も新しい形で保存していない）ときも False"""
+    cur = conn.cursor()
+    try:
+        # 分母は成績を取れる馬（horse_id のある馬）だけ。取れない馬が多いレースで毎回再評価し続けないように
+        cur.execute("""
+            SELECT COUNT(*), COUNT(recent) FROM stats_prediction WHERE race_id = %s AND horse_id IS NOT NULL
+        """, (race_id,))
+        total, have = cur.fetchone()
+        return total > 0 and have >= total * 0.8
+    except Exception:
+        return False
+    finally:
+        cur.close()
+
 def update_image_paths(conn, race_id):
     """stats_predictionのimage_path等をrace_entryからJOINして更新。
     突合は race_id + horse_id（predict_by_race_id.py と同一基準）。
@@ -433,6 +449,24 @@ def main():
                                 '鬼眼コラム')
             if not okc:
                 log(f"  ⚠️ コラム作成に失敗（予想は公開済み）")
+
+        # 6. 週中コラム（重賞のみ・木曜と金曜）。事実だけで書き、顔面分析は使わない。
+        #    近走の事実がまだ保存されていない（予想を最初に作ったのが機能追加より前など）なら、
+        #    統計予想を再評価して保存してから書く。失敗しても予想そのものには影響しない
+        weekday = datetime.now().weekday()
+        days_ahead = (race['race_date'] - datetime.now().date()).days
+        if is_graded and weekday in (3, 4) and 1 <= days_ahead <= 4:
+            if not has_recent_facts(conn, race_id):
+                run_script('stats_predictor.py', [race_id, '--update'], '統計予想（近走の事実を保存）')
+            if has_recent_facts(conn, race_id):
+                okw, _ = run_script('week_column.py',
+                                    [race_id, '--grade', {1: 'G1', 2: 'G2', 3: 'G3'}[grade_no],
+                                     '--edition', 'thu' if weekday == 3 else 'fri'],
+                                    '週中コラム')
+                if not okw:
+                    log(f"  ⚠️ 週中コラムの作成に失敗（予想は公開済み）")
+            else:
+                log(f"  ⚠️ 近走の事実がそろわないため週中コラムは見送り")
 
         results.append({
             'race': race_name,

@@ -120,14 +120,14 @@ def horse_features(results, before=None, n=RECENT_N):
 # ── 結果ページ ───────────────────────────────────────
 def parse_result_soup(soup, race_id=None):
     """db.netkeiba の結果ページ → 実際の展開。
-    {'front','back','surface','distance','direction','horses':[{num,waku,horse_id,jockey_id,rank,passing,agari}]}"""
+    {'front','back','surface','distance','direction','horses':[{num,waku,horse_id,jockey_id,rank,passing,agari,name,pop,odds}]}"""
     from constants import parse_course
     table = soup.find('table', class_='race_table_01') if soup else None
     if not table:
         return None
     head = [th.get_text(strip=True) for th in table.find('tr').find_all(['th', 'td'])]
     col = lambda name: next((i for i, h in enumerate(head) if h == name), None)
-    i_pass, i_agari = col('通過'), col('上り')
+    i_pass, i_agari, i_pop, i_odds = col('通過'), col('上り'), col('人気'), col('単勝')
     horses = []
     for tr in table.find_all('tr')[1:]:
         tds = tr.find_all('td')
@@ -146,6 +146,10 @@ def parse_result_soup(soup, race_id=None):
             'rank': int(m_rank.group(1)) if m_rank else None,
             'passing': parse_passing(tds[i_pass].get_text(strip=True)) if i_pass is not None and i_pass < len(tds) else [],
             'agari': to_float(tds[i_agari].get_text(strip=True)) if i_agari is not None and i_agari < len(tds) else None,
+            'name': link.get_text(strip=True) if link else None,
+            'pop': (lambda v: int(v) if v.isdigit() else None)(tds[i_pop].get_text(strip=True))
+                   if i_pop is not None and i_pop < len(tds) else None,
+            'odds': to_float(tds[i_odds].get_text(strip=True)) if i_odds is not None and i_odds < len(tds) else None,
         })
     text = soup.get_text(' ', strip=True)
     m = re.search(r'ペース[\d.\s-]*\((\d+\.\d-\d+\.\d)\)', text)
@@ -165,25 +169,25 @@ def parse_result_soup(soup, race_id=None):
 
 
 # ── DB ───────────────────────────────────────────────
-def ensure_column(conn):
-    """stats_prediction.tenkai 列を用意する。ALTER は排他ロックを取るので、先に有無を確認し、
+def ensure_column(conn, column='tenkai'):
+    """stats_prediction の TEXT 列（既定は tenkai。近走の事実は recent）を用意する。ALTER は排他ロックを取るので、先に有無を確認し、
     追加するときも lock_timeout で待ちすぎない（face_analyzer_local.ensure_face_columns と同じ方針）。
     用意できたら True"""
     cur = conn.cursor()
     try:
         cur.execute("""SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema()
-                       AND table_name = 'stats_prediction' AND column_name = 'tenkai'""")
+                       AND table_name = 'stats_prediction' AND column_name = %s""", (column,))
         have = cur.fetchone() is not None
         conn.commit()
         if not have:
             cur.execute("SET lock_timeout = '5s'")
-            cur.execute("ALTER TABLE stats_prediction ADD COLUMN IF NOT EXISTS tenkai TEXT")
+            cur.execute(f"ALTER TABLE stats_prediction ADD COLUMN IF NOT EXISTS {column} TEXT")
             cur.execute("SET lock_timeout = 0")
             conn.commit()
         return True
     except Exception as e:
         conn.rollback()
-        print(f"  [警告] stats_prediction.tenkai 列を用意できませんでした（次回再試行）: {e}")
+        print(f"  [警告] stats_prediction.{column} 列を用意できませんでした（次回再試行）: {e}")
         return False
     finally:
         cur.close()

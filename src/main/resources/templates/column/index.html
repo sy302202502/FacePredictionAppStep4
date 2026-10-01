@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#050708">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="鬼眼競馬">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>📝 コラム — 鬼眼競馬予想</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        /* 配色は predict-v2・答え合わせと共通 */
+        :root {
+            --neon: #7dff4f; --neon-dim: #3a7d22; --neon-glow: rgba(125,255,79,0.32);
+            --gold: #c9a84c; --gold-light: #f5d878; --purple: #8b5cf6;
+            --deep: #050708; --surface2: #111811; --panel: rgba(10,14,10,0.93);
+            --text: #d4e8cc; --text-muted: #607860;
+        }
+        body { font-family: 'Noto Sans JP', sans-serif; background: var(--deep); color: var(--text);
+               min-height: 100vh; overflow-x: hidden; }
+        body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background-image: linear-gradient(rgba(125,255,79,0.02) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(125,255,79,0.02) 1px, transparent 1px);
+            background-size: 44px 44px; }
+        .page-body { position: relative; z-index: 2; max-width: 820px; margin: 0 auto; padding: 20px 16px 60px; }
+        .page-title { font-size: 28px; font-weight: 900; letter-spacing: 4px; color: var(--neon);
+                      text-shadow: 0 0 22px var(--neon-glow); text-align: center; margin: 10px 0 4px; }
+        .page-sub { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.7; }
+        .week-bar { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 8px; flex-wrap: wrap;
+                    background: transparent; border: none; box-shadow: none; padding: 0; }
+        .week-bar select { background: var(--surface2); color: var(--text); border: 1px solid rgba(125,255,79,0.25);
+                           border-radius: 4px; padding: 6px 10px; font-size: 13px; }
+        .section-heading { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700;
+            letter-spacing: 3px; color: var(--neon); margin: 28px 0 12px; text-shadow: 0 0 10px var(--neon-glow); }
+        .section-heading::before { content: '▶'; color: var(--purple); font-size: 11px; }
+        .section-heading::after { content: ''; flex: 1; height: 1px; opacity: 0.7;
+            background: linear-gradient(90deg, var(--neon-dim), rgba(139,92,246,0.3), transparent); }
+        .glass-card { background: var(--panel); border: 1px solid rgba(125,255,79,0.13); border-radius: 5px;
+                      box-shadow: 0 4px 24px rgba(0,0,0,0.7); margin-bottom: 18px; overflow: hidden; }
+        .card-inner { padding: 16px 20px; }
+        .race-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+        .race-name { font-size: 20px; font-weight: 900; color: #fff; }
+        .grade { font-size: 12px; font-weight: 900; padding: 1px 8px; border-radius: 3px; background: var(--gold); color: #111; }
+        .race-date { font-size: 12px; color: var(--text-muted); }
+        .edition { display: inline-block; font-size: 11px; font-weight: 700; color: var(--neon);
+                   border: 1px solid rgba(125,255,79,0.35); border-radius: 10px; padding: 1px 9px; margin: 8px 0 6px; }
+        .col-title { font-size: 17px; font-weight: 900; color: var(--gold-light); margin: 2px 0 10px; line-height: 1.5; }
+        .col-p { font-size: 14.5px; line-height: 2; margin-bottom: 12px; }
+        .col-note { font-size: 11px; color: var(--text-muted); line-height: 1.7; margin-top: 4px; }
+        .older { margin-top: 10px; font-size: 13px; }
+        .older summary { cursor: pointer; color: var(--text-muted); padding: 4px 0; }
+        .older .col-p { font-size: 13.5px; color: #b9cdb2; }
+        .links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        .links a { font-size: 12px; font-weight: 700; color: var(--neon); text-decoration: none;
+                   border: 1px solid rgba(125,255,79,0.35); border-radius: 4px; padding: 5px 12px; }
+        .links a.oni { color: var(--gold-light); border-color: rgba(245,216,120,0.45); }
+        .empty { text-align: center; color: var(--text-muted); font-size: 13px; line-height: 2; padding: 30px 10px; }
+        @media (max-width: 600px) { .card-inner { padding: 14px 14px; } .col-p { font-size: 14px; } }
+    </style>
+</head>
+<body>
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <div class="page-body">
+        <h1 class="page-title">📝 コラム</h1>
+        <div class="page-sub">
+            毎週の重賞を、木曜・金曜に舞鬼法師がデータの事実から語る週中コラム。<br>
+            レース当日は予想画面の「鬼眼コラム」で、枠順をふまえた展開図も描きます。
+        </div>
+
+        <form class="week-bar" method="get" action="/column" th:if="${!#lists.isEmpty(weeks)}">
+            <select name="week" onchange="this.form.submit()">
+                <option th:each="w : ${weeks}" th:value="${w.key}" th:text="${w.label}"
+                        th:selected="${w.key == selectedWeek}">10月4日・10月5日の週</option>
+            </select>
+        </form>
+
+        <div class="glass-card" th:if="${#lists.isEmpty(races)}">
+            <div class="empty">まだコラムがありません。<br>毎週木曜・金曜の朝に、その週末の重賞のコラムが公開されます。</div>
+        </div>
+
+        <th:block th:if="${!#lists.isEmpty(races)}">
+            <div class="section-heading" th:text="${weekLabel + 'の重賞'}">10月4日・10月5日の重賞</div>
+            <div class="glass-card" th:each="r : ${races}" th:attr="id=${'race-' + r.raceId}">
+                <div class="card-inner" th:with="cur=${r.editions[0]}">
+                    <div class="race-head">
+                        <span class="race-name" th:text="${r.raceName}">毎日王冠</span>
+                        <span class="grade" th:if="${r.grade != null}" th:text="${r.grade}">G2</span>
+                        <span class="race-date" th:text="${r.dateLabel}">10月5日（日）</span>
+                    </div>
+                    <span class="edition" th:text="${cur.label}">金曜版</span>
+                    <h2 class="col-title" th:text="${cur.title}">見出し</h2>
+                    <p class="col-p" th:each="p : ${cur.paragraphs}" th:text="${p}">本文</p>
+                    <div class="col-note"
+                         th:text="${'※ アプリが集めたデータ（近走成績・過去の同じレースの結果）をもとに'
+                             + (cur.generator == 'template' ? '自動で組み立てた' : 'AIが文章化した')
+                             + 'コラムです（' + #temporals.format(cur.updated.toLocalDateTime(), 'M/d HH:mm') + ' 更新）。馬券の購入は自己判断で。'}">注記</div>
+                    <details class="older" th:each="ed, st : ${r.editions}" th:if="${st.index > 0}">
+                        <summary th:text="${ed.label + 'を読む'}">木曜版を読む</summary>
+                        <h3 class="col-title" th:text="${ed.title}">見出し</h3>
+                        <p class="col-p" th:each="p : ${ed.paragraphs}" th:text="${p}">本文</p>
+                    </details>
+                    <div class="links">
+                        <a th:href="@{/predict-v2(raceId=${r.raceId})}">予想画面へ</a>
+                        <a class="oni" th:if="${r.hasOni}" th:href="@{/predict-v2(raceId=${r.raceId})}">👁️ 鬼眼コラム（展開図つき）を読む</a>
+                    </div>
+                </div>
+            </div>
+        </th:block>
+    </div>
+</body>
+</html>

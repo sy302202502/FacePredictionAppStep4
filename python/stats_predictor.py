@@ -32,6 +32,7 @@ from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, 
 from race_condition import resolve_condition
 from pace_analyzer import running_style, predict_pace, pace_adjustment
 import tenkai
+import race_facts
 from tospo_client import fetch_adjustments as fetch_tospo_adjustments
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
@@ -655,16 +656,21 @@ def build_comment(results, dist, surf, detail, today_condition=None):
     return "。".join(parts) if parts else "特徴的なポイントなし"
 
 def save_tenkai(conn, race_id, scored):
-    """展開想定図の材料（tenkai.horse_features）を stats_prediction.tenkai に保存する。
+    """展開想定図の材料（tenkai.horse_features → tenkai 列）と、週中コラム用の近走の事実
+    （race_facts.horse_recent → recent 列）を保存する。
     本体の保存とは別に行い、列が追加できない・保存に失敗しても予想そのものは止めない"""
-    if not tenkai.ensure_column(conn):
+    cols = [c for c in ('tenkai', 'recent') if tenkai.ensure_column(conn, c)]
+    if not cols:
         return
     cur = conn.cursor()
     try:
         for h in scored:
-            if h.get('horse_id') and h.get('tenkai'):
-                cur.execute("UPDATE stats_prediction SET tenkai = %s WHERE race_id = %s AND horse_id = %s",
-                            (json.dumps(h['tenkai'], ensure_ascii=False), race_id, h['horse_id']))
+            if not h.get('horse_id'):
+                continue
+            # 今回取れなかった馬は NULL で上書きする（前回の古い材料を新しい事実として使わないため）
+            for c in cols:
+                cur.execute(f"UPDATE stats_prediction SET {c} = %s WHERE race_id = %s AND horse_id = %s",
+                            (json.dumps(h[c], ensure_ascii=False) if h.get(c) else None, race_id, h['horse_id']))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -760,6 +766,7 @@ def main():
                                             today_condition=today_condition)
         style_info = running_style(results)
         feats = tenkai.horse_features(results)
+        recent = race_facts.horse_recent(results, target_surface, target_distance)
         if style_info:
             detail['脚質'] = (f"{style_info['style']}（直近{style_info['samples']}走の平均通過"
                              f"{style_info['ratio']:.0%}"
@@ -774,6 +781,7 @@ def main():
             'results_count': len(results),
             'style': style_info,
             'tenkai': feats,
+            'recent': recent,
         })
         polite_sleep(1.5, 3.0)
 

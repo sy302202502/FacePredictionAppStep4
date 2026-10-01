@@ -427,6 +427,29 @@ CREATE TABLE IF NOT EXISTS public.tenkai_check (
     actual       text,
     checked_at   timestamp without time zone DEFAULT now()
 );
+-- 2026-10-01 追加: 週中コラム（木曜・金曜。python/week_column.py）と、その材料
+ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS recent text;   -- 近走の事実（race_facts.horse_recent）
+CREATE TABLE IF NOT EXISTS public.past_race_result (                      -- 過去の同じレースの結果（1レース1回だけ取得）
+    race_id    character varying(20) PRIMARY KEY,
+    race_name  character varying(200),
+    race_date  date,
+    venue      character varying(20),
+    data       text,
+    fetched_at timestamp without time zone DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.week_column (
+    race_id    character varying(20) NOT NULL,
+    edition    character varying(8)  NOT NULL,   -- thu=木曜版 / fri=金曜版
+    race_name  character varying(200),
+    race_date  date,
+    grade      character varying(8),
+    title      character varying(200) NOT NULL,
+    body       text NOT NULL,
+    generator  character varying(40),
+    facts_hash character varying(64),
+    updated_at timestamp without time zone DEFAULT now(),
+    PRIMARY KEY (race_id, edition)
+);
 
 -- 2026-09-28 追加: 顔面分析の項目別の点数（face_analyzer_local.py が保存。検証用）
 ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_eyes double precision;

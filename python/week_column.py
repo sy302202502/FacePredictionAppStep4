@@ -91,7 +91,7 @@ def ensure_table(conn):
             body       TEXT NOT NULL,
             generator  VARCHAR(40),
             facts_hash VARCHAR(64),
-            updated_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'Asia/Tokyo'),
             PRIMARY KEY (race_id, edition)
         )
     """)
@@ -337,11 +337,11 @@ def main():
     if not dry:
         cur.execute("""
             INSERT INTO week_column (race_id, edition, race_name, race_date, grade, title, body, generator, facts_hash, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW() AT TIME ZONE 'Asia/Tokyo')
             ON CONFLICT (race_id, edition) DO UPDATE
               SET race_name = EXCLUDED.race_name, race_date = EXCLUDED.race_date, grade = EXCLUDED.grade,
                   title = EXCLUDED.title, body = EXCLUDED.body, generator = EXCLUDED.generator,
-                  facts_hash = EXCLUDED.facts_hash, updated_at = NOW()
+                  facts_hash = EXCLUDED.facts_hash, updated_at = NOW() AT TIME ZONE 'Asia/Tokyo'
         """, (race_id, edition, facts['レース'], facts['_race_date'], grade, col['title'], col['body'], generator, h))
         conn.commit()
     cur.close()

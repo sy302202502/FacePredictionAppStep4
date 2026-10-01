@@ -111,7 +111,7 @@ def ensure_table(conn):
             body       TEXT NOT NULL,
             generator  VARCHAR(40),
             facts_hash VARCHAR(64),
-            updated_at TIMESTAMP DEFAULT NOW()
+            updated_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'Asia/Tokyo')
         )
     """)
     cur.execute("ALTER TABLE race_column ADD COLUMN IF NOT EXISTS tweet TEXT")
@@ -505,11 +505,11 @@ def main():
     if not dry:
         cur.execute("""
             INSERT INTO race_column (race_id, race_name, title, body, generator, facts_hash, tweet, diagram, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW() AT TIME ZONE 'Asia/Tokyo')
             ON CONFLICT (race_id) DO UPDATE
               SET race_name = EXCLUDED.race_name, title = EXCLUDED.title, body = EXCLUDED.body,
                   generator = EXCLUDED.generator, facts_hash = EXCLUDED.facts_hash,
-                  tweet = EXCLUDED.tweet, diagram = EXCLUDED.diagram, updated_at = NOW()
+                  tweet = EXCLUDED.tweet, diagram = EXCLUDED.diagram, updated_at = NOW() AT TIME ZONE 'Asia/Tokyo'
         """, (race_id, facts['レース'], col['title'], col['body'], generator, h, tweet,
               json.dumps(facts['_diagram'], ensure_ascii=False) if facts.get('_diagram') else None))
         conn.commit()

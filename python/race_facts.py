@@ -26,6 +26,9 @@ from constants import HEADERS, polite_sleep
 
 PAST_YEARS = 5          # 過去何回分の同じレースを見るか
 RECENT_RUNS = 5         # 保存する近走の数
+# 地方競馬の開催地（成績表の「開催」列。これ以外で中央でもないものは海外とみなす）
+LOCAL_TRACKS = {'帯広', '門別', '盛岡', '水沢', '浦和', '船橋', '大井', '川崎', '金沢', '笠松', '名古屋',
+                '園田', '姫路', '高知', '佐賀', 'ばんえい'}
 
 
 # ── 馬ごとの近走 ──────────────────────────────────────
@@ -45,7 +48,8 @@ def horse_recent(results, target_surface=None, target_distance=None, asof=None):
         return None
     runs = [{'date': r['date'], 'race': r['race_name'], 'grade': r.get('grade'), 'rank': r['rank'],
              'field': r['horses'], 'pop': r.get('popularity'), 'surface': r['surface'],
-             'distance': r['distance'], 'cond': r.get('condition')} for r in flat[:RECENT_RUNS]]
+             'distance': r['distance'], 'cond': r.get('condition'), 'venue': r.get('venue')}
+            for r in flat[:RECENT_RUNS]]
     gw = {}
     for r in flat:
         if r['rank'] == 1 and r.get('grade') in ('G1', 'G2', 'G3'):
@@ -60,18 +64,26 @@ def horse_recent(results, target_surface=None, target_distance=None, asof=None):
 
 
 def run_text(r):
-    """近走1走 → 「9/14 セントウルS 3着（14頭・8番人気・芝1200m）」"""
+    """近走1走 → 「9/14 セントウルS 3着（14頭・8番人気・芝1200m）」。
+    海外のレースは開催地を添える（netkeiba の成績表は長いレース名を途中で切るため、
+    「チャンピオンズ&チャ(GI)」だけでは何のレースか分からない）"""
     d = _d(r['date'])
     when = f"{d.month}/{d.day}" if d else r['date']
     pop = f"・{r['pop']}番人気" if r.get('pop') and r['pop'] < 30 else ''
-    return f"{when} {r['race']} {r['rank']}着（{r['field']}頭{pop}・{r['surface']}{r['distance']}m）"
+    v = re.sub(r'\d', '', r.get('venue') or '')
+    where = ''
+    if v and not tenkai.venue_of_kaisai(v):           # 中央の開催（例: 4東京2）以外
+        where = f"・地方（{v}）" if v in LOCAL_TRACKS else f"・海外（{v}）"
+    return f"{when} {r['race']} {r['rank']}着（{r['field']}頭{pop}・{r['surface']}{r['distance']}m{where}）"
 
 
 def horse_lines(rec, race_date=None):
     """近走の事実 → 材料の文字列のリスト"""
     if not rec or not rec.get('runs'):
         return []
-    out = ['近走: ' + ' / '.join(run_text(r) for r in rec['runs'][:3])]
+    # 「前走」は最も新しい1走だけ。それより前は「2走前」「3走前」と明記する（取り違えの防止）
+    labels = ['前走', '2走前', '3走前']
+    out = ['近走: ' + ' / '.join(f"{labels[i]} {run_text(r)}" for i, r in enumerate(rec['runs'][:3]))]
     last = _d(rec['runs'][0]['date'])
     if last and race_date:
         weeks = (race_date - last).days // 7

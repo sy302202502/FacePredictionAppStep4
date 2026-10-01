@@ -53,6 +53,8 @@ TASK = """以下の「材料」だけを使って、{race}の週中コラム（{
 4. 締め（週末が楽しみという一言と、「レース当日の鬼眼コラムでは枠順をふまえた展開図も描く」という予告）
 
 馬名は材料の表記どおりに書く（馬番は書かない）。
+「前走」は材料の「前走」の1走だけを指す。2走前・3走前のレースに触れるときは「2走前の〇〇」のように必ず区別して書き、
+前走の話と同じ文に並べない。海外・地方のレースは材料の（海外）（地方）の表記を添える。
 
 出力はJSONのみ: {{"title": "30字以内の見出し", "body": "本文（段落は改行2つで区切る）"}}
 
@@ -227,8 +229,14 @@ def check(col, facts):
         for t in tokens(part):
             if t not in own:
                 return f"{name}の事実にない数字「{t}」"
-        # 着順は、同じ句（読点までの区切り）にあるレース名（前でも後でも、近いほう）か「前走」と組で照合
         runs = h.get('_runs', [])
+        # 「前走から18週の休み明けで、2/15の共同通信杯を1着」のように、前走の話に2走前以前のレースを
+        # 並べると、そのレースが前走だと読めてしまう。前走に触れた部分には前走のレース名以外を出さない
+        if '前走' in part and runs:
+            older = [r for r, _ in runs[1:] if r and r in part and r != runs[0][0]]
+            if older and runs[0][0] not in part:
+                return f"{name}の前走の話に2走前以前の「{older[0]}」が混ざっている"
+        # 着順は、同じ句（読点までの区切り）にあるレース名（前でも後でも、近いほう）か「前走」と組で照合
         for seg in re.split(r'[、，,]', part):
             for m in re.finditer(r'(?<![\d.])(\d+)着(?!以内)', seg):
                 near = [(abs(i - m.start()), r, k) for r, k in runs if r
@@ -281,7 +289,7 @@ def write_template(facts, edition):
         for h in hs:
             if not h['事実']:
                 continue
-            last = h['事実'][0].replace('近走: ', '').split(' / ')[0]
+            last = h['事実'][0].replace('近走: ', '').split(' / ')[0].replace('前走 ', '', 1)
             same = next((x for x in h['事実'] if x.endswith('回') and 'の成績' in x), None)
             lines.append(f"{h['馬名']}は前走が{last}" + (f"、{same.replace('の成績: ', 'は')}" if same else ''))
         p.append("データ上の有力馬の近走もチェックしておこう。" + '。'.join(lines) + '。')

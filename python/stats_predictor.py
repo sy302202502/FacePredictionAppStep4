@@ -468,6 +468,7 @@ def fetch_horse_results(horse_id, horse_name):
                     'condition': cols[16] if len(cols) > 16 else '良',
                     # 以下は同じテーブルに元から含まれる列（追加リクエストなし）
                     'weather':   cols[2]  if len(cols) > 2  else '',
+                    'venue':     cols[1]  if len(cols) > 1  else '',   # 開催（例: 4東京2 / シャティン）
                     'passing':   cols[25] if len(cols) > 25 else '',   # 通過順位 例:13-12-12-7
                     'pace':      cols[26] if len(cols) > 26 else '',   # 例:37.1-33.4
                     'agari':     cols[27] if len(cols) > 27 else '',   # 上がり3F

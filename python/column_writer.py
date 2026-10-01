@@ -497,8 +497,9 @@ def main():
     col, reason = write_with_llm(facts)
     generator = 'gemini'
     if not col:
-        if same:
-            # 本文は既存を維持。図は計算だけで作れるので最新にしておく
+        if same and row[1] != 'template':
+            # 本文は既存（AI の文章）を維持。図は計算だけで作れるので最新にしておく
+            # （既存がテンプレートなら、語り口などの変更を反映するため下で作り直す）
             if facts.get('_diagram') and not dry:
                 cur.execute("UPDATE race_column SET diagram = %s WHERE race_id = %s",
                             (json.dumps(facts['_diagram'], ensure_ascii=False), race_id))

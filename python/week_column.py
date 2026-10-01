@@ -333,7 +333,8 @@ def main():
     col, reason = write_with_llm(facts, edition)
     generator = 'gemini'
     if not col:
-        if row and row[0] == h:
+        # 材料が同じで既存が AI の文章なら残す。既存がテンプレートなら、語り口などの変更を反映するため作り直す
+        if row and row[0] == h and row[1] != 'template':
             print(f"  AI文章化に失敗（{reason}）→ 既存の週中コラムを維持")
             print(f"RESULT:{json.dumps({'success': True, 'skipped': 'llm_failed'})}")
             conn.close()

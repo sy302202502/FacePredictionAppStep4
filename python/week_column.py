@@ -53,6 +53,7 @@ TASK = """以下の「材料」だけを使って、{race}の週中コラム（{
 馬名は材料の表記どおりに書く（馬番は書かない）。
 「前走」は材料の「前走」の1走だけを指す。2走前・3走前のレースに触れるときは「2走前の〇〇」のように必ず区別して書き、
 前走の話と同じ文に並べない。海外・地方のレースは材料の（海外）（地方）の表記を添える。
+過去のレースは必ずレース名で書く。「同レース」「そのレース」「同じレース」のように指す先があいまいな言い方はしない。
 
 出力はJSONのみ: {{"title": "30字以内の見出し", "body": "本文（段落は改行2つで区切る）"}}
 
@@ -204,6 +205,9 @@ def check(col, facts):
         return f'文字数 {len(body)}'
     if body.count('！') + body.count('!') > MAX_EXCLAIM:
         return '「！」が多い（語り口）'
+    for w in ('同レース', 'そのレース', '同じレースに', '同競走'):
+        if w in text:
+            return f'指す先があいまいな言い方「{w}」'
     material = json.dumps(_public(facts), ensure_ascii=False)
     for w in BANNED:
         if w in text:

@@ -70,7 +70,8 @@ public class ColumnController {
             "       wc.generator, wc.updated_at, " +
             "       EXISTS (SELECT 1 FROM race_column rc WHERE rc.race_id = wc.race_id) AS has_oni " +
             "FROM week_column wc WHERE wc.race_date >= ? AND wc.race_date < ? " +
-            "ORDER BY wc.race_date, wc.grade, wc.race_id, wc.edition DESC",
+            // 同じレースは 金曜版 → 木曜版 の順（新しい版を本文に。文字列順の DESC だと thu が先に来てしまう）
+            "ORDER BY wc.race_date, wc.grade, wc.race_id, CASE wc.edition WHEN 'fri' THEN 0 ELSE 1 END",
             Date.valueOf(monday), Date.valueOf(monday.plusDays(7)));
         Map<String, Map<String, Object>> byRace = new LinkedHashMap<>();
         for (Map<String, Object> r : rows) {
@@ -94,7 +95,7 @@ public class ColumnController {
             ed.put("updated", r.get("updated_at"));
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> eds = (List<Map<String, Object>>) race.get("editions");
-            eds.add(ed);   // edition DESC なので 金曜版 → 木曜版 の順
+            eds.add(ed);   // 金曜版 → 木曜版 の順
         }
         return new ArrayList<>(byRace.values());
     }

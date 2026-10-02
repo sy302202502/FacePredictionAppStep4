@@ -167,7 +167,8 @@ def _style(h, field):
     if p == 1:
         return '逃げ'
     r = (p - 1) / (field - 1)
-    return '先行' if r <= 0.33 else '差し' if r <= 0.66 else '追込'
+    # 境目ちょうど（10頭立ての4番手＝1/3 など）は前側に入れる
+    return '先行' if r <= 1 / 3 + 1e-9 else '差し' if r <= 2 / 3 + 1e-9 else '追込'
 
 
 def past_trends(conn, race_name, race_date, venue_now=None, surface_now=None, distance_now=None):

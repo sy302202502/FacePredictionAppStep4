@@ -292,7 +292,7 @@ def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, su
     finally:
         cur.close()
 
-def sync_with_latest_shutuba():
+def sync_with_latest_shutuba(days=1):
     """
     DBのrace_entryを出馬表と同期し、除外・取消馬を自動削除 + race_specific_resultを再ランク付け
 
@@ -303,13 +303,14 @@ def sync_with_latest_shutuba():
     cur = conn.cursor()
     try:
         today = datetime.now().date()
-        # 今日以降で未来2日以内のレースを対象（当日・翌日まで）
+        # 今日から days 日後までのレースを対象（既定は当日・翌日。金曜は日曜まで＝2:
+        # 出走確定後の日曜のレースから回避馬を外してから週中コラムの金曜版を書くため）
         cur.execute("""
             SELECT DISTINCT race_id, race_name, race_date
             FROM race_entry
             WHERE race_date >= %s AND race_date <= %s
             ORDER BY race_date, race_name
-        """, (today, today + timedelta(days=1)))
+        """, (today, today + timedelta(days=days)))
         races = cur.fetchall()
         # SELECT で開いた暗黙トランザクションをここで閉じる。
         # この後は netkeiba へのネットワーク取得（数十秒〜数分）が続くため、
@@ -503,7 +504,8 @@ def main():
     # --sync: 出馬表との差異チェック・除外馬削除・再ランク付け
     if '--sync' in sys.argv:
         print("=== 出走馬同期開始（出馬表との差異チェック） ===")
-        if sync_with_latest_shutuba() is False:
+        days = int(sys.argv[sys.argv.index('--days') + 1]) if '--days' in sys.argv else 1
+        if sync_with_latest_shutuba(days) is False:
             sys.exit(1)
         return
 

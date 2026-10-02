@@ -338,7 +338,10 @@ def main():
     log("─" * 50)
     log("[0] 出馬表の最新同期（直前変更を反映）")
     log("─" * 50)
-    ok_sync, _ = run_script('entry_fetcher.py', ['--sync'], '出馬表 同期')
+    # 金曜は日曜のレースまで同期する（木曜に出走が確定した日曜の重賞から回避馬を外し、
+    # 週中コラムの金曜版が回避馬や古い頭数で書かれないように）
+    sync_days = ['--days', '2'] if datetime.now().weekday() == 4 else []
+    ok_sync, _ = run_script('entry_fetcher.py', ['--sync'] + sync_days, '出馬表 同期')
     if not ok_sync:
         log("  ⚠️ 同期失敗（取消馬の反映ができていない可能性）")
         send_discord(

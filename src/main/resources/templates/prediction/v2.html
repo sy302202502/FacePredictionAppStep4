@@ -1420,9 +1420,7 @@
                             近走の位置取り・末脚・想定ペースから描いたイメージで、実際の展開は出遅れや騎手の判断で変わります。
                         </div>
                         <div class="column-note"
-                             th:text="${'※ 馬場・枠順・脚質などアプリのデータをもとに'
-                                 + (column.generator == 'template' ? '自動で組み立てた' : 'AIが文章化した')
-                                 + 'コラムです（' + #temporals.format(column.updated_at.toLocalDateTime(), 'M/d HH:mm') + ' 更新）。馬券の購入は自己判断で。'}">注記</div>
+                             th:text="${'※ ' + #temporals.format(column.updated_at.toLocalDateTime(), 'M/d HH:mm') + ' 更新。馬券の購入は自己判断で。'}">注記</div>
                         <!-- X投稿案（管理者のみ。投稿は手動） -->
                         <div class="tweet-box" sec:authorize="hasRole('ADMIN')" th:if="${column.tweet != null}">
                             <div class="tweet-head">𝕏 投稿案（管理者のみ表示）</div>

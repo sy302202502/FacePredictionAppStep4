@@ -629,10 +629,13 @@ def build_comment(results, dist, surf, detail, today_condition=None):
 
     dist_wins = len([r for r in results
                      if r['surface'] == surf and abs(r['distance']-dist)<=200 and r['rank']==1])
+    # 「この距離で」と書くと今回の距離ちょうどで勝ったように読めるため、数えた範囲を書く
+    # （例: 1800m のレースで 1600m の2勝 →「芝1600〜2000mで2勝」）
+    span = f"{surf}{dist - 200}〜{dist + 200}m"
     if dist_wins >= 2:
-        parts.append(f"この距離で{dist_wins}勝と得意")
+        parts.append(f"{span}で{dist_wins}勝と得意")
     elif dist_wins == 1:
-        parts.append("この距離での勝利実績あり")
+        parts.append(f"{span}での勝利実績あり")
 
     # 馬場コメントは当日の馬場に関係するときだけ出す。
     # （良馬場の日に「稍重以上の成績は良くない」と書いても判断材料にならない）

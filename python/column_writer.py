@@ -43,7 +43,7 @@ VOICE = """- 一人称は「私」。読者への呼びかけは「みんな」
 - 普段は落ち着いたトーンでデータを語り、注目ポイントや締めなど要所だけ熱量を上げる。「！」は要所だけ（全体で3回まで）
 - 下品な言葉・煽り・他者の悪口は使わない"""
 # 語り口から外れていると判断する言葉（AI の文章がこれを含んだら書き直し扱い）
-VOICE_NG = ('僕', '俺', 'だよ', 'じゃん')
+VOICE_NG = ('僕', '俺', 'だよ', 'じゃん', 'みなさん', '皆さん')
 MAX_EXCLAIM = 4     # 本文の「！」の上限（要所だけ熱く）
 
 PERSONA = """あなたは競馬予想VTuber「舞鬼法師（まいきーほうし／MIKEY MASTER）」として、
@@ -57,6 +57,7 @@ PERSONA = """あなたは競馬予想VTuber「舞鬼法師（まいきーほう�
 - 書いてよい事実は、渡された「材料」にあるものだけ。材料にない過去の戦績・騎手の話・
   コースの傾向・調教の中身・オッズ・人気などを作らない
 - 馬名・馬番・枠番・脚質・馬場・ペースは材料と一字一句一致させる
+- 馬が内か外かを書くときは、材料の「枠の位置」（1〜3枠=内、4〜5枠=中、6〜8枠=外）に従う。「中」の馬を「外」「内」と書かない
 - 「絶対」「確実」「鉄板」「必ず勝つ」など結果を保証する言い方はしない。馬券は自己判断で、という姿勢
 - 一般論として使ってよいのは次の「傾向」だけ。コース形態や当日の馬場状態で逆になることも多いので、
   必ず「〜になりやすい」「〜の可能性がある」と推測の言い方で書き、断定しない:
@@ -128,6 +129,13 @@ def ensure_table(conn):
     cur.close()
     # 展開図の材料の列（stats_predictor が保存）。統計予想の再実行より先にコラムを書いても失敗しないように
     tenkai.ensure_column(conn)
+
+
+def waku_side(waku):
+    """枠番 → 内・中・外（1〜3枠=内、4〜5枠=中、6〜8枠=外）。本文で「外枠」「内枠」と書くときの基準"""
+    if not waku:
+        return None
+    return '内' if waku <= 3 else '中' if waku <= 5 else '外'
 
 
 def _style(detail):
@@ -202,7 +210,7 @@ def load_facts(conn, race_id, grade=None):
 
     def horse_facts(h):
         return {
-            '印': h['mark'], '馬番': h['num'], '枠番': h['waku'], '馬名': h['name'],
+            '印': h['mark'], '馬番': h['num'], '枠番': h['waku'], '枠の位置': waku_side(h['waku']), '馬名': h['name'],
             '脚質': h['style'] or '不明',
             '顔面の見立て': _first_sentence(h['face_comment']),
             '統計の根拠': h['stats_comment'],
@@ -227,7 +235,8 @@ def load_facts(conn, race_id, grade=None):
         '当日の馬場': d0.get('当日馬場') or '不明',
         '想定ペース': d0.get('想定ペース') or '不明',
         '逃げ・先行馬（馬番順）': [
-            {'馬番': h['num'], '枠番': h['waku'], '馬名': h['name'], '脚質': h['style']} for h in front],
+            {'馬番': h['num'], '枠番': h['waku'], '枠の位置': waku_side(h['waku']), '馬名': h['name'], '脚質': h['style']}
+            for h in front],
         '鬼眼の印': [horse_facts(h) for h in horses if h['mark']],
         '展開の穴': (dict(horse_facts(dark), **{'展開の見立て': dark['detail'].get('展開')}) if dark else None),
         '回り': (diagram or {}).get('direction'),
@@ -239,7 +248,8 @@ def load_facts(conn, race_id, grade=None):
     }
     facts['_diagram'] = diagram
     # 検査用（ハッシュ・LLMには渡さない）: 馬番 → 馬名・印
-    facts['_roster'] = {num: {'name': h['name'], 'mark': h['mark']} for num, h in roster.items()}
+    facts['_roster'] = {num: {'name': h['name'], 'mark': h['mark'], 'side': waku_side(h['waku'])}
+                        for num, h in roster.items()}
     return facts, None
 
 
@@ -296,6 +306,20 @@ def _check_facts(text, facts):
         num = int(m.group(2))
         if num in roster and roster[num]['mark'] != m.group(1):
             return f'印の不一致 {m.group(1)}{num}番'
+    # 内・外の取り違え: 「外に」「外枠」などと書いた句に出てくる馬は、すべて枠の位置が「外」であること（内も同様）。
+    # 「内の2番と外の17番」のように同じ句に内と外の両方がある場合は判定しない
+    out_words, in_words = ('外枠', '外に', '外目', '外から', '大外'), ('内枠', '内に', '内目', '内から', '最内', '内ラチ')
+    for seg in re.split(r'[。！？、\n]', text):
+        claims_out = any(w in seg for w in out_words)
+        claims_in = any(w in seg for w in in_words)
+        if claims_out == claims_in:
+            continue
+        want = '外' if claims_out else '内'
+        for m in re.finditer(r'(\d{1,2})番', seg):
+            num = int(m.group(1))
+            side = roster.get(num, {}).get('side')
+            if side and side != want:
+                return f'枠の位置の取り違え（{num}番は{side}なのに「{want}」）'
     # 材料と違うペース・馬場を書いていないか
     pace = next((p for p in PACES if p in facts['想定ペース']), None)
     for p in PACES:

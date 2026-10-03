@@ -181,7 +181,7 @@ def get_horse_photo_no(horse_id):
         r.encoding = 'EUC-JP'
         soup = BeautifulSoup(r.text, 'lxml')
         for img in soup.find_all('img'):
-            m = re.search(r'show_photo\.php\?horse_id=\d+&no=(\d+)', img.get('src', ''))
+            m = re.search(r'show_photo\.php\?horse_id=\w+&no=(\d+)', img.get('src', ''))   # 海外馬の horse_id は英数字
             if m:
                 return m.group(1)
     except Exception:

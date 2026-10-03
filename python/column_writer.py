@@ -49,7 +49,8 @@ VOICE_NG = ('僕', '俺', 'だよ', 'じゃん', 'みなさん', '皆さん')
 # 舞鬼のコンテンツに関係のない第三者・情報元の名前（コラム・投稿文に出さない。2026-10-03 本人の指定）
 SOURCE_NG = ('netkeiba', 'ネットケイバ', 'ネット競馬', '気象庁', '東スポ', '東京スポーツ', 'Gemini', 'ChatGPT', 'llava')
 # 保存済みの文章・材料に残っている情報元の表記の置き換え（古いデータを表示しても出ないように）
-SOURCE_REPLACE = (('netkeiba確定', '確定'), ('気象庁予報', '予報'))
+SOURCE_REPLACE = (('netkeiba確定', '確定'), ('気象庁予報', '予報'),
+                  ('不明（海外のレースのため馬場は不明（中立扱い））', '不明（海外のレース・中立扱い）'))
 MAX_EXCLAIM = 4     # 本文の「！」の上限（要所だけ熱く）
 
 PERSONA = """あなたは競馬予想VTuber「舞鬼法師（まいきーほうし／MIKEY MASTER）」として、
@@ -174,7 +175,9 @@ def _style(detail):
 
 
 def _first_sentence(text):
-    return (text or '').split('。')[0].strip() or None
+    # 顔面分析のコメント先頭の「【5番】」（予想画面のカード用）は文章では外す
+    text = re.sub(r'^\s*【\d+番】\s*', '', text or '')
+    return text.split('。')[0].strip() or None
 
 
 def load_facts(conn, race_id, grade=None):
@@ -486,7 +489,10 @@ def write_template(facts):
     nige = [h for h in front if h['脚質'] == '逃げ']
     paras = [f"みんな、{facts['レース']}の鬼眼コラムです。{facts['競馬場'] or ''}{facts['コース']}、"
              f"{facts['出走頭数']}頭の戦いになります。"]
-    paras.append(f"馬場は{facts['当日の馬場']}。私の鬼眼で、この条件を味方にできる馬を探していきます。")
+    if facts['当日の馬場'].startswith('不明'):
+        paras.append("馬場の発表はまだありません。私の鬼眼で、この舞台を味方にできる馬を探していきます。")
+    else:
+        paras.append(f"馬場は{facts['当日の馬場']}。私の鬼眼で、この条件を味方にできる馬を探していきます。")
     def label(h):
         return str(h['馬番']) + '番' + h['馬名']
 

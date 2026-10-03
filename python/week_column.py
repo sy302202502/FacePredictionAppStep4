@@ -19,7 +19,7 @@ import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 
-from column_writer import get_conn, VOICE, VOICE_NG, SOURCE_NG, MAX_EXCLAIM, scrub_sources
+from column_writer import get_conn, notify_discord, VOICE, VOICE_NG, SOURCE_NG, MAX_EXCLAIM, scrub_sources
 from llm_client import generate_text
 from race_condition import place_from_race_id
 import column_review
@@ -383,5 +383,34 @@ def main():
     print(f"RESULT:{json.dumps({'success': True, 'generator': generator})}")
 
 
-if __name__ == '__main__':
+def gated_main():
+    """main() で保存したコラムを、公開ページで監査してから終わる（不合格なら取り下げて異常終了）。
+    どの経路（夜の公開・朝のパイプライン・再予想・手で実行）から呼ばれても、監査を通らないコラムは残らない"""
     main()
+    if '--dry-run' in sys.argv or not [a for a in sys.argv[1:] if not a.startswith('--')]:
+        return
+    import column_audit
+    race_id = [a for a in sys.argv[1:] if not a.startswith('--')][0]
+    edition = sys.argv[sys.argv.index('--edition') + 1] if '--edition' in sys.argv else \
+        {3: 'thu', 4: 'fri'}.get(today_jst().weekday())
+    if edition not in EDITIONS:
+        return
+    conn = get_conn()
+    try:
+        passed = column_audit.gate_after_write(conn, race_id, edition)
+    except Exception as e:
+        # 監査そのものが動かない（DB など）→ 確かめられていないコラムを残さない
+        print(f"ページ監査を実行できなかった: {e} → 公開を取り下げ")
+        conn.rollback()
+        column_audit.take_down(conn, race_id, edition)
+        passed = False
+    finally:
+        conn.close()
+    if not passed:
+        notify_discord(f"⛔ {race_id} の{'週中' if edition else '鬼眼'}コラムはページ監査に通らず公開を取り下げました")
+        print('RESULT:{"success": false, "audit": "failed"}')
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    gated_main()

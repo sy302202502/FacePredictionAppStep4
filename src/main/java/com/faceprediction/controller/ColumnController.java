@@ -87,6 +87,7 @@ public class ColumnController {
                 return m;
             });
             Map<String, Object> ed = new LinkedHashMap<>();
+            ed.put("key", r.get("edition"));   // 監査用（column_audit が版ごとに照合する）
             ed.put("label", "fri".equals(r.get("edition")) ? "金曜版" : "木曜版");
             ed.put("title", r.get("title"));
             ed.put("paragraphs", Arrays.stream(((String) r.get("body")).split("\\n\\s*\\n"))

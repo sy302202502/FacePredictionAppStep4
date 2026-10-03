@@ -94,11 +94,13 @@
                         <span class="race-date" th:text="${r.dateLabel}">10月5日（日）</span>
                     </div>
                     <span class="edition" th:text="${cur.label}">金曜版</span>
+                    <div class="ed-body" th:attr="data-edition=${cur.key}">
                     <h2 class="col-title" th:text="${cur.title}">見出し</h2>
                     <p class="col-p" th:each="p : ${cur.paragraphs}" th:text="${p}">本文</p>
+                    </div>
                     <div class="col-note"
                          th:text="${'※ ' + #temporals.format(cur.updated.toLocalDateTime(), 'M/d HH:mm') + ' 更新。馬券の購入は自己判断で。'}">注記</div>
-                    <details class="older" th:each="ed, st : ${r.editions}" th:if="${st.index > 0}">
+                    <details class="older" th:each="ed, st : ${r.editions}" th:if="${st.index > 0}" th:attr="data-edition=${ed.key}">
                         <summary th:text="${ed.label + 'を読む'}">木曜版を読む</summary>
                         <h3 class="col-title" th:text="${ed.title}">見出し</h3>
                         <p class="col-p" th:each="p : ${ed.paragraphs}" th:text="${p}">本文</p>

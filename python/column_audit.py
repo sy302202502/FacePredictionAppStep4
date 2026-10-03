@@ -1,28 +1,33 @@
 """
 column_audit.py — 公開しているコラムを「実際に表示されるページ」で監査する（公開前の最後の関門）
 
-    python3 python/column_audit.py <race_id> [--base URL] [--week thu|fri]
-    （終了コード 0=合格 / 1=不合格。不合格の理由を1行ずつ表示）
+    python3 python/column_audit.py <race_id> --base URL [--week thu|fri]
+    （終了コード 0=合格 / 1=不合格。不合格の理由を1行ずつ表示。--base を省くなら APP_PUBLIC_URL が必須）
 
 文章を作る側の検査（column_writer / week_column）とは別に、出来上がったページそのものを読んで確かめる。
 読み手が見るものだけを相手にするので、作る側のどこかに不具合があっても、ここで止まる。
-夜のコラム（night_columns.py）と、X 投稿の用意（Mac の定時タスク）の両方が、この監査に通ったものだけを先へ進める。
+コラムを保存する処理（column_writer / week_column / night_columns / weekly_pipeline / predict_by_race_id）は
+すべて保存の直後にこの監査を通し、不合格なら公開を取り下げる。X 投稿の用意（Mac の定時タスク）も合格したものだけ。
+方針: 「読めなかったので確かめられなかった」は合格ではなく不合格（図・内ラチの線・レース日 など）。
 
 鬼眼コラム（/predict-v2?raceId=…）で確かめること:
-  1. 本文の印（◎は「◎は6番」「◎6番」どちらの書き方も）が、予想画面のカードの印と1頭も違わない
-  2. 本文の頭数（「17頭」）が、カードの数と同じ
-  3. 展開図: 丸の数＝カードの数、図の印＝カードの印、丸の色＝カードの枠、
-     内ラチの向き＝競馬場の回り（東京・新潟・中京=左回り=上、ほかの中央の競馬場=右回り=下）
-  4. 馬場を「（確定）」と書いてよいのはレース当日だけ
-  5. 情報元・第三者の名前、語り口に合わない言葉、結果を保証する言い方が無い
-週中コラム（/column の #race-<race_id>）で確かめること:
-  2・5 に加えて、印（◎○▲△注）と顔つきの話が無いこと
+  1. 表示されたコラムが要求したレースのもの（data-race-id）
+  2. 本文の印（「◎は6番」「◎6番」どちらの書き方も）が、出てくる全ての箇所でカードの印と同じ。◎は必須
+  3. 本文の頭数: 出走頭数を言う表現（「17頭の戦い」「17頭立て」「出走は17頭」など）と、10頭以上の「N頭」がカードの数と同じ
+  4. 展開図（data-diagram）: ok なら2枚とも 丸の数・図の印・丸の色（枠）がカードと同じ、
+     回り（data-direction）が競馬場と同じ（東京・新潟・中京=左、ほかの中央=右。直線は新潟だけ）、
+     内ラチの線があり位置が回りと同じ（左=上、右・直線=下）。broken（図のデータが壊れている）は不合格
+  5. 馬場を「（確定）」と書いてよいのはレース当日だけ。レース日が読めないのに「（確定）」は不合格
+  6. 情報元・第三者の名前、語り口に合わない言葉、結果を保証する言い方が無い（column_writer の禁止語と共通）
+週中コラム（/column の #race-<race_id> の data-edition=<thu|fri>）で確かめること:
+  要求した版の本文について 3・6 に加えて、印（◎○▲△、注＋馬番）と顔つきの話が無いこと
 """
 from __future__ import annotations
 
 import os
 import re
 import sys
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -34,10 +39,31 @@ LEFT = {'東京', '新潟', '中京'}
 WAKU_FILL = {'#ffffff': 1, '#222222': 2, '#e53935': 3, '#1e5bd8': 4,
              '#fdd835': 5, '#2e9e44': 6, '#f57c00': 7, '#f48fb1': 8}
 MARKS = ('◎', '○', '▲', '△', '注')
-NG_WORDS = ('netkeiba', 'ネットケイバ', 'ネット競馬', '気象庁', '東スポ', '東京スポーツ', 'Gemini', 'ChatGPT',
-            '僕', '俺', 'みなさん', '皆さん', 'だよ', 'じゃん', '絶対', '確実', '鉄板', '必ず勝')
 RAIL_STROKE = '#e8f5e0'
-DEFAULT_BASE = os.getenv('APP_INTERNAL_URL') or os.getenv('APP_PUBLIC_URL') or 'http://localhost:8081'
+GUARANTEE_NG = ('絶対', '確実', '鉄板', '必ず勝')
+# 出走頭数を言う表現（「17頭の戦い」「17頭立て」「17頭が出走」「出走は17頭」「17頭で争う」）
+FIELD_AROUND = re.compile(r'出走|頭の戦い|頭立て|頭で争|頭がそろ|頭が揃|頭の争い|フルゲート')
+# 頭数でも出走頭数ではないもの（過去の傾向「3着以内15頭のうち」、木曜の「登録は20頭」）
+NOT_FIELD = re.compile(r'以内|うち|勝ち馬|以下|以上|人気|過去')
+
+
+def _ng_words():
+    """禁止語は文章を作る側（column_writer）と同じものを使う（片方だけ直して食い違うのを防ぐ）"""
+    from column_writer import SOURCE_NG, VOICE_NG
+    return tuple(SOURCE_NG) + tuple(VOICE_NG) + GUARANTEE_NG
+
+
+def _norm(text):
+    """全角・半角、大文字・小文字の違いで禁止語をすり抜けないように"""
+    return unicodedata.normalize('NFKC', text or '').lower()
+
+
+def resolve_base(base=None):
+    """監査するのは公開中のページ。宛先は明示が必須（黙って localhost などに向かない）"""
+    base = base or os.getenv('APP_PUBLIC_URL')
+    if not base:
+        raise RuntimeError('監査先が決まっていない（--base か APP_PUBLIC_URL を指定）')
+    return base.rstrip('/')
 
 
 def _today():
@@ -51,7 +77,7 @@ def _get(url):
 
 
 def _race_date(soup, race_id):
-    """レース選択の「10/04　毎日王冠」から日付（年は race_id の先頭4桁）"""
+    """レース選択の「10/04　毎日王冠」から日付（年は race_id の先頭4桁）。読めなければ None"""
     opt = soup.select_one(f'option[value="{race_id}"]')
     m = re.match(r'\s*(\d{1,2})/(\d{1,2})', opt.get_text() if opt else '')
     return datetime(int(race_id[:4]), int(m.group(1)), int(m.group(2))).date() if m else None
@@ -74,95 +100,142 @@ def _cards(soup):
 
 
 def _text_marks(text):
-    """本文の印 → {印: 馬番}（「◎は6番」「◎6番」「○16番」）"""
-    out = {}
-    for mk, n in re.findall(r'([◎○▲△注])(?:は|\s)*(\d{1,2})番', text):
-        out.setdefault(mk, int(n))
-    return out
+    """本文の印の全ての出現 → [(印, 馬番)]（「◎は6番」「◎6番」「○16番」）"""
+    return [(mk, int(n)) for mk, n in re.findall(r'([◎○▲△注])(?:は|\s)*(\d{1,2})番', text)]
 
 
-def _common(text, problems):
-    for w in NG_WORDS:
-        if w in text:
+def _headcount(text, field, problems):
+    """出走頭数を言う表現・10頭以上の「N頭」は field と同じであること"""
+    for m in re.finditer(r'(\d{1,2})頭', text):
+        n = int(m.group(1))
+        before, after = text[max(0, m.start() - 10): m.start()], text[m.end(): m.end() + 6]
+        around = before + m.group(0) + after
+        if re.search(r'登録', before + after):
+            continue                                   # 木曜の登録頭数は出走数と違ってよい
+        if NOT_FIELD.search(before[-6:] + after):
+            continue
+        if (FIELD_AROUND.search(around) or n >= 10) and n != field:
+            problems.append(f'本文の「{m.group(0)}」が出走頭数 {field}頭 と違う（…{around}…）')
+
+
+def _words(text, problems):
+    t = _norm(text)
+    for w in _ng_words():
+        if _norm(w) in t:
             problems.append(f'使わない言葉「{w}」がある')
 
 
-def audit_race_column(race_id, base=DEFAULT_BASE):
+def audit_race_column(race_id, base=None):
     """鬼眼コラムの監査 → 問題のリスト（空なら合格）"""
+    base = resolve_base(base)
     problems = []
     soup = _get(f'{base}/predict-v2?raceId={race_id}')
     col = soup.select_one('.column-card')
     if not col:
         return ['鬼眼コラムが表示されていない']
+    if col.get('data-race-id') != race_id:
+        return [f'表示されたコラムが別のレースのもの（{col.get("data-race-id")}）']
     body = ' '.join(p.get_text() for p in col.select('.column-p'))
     title = (col.select_one('.column-title') or col).get_text()
     cards = _cards(soup)
+    if not cards:
+        return ['出走馬カードが読めない']
     card_marks = {v['mark']: n for n, v in cards.items() if v['mark'] in MARKS}
 
-    # 1. 印
-    tm = _text_marks(body)
-    for mk, n in tm.items():
+    # 2. 印（全ての出現を確かめる）
+    found = _text_marks(body)
+    for mk, n in found:
         if card_marks.get(mk) != n:
             problems.append(f'本文の{mk}{n}番と、カードの{mk}（{card_marks.get(mk)}番）が違う')
-    if '◎' not in tm:
+    if '◎' not in {mk for mk, _ in found}:
         problems.append('本文に◎が見つからない')
-    # 本文の「N番馬名」の馬名がカードと同じか
     for n, name in re.findall(r'(\d{1,2})番([ァ-ヴー]{2,})', body):
         c = cards.get(int(n))
         if not c:
             problems.append(f'本文の{n}番は出走馬にいない')
         elif not (c['name'].startswith(name) or name.startswith(c['name'])):
             problems.append(f'本文の{n}番{name}と、カードの{n}番{c["name"]}が違う')
-    # 2. 頭数
-    m = re.search(r'(\d{1,2})頭の戦い|(\d{1,2})頭が出走|(\d{1,2})頭立て', body)
-    if m:
-        hc = int(next(g for g in m.groups() if g))
-        if hc != len(cards):
-            problems.append(f'本文の頭数 {hc}頭 と、出走馬カード {len(cards)}頭 が違う')
-    # 3. 展開図
-    venue = VENUES.get(race_id[4:6])
-    for i, svg in enumerate(col.select('.diagram svg'), 1):
-        horses = svg.select('g.dg-horse')
-        if len(horses) != len(cards):
-            problems.append(f'図{i}の丸 {len(horses)}頭 と、カード {len(cards)}頭 が違う')
-        dmarks = {}
-        for g in horses:
-            texts = g.find_all('text')
-            n = int(texts[0].get_text())
-            if len(texts) > 1 and texts[1].get_text() in MARKS:
-                dmarks[texts[1].get_text()] = n
-            fill = (g.find('circle') or {}).get('fill')
-            wk = cards.get(n, {}).get('waku')
-            if wk and WAKU_FILL.get(fill) != wk:
-                problems.append(f'図{i}の{n}番の丸の色が枠（{wk}枠）と違う')
-        if dmarks != card_marks:
-            problems.append(f'図{i}の印 {dmarks} と、カードの印 {card_marks} が違う')
-        rail = next((l for l in svg.find_all('line') if l.get('stroke') == RAIL_STROKE), None)
-        straight = '直後' in (svg.get('aria-label') or '') or 'ゴール前' in (svg.get('aria-label') or '')
-        if venue and rail is not None and not straight:
-            top = int(float(rail.get('y1'))) < 100
-            if top != (venue in LEFT):
-                problems.append(f'図{i}の内ラチが{"上" if top else "下"}（{venue}は{"左" if venue in LEFT else "右"}回りなので'
-                                f'{"上" if venue in LEFT else "下"}が正しい）')
-    # 4. 馬場の「確定」
-    rd = _race_date(soup, race_id)
-    if '（確定）' in body and rd and rd > _today():
-        problems.append(f'レース前日以前（{rd}）なのに馬場を「確定」と書いている')
-    # 5. 言葉
-    _common(title + body, problems)
+    # 3. 頭数
+    _headcount(body, len(cards), problems)
+    # 4. 展開図
+    status = col.get('data-diagram')
+    venue = VENUES.get(str(race_id)[4:6])
+    if status == 'broken':
+        problems.append('展開図のデータが壊れている')
+    elif status == 'ok':
+        svgs = col.select('.diagram svg')
+        if len(svgs) != 2:
+            problems.append(f'展開図が{len(svgs)}枚（2枚のはず）')
+        for i, svg in enumerate(svgs, 1):
+            _audit_svg(i, svg, cards, card_marks, venue, problems)
+    elif status != 'none':
+        problems.append(f'展開図の状態が読めない（{status}）')
+    # 5. 馬場の「確定」
+    if '確定）' in body:
+        rd = _race_date(soup, race_id)
+        if rd is None:
+            problems.append('レース日が読めないのに馬場を「確定」と書いている')
+        elif rd > _today():
+            problems.append(f'レース前日以前（{rd}）なのに馬場を「確定」と書いている')
+    # 6. 言葉
+    _words(title + body, problems)
     return problems
 
 
-def audit_week_column(race_id, base=DEFAULT_BASE):
-    """週中コラムの監査 → 問題のリスト（空なら合格）。頭数は予想画面のカードと比べる"""
+def _audit_svg(i, svg, cards, card_marks, venue, problems):
+    horses = svg.select('g.dg-horse')
+    if len(horses) != len(cards):
+        problems.append(f'図{i}の丸 {len(horses)}頭 と、カード {len(cards)}頭 が違う')
+    dmarks = {}
+    for g in horses:
+        texts = g.find_all('text')
+        n = int(texts[0].get_text())
+        if len(texts) > 1 and texts[1].get_text() in MARKS:
+            if texts[1].get_text() in dmarks:
+                problems.append(f'図{i}に{texts[1].get_text()}が2頭いる')
+            dmarks[texts[1].get_text()] = n
+        fill = (g.find('circle') or {}).get('fill')
+        wk = cards.get(n, {}).get('waku')
+        if n not in cards:
+            problems.append(f'図{i}の{n}番は出走馬にいない')
+        elif wk and WAKU_FILL.get(fill) != wk:
+            problems.append(f'図{i}の{n}番の丸の色が枠（{wk}枠）と違う')
+    if dmarks != card_marks:
+        problems.append(f'図{i}の印 {dmarks} と、カードの印 {card_marks} が違う')
+    d = svg.get('data-direction')
+    if d not in ('右', '左', '直線'):
+        problems.append(f'図{i}の回りが分からない（{d}）')
+        return
+    if venue:
+        want = '左' if venue in LEFT else '右'
+        if d != want and not (d == '直線' and venue == '新潟'):
+            problems.append(f'図{i}の回り「{d}」が{venue}（{want}回り）と違う')
+    rail_attr = svg.get('data-rail')
+    rail = next((l for l in svg.find_all('line') if l.get('stroke') == RAIL_STROKE), None)
+    if rail is None:
+        problems.append(f'図{i}に内ラチの線が無い')
+        return
+    top = float(rail.get('y1')) < 100
+    if rail_attr != ('top' if top else 'bottom'):
+        problems.append(f'図{i}の内ラチの線の位置と data-rail（{rail_attr}）が違う')
+    if top != (d == '左'):
+        problems.append(f'図{i}の内ラチが{"上" if top else "下"}（{d}回りなら{"上" if d == "左" else "下"}）')
+
+
+def audit_week_column(race_id, edition, base=None):
+    """週中コラム（指定した版）の監査 → 問題のリスト（空なら合格）"""
+    base = resolve_base(base)
+    if edition not in ('thu', 'fri'):
+        return [f'週中コラムの版の指定が違う（{edition}）']
     problems = []
-    card = _get(f'{base}/column').select_one(f'#race-{race_id} .card-inner')
-    if not card:
-        return ['週中コラムが表示されていない']
-    # 本文は最新の版だけ（前の版は「木曜版を読む」の中）
-    body = ' '.join(p.get_text() for p in card.select('.col-p') if not p.find_parent('details'))
-    title = (card.select_one('.col-title') or card).get_text()
-    # 印: ◎○▲△ は記号そのもの、「注」は「注10番」のように馬番が続くときだけ（「注目」は除く）
+    card = _get(f'{base}/column').select_one(f'#race-{race_id}')
+    block = card.select_one(f'[data-edition="{edition}"]') if card else None
+    if not block:
+        return [f'週中コラム（{edition}）が表示されていない']
+    body = ' '.join(p.get_text() for p in block.select('.col-p'))
+    title = (block.select_one('.col-title') or block).get_text()
+    if not body.strip():
+        return ['週中コラムの本文が読めない']
     for mk in ('◎', '○', '▲', '△'):
         if mk in body:
             problems.append(f'週中コラムに印「{mk}」がある')
@@ -171,50 +244,79 @@ def audit_week_column(race_id, base=DEFAULT_BASE):
     for w in ('顔', '目つき', '眼差し'):
         if w in body:
             problems.append(f'週中コラムに顔の話「{w}」がある')
-    m = re.search(r'(\d{1,2})頭が(?:出走|登録)', body)
-    if m:
-        n_cards = len(_cards(_get(f'{base}/predict-v2?raceId={race_id}')))
-        if n_cards and int(m.group(1)) != n_cards and '出走予定' not in body:
-            problems.append(f'本文の頭数 {m.group(1)}頭 と、出走馬 {n_cards}頭 が違う')
-    _common(title + body, problems)
+    cards = _cards(_get(f'{base}/predict-v2?raceId={race_id}'))
+    if cards:
+        _headcount(body, len(cards), problems)
+    else:
+        problems.append('出走馬カードが読めない（頭数を確かめられない）')
+    _words(title + body, problems)
     return problems
 
 
+def audit(race_id, week_edition=None, base=None):
+    """監査を実行し、問題のリストを返す。監査そのものが失敗したら、それも問題として返す（合格にしない）"""
+    try:
+        return audit_week_column(race_id, week_edition, base) if week_edition else audit_race_column(race_id, base)
+    except Exception as e:
+        return [f'監査を実行できなかった: {e}']
+
+
+def take_down(conn, race_id, week_edition):
+    cur = conn.cursor()
+    if week_edition:
+        cur.execute("DELETE FROM week_column WHERE race_id = %s AND edition = %s", (race_id, week_edition))
+    else:
+        cur.execute("DELETE FROM race_column WHERE race_id = %s", (race_id,))
+    conn.commit()
+    cur.close()
+
+
 def enforce(conn, race_id, week_edition, rewrite, log=print):
-    """公開したコラムを監査し、不合格なら rewrite() で1回だけ書き直して再監査。
+    """公開したコラムを監査し、不合格なら rewrite() で1回だけ書き直して再監査（rewrite=None なら書き直さない）。
     それでも不合格なら公開を取り下げる（行を消す）。戻り値: (合格したか, 問題のリスト)
     week_edition: 週中コラムなら 'thu' / 'fri'、鬼眼コラムなら None"""
-    def check():
-        try:
-            return audit_week_column(race_id) if week_edition else audit_race_column(race_id)
-        except Exception as e:
-            return [f'監査を実行できなかった: {e}']
-    problems = check()
+    problems = audit(race_id, week_edition)
     if problems and rewrite:
         log(f"  ⚠️ 監査 不合格 → 書き直して再監査: {' / '.join(problems)}")
         rewrite()
-        problems = check()
+        problems = audit(race_id, week_edition)
     if problems:
-        cur = conn.cursor()
-        if week_edition:
-            cur.execute("DELETE FROM week_column WHERE race_id = %s AND edition = %s", (race_id, week_edition))
-        else:
-            cur.execute("DELETE FROM race_column WHERE race_id = %s", (race_id,))
-        conn.commit()
-        cur.close()
+        take_down(conn, race_id, week_edition)
         log(f"  ⛔ 監査に通らないため公開を取り下げました: {' / '.join(problems)}")
         return False, problems
     return True, []
 
 
+def gate_after_write(conn, race_id, week_edition=None, log=print):
+    """コラムを保存した処理の最後に、書いた側が自分で呼ぶ関門（書き直しはしない）。
+    コラムが公開されていれば監査し、不合格なら取り下げる。戻り値: 合格（またはコラムが無い）なら True"""
+    cur = conn.cursor()
+    if week_edition:
+        cur.execute("SELECT 1 FROM week_column WHERE race_id = %s AND edition = %s", (race_id, week_edition))
+    else:
+        cur.execute("SELECT 1 FROM race_column WHERE race_id = %s", (race_id,))
+    exists = cur.fetchone() is not None
+    cur.close()
+    if not exists:
+        return True
+    passed, problems = enforce(conn, race_id, week_edition, None, log)
+    log("ページ監査: 合格" if passed else "ページ監査: 不合格 → 公開を取り下げ（" + ' / '.join(problems) + "）")
+    return passed
+
+
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    args = [a for i, a in enumerate(sys.argv[1:], 1)
+            if not a.startswith('--') and sys.argv[i - 1] not in ('--base', '--week')]
     if not args:
         print(__doc__)
         sys.exit(2)
-    base = sys.argv[sys.argv.index('--base') + 1].rstrip('/') if '--base' in sys.argv else DEFAULT_BASE
+    base = sys.argv[sys.argv.index('--base') + 1] if '--base' in sys.argv else None
+    edition = sys.argv[sys.argv.index('--week') + 1] if '--week' in sys.argv else None
+    if '--week' in sys.argv and edition not in ('thu', 'fri'):
+        print('--week には thu か fri を指定')
+        sys.exit(2)
     rid = args[0]
-    problems = audit_week_column(rid, base) if '--week' in sys.argv else audit_race_column(rid, base)
+    problems = audit(rid, edition, base)
     if problems:
         print(f"監査 不合格（{rid}）")
         for p in problems:

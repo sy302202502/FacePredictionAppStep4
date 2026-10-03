@@ -109,25 +109,38 @@ except subprocess.TimeoutExpired:
     print("⚠️ コラムの書き直しがタイムアウト（予想は完了済み）")
 
 # 5. 書き直した鬼眼コラムを実際のページで監査。通らなければ公開を取り下げる（column_audit）
+#    監査の途中で何かが失敗したときも、確かめられていないコラムを出したままにしない（取り下げて異常終了）
+audit_failed = False
 try:
     import column_audit
     conn3 = psycopg2.connect(host=os.getenv('DB_HOST', 'localhost'), port=os.getenv('DB_PORT', '5432'),
                              dbname=os.getenv('DB_NAME', 'faceapp'), user=os.getenv('DB_USER', 'postgres'),
                              password=os.getenv('DB_PASSWORD', 'postgrestest'))
-    cur3 = conn3.cursor()
-    cur3.execute("SELECT 1 FROM race_column WHERE race_id = %s", (race_id,))
-    has_col = cur3.fetchone() is not None
-    cur3.close()
-    if has_col:
-        passed, problems = column_audit.enforce(
-            conn3, race_id, None,
-            lambda: subprocess.run(['python3', os.path.join(script_dir, 'column_writer.py'), race_id, '--force'],
-                                   cwd=script_dir, timeout=600))
-        print("  鬼眼コラムの監査: " + ("合格" if passed else "不合格のため取り下げ（" + ' / '.join(problems) + "）"))
-    conn3.close()
+    try:
+        cur3 = conn3.cursor()
+        cur3.execute("SELECT 1 FROM race_column WHERE race_id = %s", (race_id,))
+        has_col = cur3.fetchone() is not None
+        cur3.close()
+        if has_col:
+            try:
+                passed, problems = column_audit.enforce(
+                    conn3, race_id, None,
+                    lambda: subprocess.run(['python3', os.path.join(script_dir, 'column_writer.py'), race_id, '--force'],
+                                           cwd=script_dir, timeout=600))
+            except Exception as e:
+                conn3.rollback()
+                column_audit.take_down(conn3, race_id, None)
+                passed, problems = False, [f'監査の途中で失敗: {e}']
+            print("  鬼眼コラムの監査: " + ("合格" if passed else "不合格のため取り下げ（" + ' / '.join(problems) + "）"))
+            audit_failed = not passed
+    finally:
+        conn3.close()
 except Exception as e:
-    print(f"⚠️ コラムの監査に失敗（予想は完了済み）: {e}")
+    print(f"⛔ コラムの監査を実行できなかった（予想は完了済み・コラムは確かめられていない）: {e}")
+    audit_failed = True
 
 print("\n" + "=" * 60)
 print(f"✅ {race_name} の予想完了")
 print(f"   → /predict-v2?raceName={race_name} で確認")
+if audit_failed:
+    sys.exit(3)

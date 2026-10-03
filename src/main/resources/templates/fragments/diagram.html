@@ -3,7 +3,7 @@
 <body>
 <!-- 展開の想定図（RaceDiagramService.scenes の1場面を SVG で描く）。/predict-v2 のコラムと /review の答え合わせで共用。
      sc = 場面、idx = 図の番号（0 始まり。丸をタップしたときの根拠行 why-<idx>-<馬番> に使う） -->
-<div class="diagram-scroll" th:fragment="svg(sc, idx)"><svg viewBox="0 0 800 250" role="img" th:attr="aria-label=${sc.title}">
+<div class="diagram-scroll" th:fragment="svg(sc, idx)"><svg viewBox="0 0 800 250" role="img" th:attr="aria-label=${sc.title},data-direction=${sc.direction},data-rail=${sc.railY > 100 ? 'bottom' : 'top'}">
     <rect x="10" y="40" width="780" height="180" rx="10" fill="#123a1c"/>
     <!-- 内ラチ（太線）と外ラチ -->
     <line x1="10" x2="790" th:attr="y1=${sc.railY},y2=${sc.railY}" stroke="#e8f5e0" stroke-width="5"/>

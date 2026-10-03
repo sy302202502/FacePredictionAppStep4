@@ -1379,7 +1379,8 @@
             <!-- 鬼眼コラム（重賞・枠順確定後） -->
             <div th:if="${column != null}">
                 <div class="section-heading">鬼眼コラム</div>
-                <div class="glass-card column-card">
+                <div class="glass-card column-card"
+                     th:attr="data-race-id=${selectedRaceId},data-diagram=${column.diagram == null ? 'none' : (column.scenes == null ? 'broken' : 'ok')}">
                     <div class="column-inner">
                         <h2 class="column-title" th:text="${column.title}">見出し</h2>
                         <p class="column-p" th:each="p : ${column.paragraphs}" th:text="${p}">本文</p>

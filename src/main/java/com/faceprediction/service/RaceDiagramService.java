@@ -110,6 +110,7 @@ public class RaceDiagramService {
                 }
                 Map<String, Object> scene = new LinkedHashMap<>();
                 scene.put("key", s.path("key").asText());
+                scene.put("direction", direction);   // 監査用（column_audit が回りと内ラチの位置を照合する）
                 scene.put("title", s.path("title").asText());
                 scene.put("goal", s.path("goal").asText());
                 scene.put("horses", horses);

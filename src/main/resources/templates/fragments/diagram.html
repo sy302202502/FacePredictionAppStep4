@@ -10,7 +10,9 @@
     <line x1="10" x2="790" th:attr="y1=${sc.outerY},y2=${sc.outerY}" stroke="#7fa58a" stroke-width="2" stroke-dasharray="8 6"/>
     <text x="20" th:attr="y=${sc.railY > 100 ? sc.railY + 22 : sc.railY - 10}" fill="#9bb592" font-size="14">内ラチ</text>
     <!-- 進行方向 / ゴール -->
-    <text x="785" y="30" text-anchor="end" fill="#f5d878" font-size="16" font-weight="700"
+    <!-- 進行方向の文字は内ラチの反対側に置く（左回りは内ラチが上なので、上の馬の印と重ならないよう下へ） -->
+    <text x="785" text-anchor="end" fill="#f5d878" font-size="16" font-weight="700"
+          th:attr="y=${sc.railY > 100 ? 30 : 242}"
           th:text="${sc.goal + ' ▶'}">1コーナーへ ▶</text>
     <line th:if="${sc.finish}" x1="770" x2="770" y1="40" y2="220" stroke="#ff2244" stroke-width="4"/>
     <g th:each="h : ${sc.horses}" class="dg-horse" th:attr="data-why=${'why-' + idx + '-' + h.num}">

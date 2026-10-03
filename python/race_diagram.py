@@ -28,6 +28,9 @@ _STYLE_EARLY = {'逃げ': 0.05, '先行': 0.25, '差し': 0.55, '追込': 0.85}
 _MAX_LANES = 5
 _GAP = 0.07          # 同じレーンで前後の馬とこれ以上離す（重なり防止）
 _shutuba_cache: dict = {}
+# 中央の競馬場の回り（出馬表から読めなかったときの予備。新潟の直線1000mは出馬表の「直線」で判別）
+VENUE_DIRECTION = {'東京': '左', '新潟': '左', '中京': '左',
+                   '札幌': '右', '函館': '右', '福島': '右', '中山': '右', '京都': '右', '阪神': '右', '小倉': '右'}
 
 # 材料の重み（tenkai_backtest.py の検証で決める。0 は「効果が確認できなかったので使わない」）
 W = {
@@ -262,6 +265,8 @@ def build(horses, pace, direction, course_key=None, abroad=False):
                    key=lambda h: -h['tenkai']['kick'])
     kick_rank = {h['num']: i + 1 for i, h in enumerate(kicks)}
 
+    if direction not in ('右', '左', '直線'):
+        return None   # 回りが分からないまま描くと内ラチの位置を間違えるので、図を付けない
     straight = direction == '直線'
     model = stats.get('model') or {}
     course_note = None
@@ -271,7 +276,7 @@ def build(horses, pace, direction, course_key=None, abroad=False):
         if trend.get('inner_top3') is not None and trend.get('outer_top3') is not None:
             course_note += f"・内枠(1-3) {trend['inner_top3']:.0%} / 外枠(6-8) {trend['outer_top3']:.0%}"
     return {
-        'direction': direction or '右',
+        'direction': direction,
         'pace': pace,
         'evidence': {
             'pace': dict(pace_forecast(horses, stats), label=pace),

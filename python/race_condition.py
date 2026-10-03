@@ -230,7 +230,14 @@ def resolve_condition(race_id, race_date, place=None):
 
     actual, tenki = fetch_actual_condition(race_id)
     if actual:
-        return {'condition': actual, 'source': '確定', 'confidence': 'high',   # 同上（中身はレースページの馬場表記）
+        # 出馬表の「馬場:良」は、その時点で最新の発表。レース当日より前に読んだときは前日（開催中の別の日）の
+        # 発表であって、レース当日の馬場はまだ決まっていない → 「確定」とは書かない
+        from datetime import datetime, timedelta, timezone
+        today = datetime.now(timezone(timedelta(hours=9))).date()
+        rd = race_date if hasattr(race_date, 'year') else datetime.strptime(str(race_date)[:10], '%Y-%m-%d').date()
+        same_day = rd <= today
+        return {'condition': actual, 'source': '確定' if same_day else '前日の発表',
+                'confidence': 'high' if same_day else 'medium',
                 'reason': f"レースページの馬場表記より（天候:{tenki or '?'}）", 'weather': tenki}
 
     est = estimate_condition(place, race_date)

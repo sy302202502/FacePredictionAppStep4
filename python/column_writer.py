@@ -154,6 +154,19 @@ def scrub_sources(conn):
             for old, new in SOURCE_REPLACE:
                 cur.execute(f"UPDATE {table} SET {col} = replace({col}, %s, %s) WHERE {col} LIKE %s",
                             (old, new, f'%{old}%'))
+        # レース前日以前に読んだ馬場を「確定」と書いていたもの（2026-10-03 まで）を「前日の発表」に直す。
+        # 対象はレース日がまだ来ていない予想の材料と、レース日より前に書いた鬼眼コラム
+        cur.execute("""
+            UPDATE stats_prediction sp SET score_detail = replace(score_detail, '（確定）', '（前日の発表）')
+            FROM (SELECT race_id, MIN(race_date) AS d FROM race_entry GROUP BY race_id) e
+            WHERE e.race_id = sp.race_id AND e.d > (NOW() AT TIME ZONE 'Asia/Tokyo')::date
+              AND sp.score_detail LIKE '%%（確定）%%'
+        """)
+        cur.execute("""
+            UPDATE race_column rc SET body = replace(body, '（確定）', '（前日の発表）')
+            FROM (SELECT race_id, MIN(race_date) AS d FROM race_entry GROUP BY race_id) e
+            WHERE e.race_id = rc.race_id AND rc.updated_at::date < e.d AND rc.body LIKE '%%（確定）%%'
+        """)
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -173,6 +186,16 @@ def _style(detail):
     """「差し（直近6走…）」→「差し」。判定不能は None"""
     m = re.match(r'(逃げ|先行|差し|追込)', detail.get('脚質') or '')
     return m.group(1) if m else None
+
+
+def _condition_label(label, race_date):
+    """「良（確定）」はレース当日に読んだ馬場のときだけ。統計予想をレース前日以前に作った場合
+    （夜のコラムなど）は、出馬表の馬場は前日の発表なので「良（前日の発表）」に直す"""
+    from datetime import datetime, timedelta, timezone
+    today = datetime.now(timezone(timedelta(hours=9))).date()
+    if race_date and race_date > today and label.endswith('（確定）'):
+        return label[:-len('（確定）')] + '（前日の発表）'
+    return label
 
 
 def _first_sentence(text):
@@ -264,7 +287,9 @@ def load_facts(conn, race_id, grade=None):
 
     # 展開の想定図（本文と同じ材料から作る。図の要点は本文の材料にも入れて文章と図をそろえる）
     pace_label = (d0.get('想定ペース') or '').split('（')[0]
-    diagram = race_diagram.build(horses, pace_label, shutuba['direction'],
+    # 回り: 出馬表の表記（新潟の直線も分かる）を優先し、読めなければ競馬場ごとの回り。右回りを初期値にしない
+    direction = shutuba['direction'] or race_diagram.VENUE_DIRECTION.get(place_from_race_id(race_id))
+    diagram = race_diagram.build(horses, pace_label, direction,
                                  tenkai.course_key(tenkai.venue_of_race_id(race_id), surface, distance),
                                  abroad=not str(race_id).isdigit())
     evidence = race_diagram.evidence_lines(diagram)
@@ -277,7 +302,7 @@ def load_facts(conn, race_id, grade=None):
         '競馬場': place_from_race_id(race_id) or rows[0][12],   # 海外は出馬表の開催地（例 パリロンシャン）
         'コース': f"{surface}{distance}m" if distance else surface,
         '出走頭数': len(horses),
-        '当日の馬場': d0.get('当日馬場') or '不明',
+        '当日の馬場': _condition_label(d0.get('当日馬場') or '不明', race_date),
         '想定ペース': '海外のレースのため想定しない' if abroad else (d0.get('想定ペース') or '不明'),
         '逃げ・先行馬（馬番順）': [
             {'馬番': h['num'], '枠番': h['waku'], '枠の位置': waku_side(h['waku']), '馬名': h['name'], '脚質': h['style']}

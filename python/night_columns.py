@@ -22,6 +22,7 @@ from __future__ import annotations
 import sys
 from datetime import date, datetime, timedelta
 
+import column_audit
 from weekly_pipeline import (fetch_upcoming_grade_races, get_conn, has_recent_facts, log, run_script,
                              send_discord)
 
@@ -80,18 +81,24 @@ def main():
             edition = 'thu' if mode == 'thu' else 'fri'
             if not has_recent_facts(conn, rid):
                 run_script('stats_predictor.py', [rid, '--update'], f'{name} 統計予想（近走の事実を保存）')
-            ok, _ = run_script('week_column.py', [rid, '--grade', grade, '--edition', edition, '--force'],
-                               f'{name} 週中コラム（{edition}）')
-            st = column_status(conn, rid, 'week_column', edition)
+            args = [rid, '--grade', grade, '--edition', edition, '--force']
+            ok, _ = run_script('week_column.py', args, f'{name} 週中コラム（{edition}）')
+            passed, problems = column_audit.enforce(conn, rid, edition,
+                                                     lambda: run_script('week_column.py', args, f'{name} 週中コラム（書き直し）'), log)
+            st = column_status(conn, rid, 'week_column', edition) if passed else None
             kind = f"週中コラム（{'木曜版' if edition == 'thu' else '金曜版'}）"
         elif (mode == 'fri' and r['race_date'] == sat) or (mode == 'sat' and r['race_date'] == sun):
-            ok, _ = run_script('column_writer.py', [rid, '--grade', grade, '--force'], f'{name} 鬼眼コラム')
-            st = column_status(conn, rid, 'race_column')
+            args = [rid, '--grade', grade, '--force']
+            ok, _ = run_script('column_writer.py', args, f'{name} 鬼眼コラム')
+            passed, problems = column_audit.enforce(conn, rid, None,
+                                                     lambda: run_script('column_writer.py', args, f'{name} 鬼眼コラム（書き直し）'), log)
+            st = column_status(conn, rid, 'race_column') if passed else None
             kind = '鬼眼コラム（展開図つき）'
         else:
             continue
         fails += 0 if (ok and st) else 1
-        how = ('AIの文章（検査・校閲に合格）' if st and st[0] != 'template' else 'テンプレートの文章') if st else '公開できず'
+        how = (('AIの文章' if st[0] != 'template' else 'テンプレートの文章') + '・ページ監査に合格') if st \
+            else ('⛔ 監査に通らず公開を取り下げ: ' + ' / '.join(problems) if problems else '公開できず')
         report.append(f"・{name}（{grade}）{kind}: {how}")
     conn.close()
 

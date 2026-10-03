@@ -108,6 +108,26 @@ try:
 except subprocess.TimeoutExpired:
     print("⚠️ コラムの書き直しがタイムアウト（予想は完了済み）")
 
+# 5. 書き直した鬼眼コラムを実際のページで監査。通らなければ公開を取り下げる（column_audit）
+try:
+    import column_audit
+    conn3 = psycopg2.connect(host=os.getenv('DB_HOST', 'localhost'), port=os.getenv('DB_PORT', '5432'),
+                             dbname=os.getenv('DB_NAME', 'faceapp'), user=os.getenv('DB_USER', 'postgres'),
+                             password=os.getenv('DB_PASSWORD', 'postgrestest'))
+    cur3 = conn3.cursor()
+    cur3.execute("SELECT 1 FROM race_column WHERE race_id = %s", (race_id,))
+    has_col = cur3.fetchone() is not None
+    cur3.close()
+    if has_col:
+        passed, problems = column_audit.enforce(
+            conn3, race_id, None,
+            lambda: subprocess.run(['python3', os.path.join(script_dir, 'column_writer.py'), race_id, '--force'],
+                                   cwd=script_dir, timeout=600))
+        print("  鬼眼コラムの監査: " + ("合格" if passed else "不合格のため取り下げ（" + ' / '.join(problems) + "）"))
+    conn3.close()
+except Exception as e:
+    print(f"⚠️ コラムの監査に失敗（予想は完了済み）: {e}")
+
 print("\n" + "=" * 60)
 print(f"✅ {race_name} の予想完了")
 print(f"   → /predict-v2?raceName={race_name} で確認")

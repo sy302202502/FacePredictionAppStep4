@@ -462,11 +462,17 @@ def main():
         # 5. 鬼眼コラム（重賞のみ）。公開は夜（night_columns.py: 金曜夜=土曜の重賞、土曜夜=日曜の重賞）。
         #    朝は、レース当日なのにまだコラムが無いとき（夜の処理の失敗など）だけ作る。書き直しはしない
         if is_graded and ok3 and race['race_date'] == datetime.now().date() and not has_race_column(conn, race_id):
-            okc, _ = run_script('column_writer.py',
-                                [race_id, '--grade', {1: 'G1', 2: 'G2', 3: 'G3'}[grade_no]],
-                                '鬼眼コラム（夜の公開が無かったため）')
+            col_args = [race_id, '--grade', {1: 'G1', 2: 'G2', 3: 'G3'}[grade_no]]
+            okc, _ = run_script('column_writer.py', col_args, '鬼眼コラム（夜の公開が無かったため）')
             if not okc:
                 log(f"  ⚠️ コラム作成に失敗（予想は公開済み）")
+            elif has_race_column(conn, race_id):
+                import column_audit
+                passed, problems = column_audit.enforce(
+                    conn, race_id, None,
+                    lambda: run_script('column_writer.py', col_args + ['--force'], '鬼眼コラム（監査で書き直し）'), log)
+                if not passed:
+                    send_discord(f"⛔ {race_name} の鬼眼コラムは監査に通らず公開を取り下げました: {' / '.join(problems)}")
 
         # （週中コラムは夜の night_columns.py で書く）
 

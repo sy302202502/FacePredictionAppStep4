@@ -16,7 +16,8 @@ column_audit.py — 公開しているコラムを「実際に表示されるペ
   3. 本文の頭数: 出走頭数を言う表現（「17頭の戦い」「17頭立て」「出走は17頭」など）と、10頭以上の「N頭」がカードの数と同じ
   4. 展開図（data-diagram）: ok なら2枚とも 丸の数・図の印・丸の色（枠）がカードと同じ、
      回り（data-direction）が競馬場と同じ（東京・新潟・中京=左、ほかの中央=右。直線は新潟だけ）、
-     テレビで見る向き: 内ラチの線はいつも上、左回り・直線は左→右（ゴール右）、右回りは右→左（ゴール左）。
+     テレビの見え方: 場面の直線（スタート地点は race_diagram.START_SIDE で引き直す）ごとに、
+     スタンド前=内ラチ上（左回り・直線は左→右、右回りは右→左）、向正面=内ラチ下（左回りは右→左、右回りは左→右）。
      broken（図のデータが壊れている）は不合格
   5. 馬場を「（確定）」と書いてよいのはレース当日だけ。レース日が読めないのに「（確定）」は不合格
   6. 情報元・第三者の名前、語り口に合わない言葉、結果を保証する言い方が無い（column_writer の禁止語と共通）
@@ -165,8 +166,8 @@ def audit_race_column(race_id, base=None):
         problems.append('展開図のデータが壊れている')
     elif status == 'ok':
         svgs = col.select('.diagram svg')
-        if len(svgs) != 2:
-            problems.append(f'展開図が{len(svgs)}枚（2枚のはず）')
+        if [s.get('data-key') for s in svgs] != ['start', 'stretch']:
+            problems.append(f'展開図が図1（スタート）・図2（直線）の2枚になっていない（{[s.get("data-key") for s in svgs]}）')
         for i, svg in enumerate(svgs, 1):
             _audit_svg(i, svg, cards, card_marks, venue, problems)
     elif status != 'none':
@@ -211,28 +212,51 @@ def _audit_svg(i, svg, cards, card_marks, venue, problems):
         want = '左' if venue in LEFT else '右'
         if d != want and not (d == '直線' and venue == '新潟'):
             problems.append(f'図{i}の回り「{d}」が{venue}（{want}回り）と違う')
-    # テレビで見る向き: 内ラチはいつも上。左回り・直線は左→右、右回りは右→左（ゴールが左）
+    # テレビ（スタンド）から見た向き。場面がどちらの直線か（data-side）で決まる:
+    #   スタンド前（home）… 内ラチは上。左回り・直線は左→右、右回りは右→左
+    #   向正面（back）    … 内ラチは下。左回りは右→左、右回りは左→右
+    key, side = svg.get('data-key'), svg.get('data-side')
+    want_side = 'home' if key == 'stretch' else _expected_start_side(svg.get('data-course'), venue)
+    if want_side is None:
+        problems.append(f'図{i}のスタート地点が確かめられない（コース {svg.get("data-course")}）')
+        return
+    if side != want_side:
+        problems.append(f'図{i}の場面が{"スタンド前" if side == "home" else "向正面" if side == "back" else side}になっている'
+                        f'（{svg.get("data-course")}は{"スタンド前" if want_side == "home" else "向正面"}）')
+        return
+    rail_top = want_side == 'home'
+    want_travel = ('left' if d == '右' else 'right') if rail_top else ('left' if d == '左' else 'right')
     rail_attr = svg.get('data-rail')
     rail = next((l for l in svg.find_all('line') if l.get('stroke') == RAIL_STROKE), None)
     if rail is None:
         problems.append(f'図{i}に内ラチの線が無い')
-    elif float(rail.get('y1')) >= 100 or rail_attr != 'top':
-        problems.append(f'図{i}の内ラチが上ではない（テレビで見る向きでは内ラチはいつも上）')
-    want_travel = 'left' if d == '右' else 'right'
+    elif (float(rail.get('y1')) < 100) != rail_top or rail_attr != ('top' if rail_top else 'bottom'):
+        problems.append(f'図{i}の内ラチが{"下" if rail_top else "上"}（テレビの見え方では{"上" if rail_top else "下"}）')
     if svg.get('data-travel') != want_travel:
-        problems.append(f'図{i}の進む向き（{svg.get("data-travel")}）が{d}回りと違う（{"右→左" if d == "右" else "左→右"}のはず）')
+        problems.append(f'図{i}の進む向き（{svg.get("data-travel")}）が違う（{"右→左" if want_travel == "left" else "左→右"}のはず）')
     goal = svg.select_one('text.dg-goal')
     gt = goal.get_text().strip() if goal else ''
     if not (gt.startswith('◀') if want_travel == 'left' else gt.endswith('▶')):
-        problems.append(f'図{i}の進行方向の矢印「{gt}」が{d}回りと違う')
+        problems.append(f'図{i}の進行方向の矢印「{gt}」が違う')
     finish = svg.select_one('line.dg-finish')
+    if (key == 'stretch') != (finish is not None):
+        problems.append(f'図{i}のゴール板の有無が違う')
     if finish is not None and (float(finish.get('x1')) < 400) != (want_travel == 'left'):
-        problems.append(f'図{i}のゴール板が{"左" if float(finish.get("x1")) < 400 else "右"}にある（{d}回りなら{"左" if want_travel == "left" else "右"}）')
-    if horses:
-        xs = sorted(((float(g.find('circle').get('cx')), g) for g in horses), key=lambda t: t[0])
-        lead = xs[0][0] if want_travel == 'left' else xs[-1][0]
-        if finish is not None and abs(lead - float(finish.get('x1'))) > 120:
+        problems.append(f'図{i}のゴール板が{"左" if float(finish.get("x1")) < 400 else "右"}にある')
+    if horses and finish is not None:
+        xs = sorted(float(g.find('circle').get('cx')) for g in horses)
+        lead = xs[0] if want_travel == 'left' else xs[-1]
+        if abs(lead - float(finish.get('x1'))) > 120:
             problems.append(f'図{i}の先頭の馬がゴール板から離れている（向きが逆の可能性）')
+
+
+def _expected_start_side(course, venue):
+    """data-course（例: 東京芝1800 / 京都芝2400(外)）から、スタート地点の直線を表で引き直す"""
+    import race_diagram
+    m = re.match(r'^(\D+?)(芝|ダ)(\d{3,4})(?:\((外|内)\))?$', course or '')
+    if not m or (venue and m.group(1) != venue):
+        return None
+    return race_diagram.start_side(m.group(1), m.group(2), int(m.group(3)), m.group(4))
 
 
 def audit_week_column(race_id, edition, base=None):

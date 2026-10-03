@@ -81,11 +81,19 @@ public class RaceDiagramService {
         try {
             JsonNode root = mapper.readTree(diagramJson);
             String direction = root.path("direction").asText("右");
-            // テレビ・スタンドから見たときと同じ向きで描く: 内ラチはいつも上（奥）。
-            // 左回り（東京・新潟・中京）は左から右へ、右回りは右から左へ走る（ゴールが左）。直線コースは左から右へ
-            boolean toLeft = "右".equals(direction);
+            String course = root.path("course").isTextual() ? root.path("course").asText()
+                + (root.path("io").isTextual() ? "(" + root.path("io").asText() + ")" : "") : null;
+            // テレビ（スタンド）から見たときと同じ向きで描く。場面がどちらの直線か（side）で決まる:
+            //   スタンド前の直線（home）… 内ラチは奥（上）。左回り・直線コースは左→右、右回りは右→左
+            //   向正面（back）        … 内ラチは手前（下）。左回りは右→左、右回りは左→右
+            // side の無い古い図（スタート地点を確かめる前に描いたもの）は、図1を出さず図2（直線＝home）だけにする
             List<Map<String, Object>> scenes = new ArrayList<>();
             for (JsonNode s : root.path("scenes")) {
+                boolean stretch = "stretch".equals(s.path("key").asText());
+                String side = s.path("side").isTextual() ? s.path("side").asText() : (stretch ? "home" : null);
+                if (!"home".equals(side) && !"back".equals(side)) continue;
+                boolean railTop = "home".equals(side);
+                boolean toLeft = railTop ? "右".equals(direction) : "左".equals(direction);
                 List<Map<String, Object>> horses = new ArrayList<>();
                 for (JsonNode h : s.path("horses")) {
                     int lane = h.path("lane").asInt();
@@ -93,7 +101,8 @@ public class RaceDiagramService {
                     if (waku < 0 || waku > 8) waku = 0;
                     double back = h.path("x").asDouble() * SPAN_X;   // 先頭からの遅れ
                     double x = toLeft ? (WIDTH - FRONT_X) + back : FRONT_X - back;
-                    double y = TRACK_TOP + RAIL_GAP + lane * LANE_GAP;
+                    double y = railTop ? TRACK_TOP + RAIL_GAP + lane * LANE_GAP
+                                       : TRACK_BOTTOM - RAIL_GAP - lane * LANE_GAP;
                     String mark = h.path("mark").isTextual() ? h.path("mark").asText() : null;
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("num", h.path("num").asInt());
@@ -113,11 +122,13 @@ public class RaceDiagramService {
                 scene.put("key", s.path("key").asText());
                 scene.put("direction", direction);   // 監査用（column_audit が回り・内ラチ・進む向きを照合する）
                 scene.put("toLeft", toLeft);
+                scene.put("side", side);
+                scene.put("course", course);
                 scene.put("title", s.path("title").asText());
                 scene.put("goal", s.path("goal").asText());
                 scene.put("horses", horses);
-                scene.put("railY", TRACK_TOP + 4);
-                scene.put("outerY", TRACK_BOTTOM - 4);
+                scene.put("railY", railTop ? TRACK_TOP + 4 : TRACK_BOTTOM - 4);
+                scene.put("outerY", railTop ? TRACK_BOTTOM - 4 : TRACK_TOP + 4);
                 scene.put("finish", "stretch".equals(s.path("key").asText()));
                 scenes.add(scene);
             }

@@ -32,6 +32,68 @@ _shutuba_cache: dict = {}
 VENUE_DIRECTION = {'東京': '左', '新潟': '左', '中京': '左',
                    '札幌': '右', '函館': '右', '福島': '右', '中山': '右', '京都': '右', '阪神': '右', '小倉': '右'}
 
+# スタート地点がどちらの直線か（展開図の図1をテレビで見る向きで描くため）
+#   'home' … スタンド前の直線（またはその延長のポケット）からスタートし、1コーナーへ向かう
+#   'back' … 向正面（または1〜2コーナーのポケット）からスタートし、向正面を走る
+# テレビ（スタンド）から見ると、スタンド前の直線は内ラチが奥（上）、向正面は内ラチが手前（下）で、走る向きも逆になる。
+# キーは (競馬場, 芝/ダ, 距離, 内/外 or None)。内/外のある競馬場で表記が読めないときは None のキーを探す。
+# 表に無いコースは図を描かない（推測で描くと向きを間違えるため）。追加するときはスタート地点を必ず確かめる。
+START_SIDE = {
+    # 東京（芝は2000m・1800mも1〜2コーナーのポケット→向正面。2400・2500はスタンド前）
+    ('東京', '芝', 1400, None): 'back', ('東京', '芝', 1600, None): 'back', ('東京', '芝', 1800, None): 'back',
+    ('東京', '芝', 2000, None): 'back', ('東京', '芝', 2400, None): 'home', ('東京', '芝', 2500, None): 'home',
+    ('東京', 'ダ', 1300, None): 'back', ('東京', 'ダ', 1400, None): 'back', ('東京', 'ダ', 1600, None): 'back',
+    ('東京', 'ダ', 2100, None): 'home',
+    # 京都
+    ('京都', '芝', 1200, '内'): 'back', ('京都', '芝', 1400, '内'): 'back', ('京都', '芝', 1400, '外'): 'back',
+    ('京都', '芝', 1600, '内'): 'back', ('京都', '芝', 1600, '外'): 'back', ('京都', '芝', 1800, '外'): 'back',
+    ('京都', '芝', 2000, '内'): 'home', ('京都', '芝', 2200, '外'): 'home', ('京都', '芝', 2400, '外'): 'home',
+    ('京都', '芝', 3000, '外'): 'back', ('京都', '芝', 3200, '外'): 'back',
+    ('京都', 'ダ', 1200, None): 'back', ('京都', 'ダ', 1400, None): 'back', ('京都', 'ダ', 1800, None): 'home',
+    ('京都', 'ダ', 1900, None): 'home',
+    # 阪神
+    ('阪神', '芝', 1200, '内'): 'back', ('阪神', '芝', 1400, '内'): 'back', ('阪神', '芝', 1600, '外'): 'back',
+    ('阪神', '芝', 1800, '外'): 'back', ('阪神', '芝', 2000, '内'): 'home', ('阪神', '芝', 2200, '内'): 'home',
+    ('阪神', '芝', 2400, '外'): 'home',
+    ('阪神', 'ダ', 1200, None): 'back', ('阪神', 'ダ', 1400, None): 'back', ('阪神', 'ダ', 1800, None): 'home',
+    ('阪神', 'ダ', 2000, None): 'home',
+    # 中山（芝2500mは外回りの3コーナー手前から）
+    ('中山', '芝', 1200, '外'): 'back', ('中山', '芝', 1600, '外'): 'back', ('中山', '芝', 1800, '内'): 'home',
+    ('中山', '芝', 2000, '内'): 'home', ('中山', '芝', 2200, '外'): 'home', ('中山', '芝', 2500, '内'): 'back',
+    ('中山', '芝', 2500, None): 'back',
+    ('中山', 'ダ', 1200, None): 'back', ('中山', 'ダ', 1800, None): 'home',
+    # 中京（芝1600mは1〜2コーナーのポケット）
+    ('中京', '芝', 1200, None): 'back', ('中京', '芝', 1400, None): 'back', ('中京', '芝', 1600, None): 'back',
+    ('中京', '芝', 2000, None): 'home', ('中京', '芝', 2200, None): 'home',
+    ('中京', 'ダ', 1200, None): 'back', ('中京', 'ダ', 1400, None): 'back', ('中京', 'ダ', 1800, None): 'home',
+    ('中京', 'ダ', 1900, None): 'home',
+    # 新潟（直線1000mは別扱い）
+    ('新潟', '芝', 1200, '内'): 'back', ('新潟', '芝', 1400, '内'): 'back', ('新潟', '芝', 1600, '外'): 'back',
+    ('新潟', '芝', 1800, '外'): 'back', ('新潟', '芝', 2000, '外'): 'back', ('新潟', '芝', 2000, '内'): 'home',
+    ('新潟', '芝', 2200, '内'): 'home', ('新潟', '芝', 2400, '内'): 'home',
+    ('新潟', 'ダ', 1200, None): 'back', ('新潟', 'ダ', 1800, None): 'home',
+    # ローカル（札幌・函館・福島・小倉）
+    ('札幌', '芝', 1200, None): 'back', ('札幌', '芝', 1500, None): 'back', ('札幌', '芝', 1800, None): 'home',
+    ('札幌', '芝', 2000, None): 'home', ('札幌', '芝', 2600, None): 'back',
+    ('札幌', 'ダ', 1000, None): 'back', ('札幌', 'ダ', 1700, None): 'home',
+    ('函館', '芝', 1200, None): 'back', ('函館', '芝', 1800, None): 'home', ('函館', '芝', 2000, None): 'home',
+    ('函館', '芝', 2600, None): 'back', ('函館', 'ダ', 1000, None): 'back', ('函館', 'ダ', 1700, None): 'home',
+    ('福島', '芝', 1200, None): 'back', ('福島', '芝', 1800, None): 'home', ('福島', '芝', 2000, None): 'home',
+    ('福島', '芝', 2600, None): 'back', ('福島', 'ダ', 1150, None): 'back', ('福島', 'ダ', 1700, None): 'home',
+    ('小倉', '芝', 1200, None): 'back', ('小倉', '芝', 1800, None): 'home', ('小倉', '芝', 2000, None): 'home',
+    ('小倉', '芝', 2600, None): 'back', ('小倉', 'ダ', 1000, None): 'back', ('小倉', 'ダ', 1700, None): 'home',
+}
+
+
+def start_side(venue, surface, distance, io=None):
+    """スタート地点の直線（'home' / 'back'）。表に無ければ None（図を描かない）"""
+    if not venue or not surface or not distance:
+        return None
+    sf = 'ダ' if str(surface).startswith('ダ') else '芝'
+    d = int(distance)
+    return START_SIDE.get((venue, sf, d, io)) or START_SIDE.get((venue, sf, d, None))
+
+
 # 材料の重み（tenkai_backtest.py の検証で決める。0 は「効果が確認できなかったので使わない」）
 W = {
     'nige': 0.10,      # 図1: 逃げた割合が高いほど前へ
@@ -50,7 +112,7 @@ def shutuba_info(race_id):
     """出馬表から {'direction': '右'/'左'/'直線'/None, 'jockeys': {馬番: 騎手ID}}（レースごとに1回だけ取得）"""
     if race_id in _shutuba_cache:
         return _shutuba_cache[race_id]
-    info = {'direction': None, 'jockeys': {}}
+    info = {'direction': None, 'io': None, 'jockeys': {}}
     try:
         from bs4 import BeautifulSoup
         from constants import shutuba_url
@@ -58,8 +120,9 @@ def shutuba_info(race_id):
         html = decode_netkeiba(r)
         # 「<span> 芝1800m</span> (左&nbsp;A)」のようにタグや &nbsp; が挟まるので、タグを除いてから読む
         plain = re.sub(r'<[^>]+>', '', html).replace('&nbsp;', ' ')
-        m = re.search(r'\d{3,4}m\s*\((右|左|直線)', plain)
+        m = re.search(r'\d{3,4}m\s*\((右|左|直線)\s*(外|内)?', plain)
         info['direction'] = m.group(1) if m else None
+        info['io'] = m.group(2) if m else None   # 内回り・外回り（京都・阪神・中山・新潟。表記の無い競馬場は None）
         for row in BeautifulSoup(html, 'lxml').find_all('tr', class_=re.compile(r'HorseList')):
             tds = row.find_all('td')
             jl = row.find('a', href=re.compile(r'/jockey/'))
@@ -221,9 +284,10 @@ def pace_forecast(horses, stats=None):
 
 
 # ── 本体 ─────────────────────────────────────────────
-def build(horses, pace, direction, course_key=None, abroad=False):
+def build(horses, pace, direction, course_key=None, abroad=False, start=None, io=None):
     """horses: column_writer の馬リスト（num, waku, style, detail, stats_score, mark, name, tenkai, jockey_id）。
     mark（鬼眼の印）は表示用で、位置の計算には使わない。
+    start: スタート地点の直線（'home' / 'back'。start_side()）。直線コース以外で分からなければ図を描かない
     戻り値は画面に渡す辞書（JSON にして race_column.diagram へ保存する）"""
     n = len(horses)
     if n < 2:
@@ -268,6 +332,10 @@ def build(horses, pace, direction, course_key=None, abroad=False):
     if direction not in ('右', '左', '直線'):
         return None   # 回りが分からないまま描くと内ラチの位置を間違えるので、図を付けない
     straight = direction == '直線'
+    if straight:
+        start = 'home'
+    if start not in ('home', 'back'):
+        return None   # スタート地点が分からないまま描くと図1の向きを間違えるので、図を付けない
     model = stats.get('model') or {}
     course_note = None
     if trend and trend.get('front_top3') is not None:
@@ -277,6 +345,8 @@ def build(horses, pace, direction, course_key=None, abroad=False):
             course_note += f"・内枠(1-3) {trend['inner_top3']:.0%} / 外枠(6-8) {trend['outer_top3']:.0%}"
     return {
         'direction': direction,
+        'course': course_key,
+        'io': io,            # 内回り・外回り（監査でスタート地点の表を引き直すため）
         'pace': pace,
         'evidence': {
             'pace': dict(pace_forecast(horses, stats), label=pace),
@@ -288,10 +358,10 @@ def build(horses, pace, direction, course_key=None, abroad=False):
         },
         'scenes': [
             {'key': 'start', 'title': 'スタート直後の隊列（想定）' if straight else 'スタート〜最初のコーナー（想定）',
-             'goal': '進行方向' if straight else '最初のコーナーへ',
+             'goal': '進行方向' if straight else '最初のコーナーへ', 'side': start,
              'horses': pack(scene1, lambda h: _why_early(h, n, stats))},
             {'key': 'stretch', 'title': 'ゴール前（想定）' if straight else '最後の直線（想定）',
-             'goal': 'ゴール', 'horses': pack(scene2, lambda h: _why_late(h, n, kick_rank))},
+             'goal': 'ゴール', 'side': 'home', 'horses': pack(scene2, lambda h: _why_late(h, n, kick_rank))},
         ],
     }
 

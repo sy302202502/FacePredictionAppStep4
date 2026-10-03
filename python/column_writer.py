@@ -289,9 +289,12 @@ def load_facts(conn, race_id, grade=None):
     pace_label = (d0.get('想定ペース') or '').split('（')[0]
     # 回り: 出馬表の表記（新潟の直線も分かる）を優先し、読めなければ競馬場ごとの回り。右回りを初期値にしない
     direction = shutuba['direction'] or race_diagram.VENUE_DIRECTION.get(place_from_race_id(race_id))
+    venue = tenkai.venue_of_race_id(race_id)
     diagram = race_diagram.build(horses, pace_label, direction,
-                                 tenkai.course_key(tenkai.venue_of_race_id(race_id), surface, distance),
-                                 abroad=not str(race_id).isdigit())
+                                 tenkai.course_key(venue, surface, distance),
+                                 abroad=not str(race_id).isdigit(),
+                                 start=race_diagram.start_side(venue, surface, distance, shutuba.get('io')),
+                                 io=shutuba.get('io'))
     evidence = race_diagram.evidence_lines(diagram)
 
     roster = {h['num']: h for h in horses}

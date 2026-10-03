@@ -3,16 +3,17 @@
 <body>
 <!-- 展開の想定図（RaceDiagramService.scenes の1場面を SVG で描く）。/predict-v2 のコラムと /review の答え合わせで共用。
      sc = 場面、idx = 図の番号（0 始まり。丸をタップしたときの根拠行 why-<idx>-<馬番> に使う） -->
-<div class="diagram-scroll" th:fragment="svg(sc, idx)"><svg viewBox="0 0 800 250" role="img" th:attr="aria-label=${sc.title},data-direction=${sc.direction},data-rail=${sc.railY > 100 ? 'bottom' : 'top'},data-travel=${sc.toLeft ? 'left' : 'right'}">
+<div class="diagram-scroll" th:fragment="svg(sc, idx)"><svg viewBox="0 0 800 250" role="img" th:attr="aria-label=${sc.title},data-direction=${sc.direction},data-rail=${sc.railY > 100 ? 'bottom' : 'top'},data-travel=${sc.toLeft ? 'left' : 'right'},data-side=${sc.side},data-key=${sc.key},data-course=${sc.course}">
     <rect x="10" y="40" width="780" height="180" rx="10" fill="#123a1c"/>
     <!-- 内ラチ（太線）と外ラチ -->
     <line x1="10" x2="790" th:attr="y1=${sc.railY},y2=${sc.railY}" stroke="#e8f5e0" stroke-width="5"/>
     <line x1="10" x2="790" th:attr="y1=${sc.outerY},y2=${sc.outerY}" stroke="#7fa58a" stroke-width="2" stroke-dasharray="8 6"/>
-    <!-- テレビで見る向き: 内ラチはいつも上。右回りは右から左へ走るので、ゴール・進行方向は左側 -->
-    <text th:attr="x=${sc.toLeft ? 780 : 20},text-anchor=${sc.toLeft ? 'end' : 'start'}" y="34" fill="#9bb592" font-size="14">内ラチ</text>
-    <!-- 進行方向 / ゴールの文字は下（内ラチ側の馬の印と重ならないように） -->
-    <text class="dg-goal" y="242" fill="#f5d878" font-size="16" font-weight="700"
-          th:attr="x=${sc.toLeft ? 15 : 785},text-anchor=${sc.toLeft ? 'start' : 'end'}"
+    <!-- テレビ（スタンド）から見た向き: スタンド前の直線は内ラチが奥（上）、向正面は手前（下）。
+         「内ラチ」の文字は進行方向の後ろ側、進行方向・ゴールの文字は内ラチの反対側（馬の印と重ならないように） -->
+    <text th:attr="x=${sc.toLeft ? 780 : 20},y=${sc.railY > 100 ? sc.railY + 22 : sc.railY - 10},text-anchor=${sc.toLeft ? 'end' : 'start'}"
+          fill="#9bb592" font-size="14">内ラチ</text>
+    <text class="dg-goal" fill="#f5d878" font-size="16" font-weight="700"
+          th:attr="x=${sc.toLeft ? 15 : 785},y=${sc.railY > 100 ? 30 : 242},text-anchor=${sc.toLeft ? 'start' : 'end'}"
           th:text="${sc.toLeft ? '◀ ' + sc.goal : sc.goal + ' ▶'}">1コーナーへ ▶</text>
     <line th:if="${sc.finish}" class="dg-finish" th:attr="x1=${sc.toLeft ? 30 : 770},x2=${sc.toLeft ? 30 : 770}" y1="40" y2="220" stroke="#ff2244" stroke-width="4"/>
     <g th:each="h : ${sc.horses}" class="dg-horse" th:attr="data-why=${'why-' + idx + '-' + h.num}">

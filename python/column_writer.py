@@ -1,7 +1,8 @@
 """
 column_writer.py — 重賞の「鬼眼コラム」を舞鬼法師の語り口で書く
 
-  python3 python/column_writer.py <race_id> [--grade G1] [--force] [--dry-run] [--only-existing]
+  python3 python/column_writer.py <race_id> [--grade G1] [--force] [--dry-run] [--only-existing] [--diagram-only]
+  --diagram-only: 展開図だけを描き直す（公開済みの本文・印は変えない）
   --only-existing: すでにコラムがあるレースだけ書き直す（再予想の後に呼ぶ用。重賞判定を持たない経路向け）
 
 【材料】アプリ自前のデータだけを使う（東スポ競馬のデータは規約上、公開する文章には使わない）
@@ -565,6 +566,16 @@ def main():
             conn.commit()
         print(f"コラムを書かない: {why}")
         print(f"RESULT:{json.dumps({'success': True, 'skipped': why}, ensure_ascii=False)}")
+        return
+    if '--diagram-only' in sys.argv:
+        # 展開図だけを描き直す（本文・印・材料のハッシュはそのまま。公開済みのコラムの文章を変えずに図の不具合を直す用）
+        cur.execute("UPDATE race_column SET diagram = %s WHERE race_id = %s",
+                    (json.dumps(facts['_diagram'], ensure_ascii=False) if facts.get('_diagram') else None, race_id))
+        conn.commit()
+        print(f"展開図だけを描き直しました（回り: {(facts.get('_diagram') or {}).get('direction')}・{cur.rowcount}件）")
+        print(f"RESULT:{json.dumps({'success': True, 'diagram_only': True})}")
+        cur.close()
+        conn.close()
         return
     h = _facts_hash(facts)
     cur.execute("SELECT facts_hash, generator, tweet, diagram FROM race_column WHERE race_id = %s", (race_id,))

@@ -53,7 +53,9 @@ def shutuba_info(race_id):
         from constants import shutuba_url
         r = requests.get(shutuba_url(race_id), headers=HEADERS, timeout=15)
         html = decode_netkeiba(r)
-        m = re.search(r'\d{3,4}m\s*\((右|左|直線)', html)
+        # 「<span> 芝1800m</span> (左&nbsp;A)」のようにタグや &nbsp; が挟まるので、タグを除いてから読む
+        plain = re.sub(r'<[^>]+>', '', html).replace('&nbsp;', ' ')
+        m = re.search(r'\d{3,4}m\s*\((右|左|直線)', plain)
         info['direction'] = m.group(1) if m else None
         for row in BeautifulSoup(html, 'lxml').find_all('tr', class_=re.compile(r'HorseList')):
             tds = row.find_all('td')

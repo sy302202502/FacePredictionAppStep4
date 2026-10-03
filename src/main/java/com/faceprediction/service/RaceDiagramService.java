@@ -23,7 +23,7 @@ public class RaceDiagramService {
     public static final int HEIGHT = 250;
     private static final int TRACK_TOP = 40;
     private static final int TRACK_BOTTOM = 220;
-    private static final int FRONT_X = 730;   // 先頭の位置（右が進行方向）
+    private static final int FRONT_X = 730;   // 先頭の位置（右へ進むとき。左へ進むときは左右を入れ替えて 70）
     private static final int SPAN_X = 640;    // 先頭〜最後方の幅
     private static final int RAIL_GAP = 22;   // 内ラチからの最初のレーンまで
     private static final int LANE_GAP = 34;   // レーン間隔
@@ -81,8 +81,9 @@ public class RaceDiagramService {
         try {
             JsonNode root = mapper.readTree(diagramJson);
             String direction = root.path("direction").asText("右");
-            // 右回りは進行方向の右手（画面の下側）が内ラチ、左回りは上側。直線コースは下側を外ラチとして描く
-            boolean railBottom = !"左".equals(direction);
+            // テレビ・スタンドから見たときと同じ向きで描く: 内ラチはいつも上（奥）。
+            // 左回り（東京・新潟・中京）は左から右へ、右回りは右から左へ走る（ゴールが左）。直線コースは左から右へ
+            boolean toLeft = "右".equals(direction);
             List<Map<String, Object>> scenes = new ArrayList<>();
             for (JsonNode s : root.path("scenes")) {
                 List<Map<String, Object>> horses = new ArrayList<>();
@@ -90,9 +91,9 @@ public class RaceDiagramService {
                     int lane = h.path("lane").asInt();
                     int waku = h.path("waku").isInt() ? h.path("waku").asInt() : 0;
                     if (waku < 0 || waku > 8) waku = 0;
-                    double x = FRONT_X - h.path("x").asDouble() * SPAN_X;
-                    double y = railBottom ? TRACK_BOTTOM - RAIL_GAP - lane * LANE_GAP
-                                          : TRACK_TOP + RAIL_GAP + lane * LANE_GAP;
+                    double back = h.path("x").asDouble() * SPAN_X;   // 先頭からの遅れ
+                    double x = toLeft ? (WIDTH - FRONT_X) + back : FRONT_X - back;
+                    double y = TRACK_TOP + RAIL_GAP + lane * LANE_GAP;
                     String mark = h.path("mark").isTextual() ? h.path("mark").asText() : null;
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("num", h.path("num").asInt());
@@ -110,12 +111,13 @@ public class RaceDiagramService {
                 }
                 Map<String, Object> scene = new LinkedHashMap<>();
                 scene.put("key", s.path("key").asText());
-                scene.put("direction", direction);   // 監査用（column_audit が回りと内ラチの位置を照合する）
+                scene.put("direction", direction);   // 監査用（column_audit が回り・内ラチ・進む向きを照合する）
+                scene.put("toLeft", toLeft);
                 scene.put("title", s.path("title").asText());
                 scene.put("goal", s.path("goal").asText());
                 scene.put("horses", horses);
-                scene.put("railY", railBottom ? TRACK_BOTTOM - 4 : TRACK_TOP + 4);
-                scene.put("outerY", railBottom ? TRACK_TOP + 4 : TRACK_BOTTOM - 4);
+                scene.put("railY", TRACK_TOP + 4);
+                scene.put("outerY", TRACK_BOTTOM - 4);
                 scene.put("finish", "stretch".equals(s.path("key").asText()));
                 scenes.add(scene);
             }

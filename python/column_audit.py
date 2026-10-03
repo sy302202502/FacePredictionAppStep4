@@ -16,7 +16,8 @@ column_audit.py — 公開しているコラムを「実際に表示されるペ
   3. 本文の頭数: 出走頭数を言う表現（「17頭の戦い」「17頭立て」「出走は17頭」など）と、10頭以上の「N頭」がカードの数と同じ
   4. 展開図（data-diagram）: ok なら2枚とも 丸の数・図の印・丸の色（枠）がカードと同じ、
      回り（data-direction）が競馬場と同じ（東京・新潟・中京=左、ほかの中央=右。直線は新潟だけ）、
-     内ラチの線があり位置が回りと同じ（左=上、右・直線=下）。broken（図のデータが壊れている）は不合格
+     テレビで見る向き: 内ラチの線はいつも上、左回り・直線は左→右（ゴール右）、右回りは右→左（ゴール左）。
+     broken（図のデータが壊れている）は不合格
   5. 馬場を「（確定）」と書いてよいのはレース当日だけ。レース日が読めないのに「（確定）」は不合格
   6. 情報元・第三者の名前、語り口に合わない言葉、結果を保証する言い方が無い（column_writer の禁止語と共通）
 週中コラム（/column の #race-<race_id> の data-edition=<thu|fri>）で確かめること:
@@ -210,16 +211,28 @@ def _audit_svg(i, svg, cards, card_marks, venue, problems):
         want = '左' if venue in LEFT else '右'
         if d != want and not (d == '直線' and venue == '新潟'):
             problems.append(f'図{i}の回り「{d}」が{venue}（{want}回り）と違う')
+    # テレビで見る向き: 内ラチはいつも上。左回り・直線は左→右、右回りは右→左（ゴールが左）
     rail_attr = svg.get('data-rail')
     rail = next((l for l in svg.find_all('line') if l.get('stroke') == RAIL_STROKE), None)
     if rail is None:
         problems.append(f'図{i}に内ラチの線が無い')
-        return
-    top = float(rail.get('y1')) < 100
-    if rail_attr != ('top' if top else 'bottom'):
-        problems.append(f'図{i}の内ラチの線の位置と data-rail（{rail_attr}）が違う')
-    if top != (d == '左'):
-        problems.append(f'図{i}の内ラチが{"上" if top else "下"}（{d}回りなら{"上" if d == "左" else "下"}）')
+    elif float(rail.get('y1')) >= 100 or rail_attr != 'top':
+        problems.append(f'図{i}の内ラチが上ではない（テレビで見る向きでは内ラチはいつも上）')
+    want_travel = 'left' if d == '右' else 'right'
+    if svg.get('data-travel') != want_travel:
+        problems.append(f'図{i}の進む向き（{svg.get("data-travel")}）が{d}回りと違う（{"右→左" if d == "右" else "左→右"}のはず）')
+    goal = svg.select_one('text.dg-goal')
+    gt = goal.get_text().strip() if goal else ''
+    if not (gt.startswith('◀') if want_travel == 'left' else gt.endswith('▶')):
+        problems.append(f'図{i}の進行方向の矢印「{gt}」が{d}回りと違う')
+    finish = svg.select_one('line.dg-finish')
+    if finish is not None and (float(finish.get('x1')) < 400) != (want_travel == 'left'):
+        problems.append(f'図{i}のゴール板が{"左" if float(finish.get("x1")) < 400 else "右"}にある（{d}回りなら{"左" if want_travel == "left" else "右"}）')
+    if horses:
+        xs = sorted(((float(g.find('circle').get('cx')), g) for g in horses), key=lambda t: t[0])
+        lead = xs[0][0] if want_travel == 'left' else xs[-1][0]
+        if finish is not None and abs(lead - float(finish.get('x1'))) > 120:
+            problems.append(f'図{i}の先頭の馬がゴール板から離れている（向きが逆の可能性）')
 
 
 def audit_week_column(race_id, edition, base=None):

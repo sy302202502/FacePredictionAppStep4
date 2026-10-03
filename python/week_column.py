@@ -19,7 +19,7 @@ import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 
-from column_writer import get_conn, VOICE, VOICE_NG, MAX_EXCLAIM
+from column_writer import get_conn, VOICE, VOICE_NG, SOURCE_NG, MAX_EXCLAIM, scrub_sources
 from llm_client import generate_text
 from race_condition import place_from_race_id
 import race_facts
@@ -74,7 +74,7 @@ KATAKANA_OK = {
     'ルール', 'サプライズ', 'ダークホース', 'ストーリー', 'キャラ', 'ハイレベル', 'ペースアップ', 'スムーズ',
     'ハンデ', 'コンディション', 'ベテラン', 'ブランク', 'ロングスパート', 'ゴール前', 'フィニッシュ', 'ラストスパート',
 }
-BANNED = ('絶対', '確実', '鉄板', '必ず勝', '東スポ', '東京スポーツ', '顔', '眼差し', '目つき', '◎', '○', '▲', '△') + VOICE_NG
+BANNED = ('絶対', '確実', '鉄板', '必ず勝', '顔', '眼差し', '目つき', '◎', '○', '▲', '△') + VOICE_NG + SOURCE_NG
 OFF_TOPIC = ('騎手', '鞍上', 'オッズ', '調教', '追い切り', '血統', '父', '母')
 NUM_UNIT = re.compile(r'(?<![\d.])(\d+)\s*(番人気|着|勝|頭|年|枠|週|戦|回|m)')
 
@@ -98,6 +98,7 @@ def ensure_table(conn):
     """)
     conn.commit()
     cur.close()
+    scrub_sources(conn)
 
 
 def today_jst():

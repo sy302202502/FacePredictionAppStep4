@@ -41,9 +41,14 @@ VOICE = """- 一人称は「私」。読者への呼びかけは「みんな」
 - 文末は「です・ます」。丁寧だけど親しみやすく（「〜ですね」「〜なんです」「〜しましょう」）。
   くだけすぎた「〜だよ」「〜じゃん」や、偉そうな「〜だ」「〜である」は使わない
 - 普段は落ち着いたトーンでデータを語り、注目ポイントや締めなど要所だけ熱量を上げる。「！」は要所だけ（全体で3回まで）
-- 下品な言葉・煽り・他者の悪口は使わない"""
+- 下品な言葉・煽り・他者の悪口は使わない
+- データの情報元や、舞鬼のコンテンツに関係のない第三者の名前（サイト名・機関名・AI の名前など）は書かない"""
 # 語り口から外れていると判断する言葉（AI の文章がこれを含んだら書き直し扱い）
 VOICE_NG = ('僕', '俺', 'だよ', 'じゃん', 'みなさん', '皆さん')
+# 舞鬼のコンテンツに関係のない第三者・情報元の名前（コラム・投稿文に出さない。2026-10-03 本人の指定）
+SOURCE_NG = ('netkeiba', 'ネットケイバ', 'ネット競馬', '気象庁', '東スポ', '東京スポーツ', 'Gemini', 'ChatGPT', 'llava')
+# 保存済みの文章・材料に残っている情報元の表記の置き換え（古いデータを表示しても出ないように）
+SOURCE_REPLACE = (('netkeiba確定', '確定'), ('気象庁予報', '予報'))
 MAX_EXCLAIM = 4     # 本文の「！」の上限（要所だけ熱く）
 
 PERSONA = """あなたは競馬予想VTuber「舞鬼法師（まいきーほうし／MIKEY MASTER）」として、
@@ -129,6 +134,29 @@ def ensure_table(conn):
     cur.close()
     # 展開図の材料の列（stats_predictor が保存）。統計予想の再実行より先にコラムを書いても失敗しないように
     tenkai.ensure_column(conn)
+    scrub_sources(conn)
+
+
+def scrub_sources(conn):
+    """保存済みの予想の材料・コラムに残っている情報元の名前（例「良（netkeiba確定）」）を置き換える。
+    該当する行が無ければ何もしない（毎回呼んでも軽い）"""
+    targets = [('stats_prediction', 'score_detail'), ('race_column', 'body'), ('race_column', 'title'),
+               ('race_column', 'tweet'), ('week_column', 'body'), ('week_column', 'title')]
+    cur = conn.cursor()
+    try:
+        for table, col in targets:
+            cur.execute("SELECT to_regclass(%s)", (table,))
+            if cur.fetchone()[0] is None:
+                continue
+            for old, new in SOURCE_REPLACE:
+                cur.execute(f"UPDATE {table} SET {col} = replace({col}, %s, %s) WHERE {col} LIKE %s",
+                            (old, new, f'%{old}%'))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"  [警告] 情報元の表記の置き換えに失敗（次回再試行）: {e}")
+    finally:
+        cur.close()
 
 
 def waku_side(waku):
@@ -288,7 +316,7 @@ def _check_facts(text, facts):
     """本文・X投稿文に共通の事実検査。問題があれば理由、なければ None。"""
     material = json.dumps(_public(facts), ensure_ascii=False)
     roster = facts['_roster']
-    for w in ('絶対', '確実', '鉄板', '必ず勝', '東スポ', '東京スポーツ') + VOICE_NG:
+    for w in ('絶対', '確実', '鉄板', '必ず勝') + VOICE_NG + SOURCE_NG:
         if w in text:
             return f'禁止語「{w}」'
     for w in OFF_TOPIC:

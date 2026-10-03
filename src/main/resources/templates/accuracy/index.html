@@ -158,7 +158,7 @@
 
         <!-- 的中記録 自動取得バー（管理者のみ） -->
         <div class="action-bar" sec:authorize="isAuthenticated()">
-            <span class="action-bar-text">レース後にnetkeibaから実際の着順を自動取得して的中率を更新します</span>
+            <span class="action-bar-text">レース後に実際の着順を自動取得して的中率を更新します</span>
             <!-- /script/** は XHRヘッダ必須(CSRF対策)のため fetch で呼ぶ -->
             <button type="button" class="btn btn-fire"
                     onclick="fetch('/script/result-fetch', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(){ location.href='/script?started=result_fetch'; })">結果を自動取得</button>

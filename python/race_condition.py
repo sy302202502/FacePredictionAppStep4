@@ -210,7 +210,7 @@ def estimate_condition(place, race_date):
 
     return {
         'condition':  cond,
-        'source':     '気象庁予報',
+        'source':     '予報',          # 画面・コラムに出るため情報元の名前は付けない（中身は気象庁の天気予報から推定）
         'confidence': 'low' if d_race not in daily else 'medium',
         'score':      round(total, 2),
         'reason':     f"前日({s_prev}) + 当日({s_race}) → 湿り度{total:.1f} → {cond}",
@@ -226,7 +226,7 @@ def resolve_condition(race_id, race_date, place=None):
 
     actual, tenki = fetch_actual_condition(race_id)
     if actual:
-        return {'condition': actual, 'source': 'netkeiba確定', 'confidence': 'high',
+        return {'condition': actual, 'source': '確定', 'confidence': 'high',   # 同上（中身はレースページの馬場表記）
                 'reason': f"レースページの馬場表記より（天候:{tenki or '?'}）", 'weather': tenki}
 
     est = estimate_condition(place, race_date)

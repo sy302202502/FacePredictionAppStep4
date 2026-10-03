@@ -186,7 +186,7 @@ def load_facts(conn, race_id, grade=None):
     cur.execute("""
         SELECT sp.horse_name, re.horse_number, re.post_position, sp.face_score, sp.score,
                sp.score_detail, sp.comment, sp.face_comment,
-               re.race_name, re.race_date, re.distance, re.surface, re.venue, sp.tenkai
+               re.race_name, re.race_date, re.distance, re.surface, re.venue, sp.tenkai, sp.horse_id
         FROM stats_prediction sp
         JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id
         WHERE sp.race_id = %s
@@ -204,7 +204,14 @@ def load_facts(conn, race_id, grade=None):
 
     shutuba = race_diagram.shutuba_info(race_id)   # 回り・騎手（展開図の材料）
     horses = []
-    for name, num, waku, face, stats, detail_json, comment, face_comment, *_, venue_db, tenkai_json in rows:
+    # 写真が無く鬼眼で見られない海外馬は、顔の点数の代わりにレース内の平均を使う（FaceRankingService と同じ）
+    faces = [r[3] for r in rows if r[3] is not None]
+    face_mean = sum(faces) / len(faces) if faces else None
+    abroad = not str(race_id).isdigit()
+    for name, num, waku, face, stats, detail_json, comment, face_comment, *_, venue_db, tenkai_json, hid in rows:
+        no_photo = face is None and abroad and hid and not str(hid).isdigit() and face_mean is not None and stats is not None
+        if no_photo:
+            face = face_mean
         try:
             detail = json.loads(detail_json) if detail_json else {}
         except ValueError:
@@ -220,6 +227,7 @@ def load_facts(conn, race_id, grade=None):
             'style': _style(detail), 'detail': detail,
             'stats_comment': comment, 'face_comment': face_comment,
             'tenkai': feats, 'jockey_id': shutuba['jockeys'].get(num),
+            'no_photo': bool(no_photo),
         })
     # 顔面分析済み → 合成スコア降順（同点は馬番順）、未分析は末尾
     horses.sort(key=lambda h: (h['composite'] is None, -(h['composite'] or 0), h['num']))
@@ -231,7 +239,7 @@ def load_facts(conn, race_id, grade=None):
     # コラムの肝は馬場と展開。どちらかが分からない（古い予想・取得失敗）なら書かない
     if not d0.get('当日馬場') or not d0.get('想定ペース'):
         return None, '馬場・想定ペースの材料なし（統計予想の再計算待ち）'
-    front = sorted([h for h in horses if h['style'] in ('逃げ', '先行')], key=lambda h: h['num'])
+    front = [] if abroad else sorted([h for h in horses if h['style'] in ('逃げ', '先行')], key=lambda h: h['num'])
 
     # 展開の穴: 印の外（6番手以下）で、展開補正がプラスのうち統計スコアが最も高い馬
     def pace_plus(h):
@@ -239,12 +247,15 @@ def load_facts(conn, race_id, grade=None):
         return float(m.group(1)) if m else 0.0
     outside = [h for h in horses if h['mark'] is None and pace_plus(h) > 0]
     dark = max(outside, key=lambda h: (pace_plus(h), h['composite'] or 0), default=None)
+    if abroad:
+        dark = None   # 海外は脚質・ペースの材料が無いので「展開の穴」は出さない
 
     def horse_facts(h):
         return {
             '印': h['mark'], '馬番': h['num'], '枠番': h['waku'], '枠の位置': waku_side(h['waku']), '馬名': h['name'],
             '脚質': h['style'] or '不明',
-            '顔面の見立て': _first_sentence(h['face_comment']),
+            '顔面の見立て': ('写真がないため鬼眼の対象外（統計で評価）' if h.get('no_photo')
+                       else _first_sentence(h['face_comment'])),
             '統計の根拠': h['stats_comment'],
             '当日馬場への適性': h['detail'].get('馬場状態適性'),
             '距離適性': h['detail'].get('距離適性'),
@@ -266,7 +277,7 @@ def load_facts(conn, race_id, grade=None):
         'コース': f"{surface}{distance}m" if distance else surface,
         '出走頭数': len(horses),
         '当日の馬場': d0.get('当日馬場') or '不明',
-        '想定ペース': d0.get('想定ペース') or '不明',
+        '想定ペース': '海外のレースのため想定しない' if abroad else (d0.get('想定ペース') or '不明'),
         '逃げ・先行馬（馬番順）': [
             {'馬番': h['num'], '枠番': h['waku'], '枠の位置': waku_side(h['waku']), '馬名': h['name'], '脚質': h['style']}
             for h in front],
@@ -312,6 +323,8 @@ def _valid(col, facts):
     top = facts['鬼眼の印'][0]
     if top['馬名'] not in body:
         return '◎の馬名がない'
+    if facts['想定ペース'].startswith('海外') and re.search(r'ペース|逃げ|隊列', text):
+        return '海外のレースなのにペース・隊列に触れている'
     if not facts.get('_diagram') and re.search(r'図[12１２]', text):
         return '展開図が無いのに図に触れている'
     if body.count('！') + body.count('!') > MAX_EXCLAIM:
@@ -382,6 +395,9 @@ def write_with_llm(facts):
     prompt = TASK.format(race=facts['レース'], facts=json.dumps(_public(facts), ensure_ascii=False, indent=1))
     if not facts.get('_diagram'):
         prompt = prompt.replace(DIAGRAM_TASK, '')
+    if facts['想定ペース'].startswith('海外'):
+        prompt += ("\n海外のレースなので、構成の3（枠順と隊列）と4（ペースと展開）は書かない（材料に無いため）。"
+                   "「顔面の見立て」が「写真がないため鬼眼の対象外」の馬は、顔つきに触れず統計の根拠だけで書く。")
     extra, reason = '', None
     for _ in range(LLM_TRIES):
         text = generate_text(prompt + extra, system=PERSONA, json_output=True, temperature=0.9)
@@ -503,7 +519,8 @@ def write_template(facts):
     elif front:
         paras.append("はっきりした逃げ馬はいなくて、先行勢の" + '、'.join(label(h) for h in front[:3])
                      + "が隊列を作る形になりそうです。")
-    paras.append(f"想定ペースは{facts['想定ペース']}。この流れが結果を左右しそうです。"
+    if not facts['想定ペース'].startswith('海外'):
+        paras.append(f"想定ペースは{facts['想定ペース']}。この流れが結果を左右しそうです。"
                  + ("図1と図2に、スタート直後と直線の隊列の想定を描いておきました。" if facts.get('_diagram') else ''))
     reason = top['顔面の見立て'] or '顔つきに勝負気配'
     paras.append(f"私の◎は{top['馬番']}番{top['馬名']}です！ {reason}。"

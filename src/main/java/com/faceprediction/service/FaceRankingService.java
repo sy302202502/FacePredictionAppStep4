@@ -48,6 +48,11 @@ public class FaceRankingService {
      * rows には horse_name / image_path / face_comment / face_score / score /
      * horse_number / post_position（任意で actual_rank）を含めること。
      */
+    /** 海外の馬か（netkeiba の horse_id が英数字。日本の馬は数字だけ） */
+    static boolean isAbroadHorse(String horseId) {
+        return horseId != null && !horseId.isEmpty() && !horseId.chars().allMatch(Character::isDigit);
+    }
+
     public List<RaceSpecificResult> rank(List<Map<String, Object>> rows) {
         // 1. 各馬の合成スコアを計算
         List<RaceSpecificResult> analyzed = new ArrayList<>();
@@ -55,6 +60,11 @@ public class FaceRankingService {
         List<Double> composites = new ArrayList<>();
         // 同点時の並びを決定的にするため、クリップ前の合成スコアを覚えておく
         Map<RaceSpecificResult, Double> rawComposite = new IdentityHashMap<>();
+
+        // 写真が無く鬼眼で見られない海外馬（horse_id が英数字）は、顔の点数の代わりにレース内で
+        // 顔面分析できた馬の平均を使い、統計の点数で比べる（顔の分だけ不利にならないように）
+        double faceMean = rows.stream().map(x -> x.get("face_score")).filter(java.util.Objects::nonNull)
+            .mapToDouble(x -> ((Number) x).doubleValue()).average().orElse(Double.NaN);
 
         for (Map<String, Object> row : rows) {
             RaceSpecificResult r = new RaceSpecificResult();
@@ -70,12 +80,15 @@ public class FaceRankingService {
             if (ar != null) r.setActualRank(((Number) ar).intValue());
 
             Object fs = row.get("face_score");
-            if (fs == null) {
+            boolean noPhotoAbroad = fs == null && isAbroadHorse(r.getHorseId()) && !Double.isNaN(faceMean)
+                && row.get("score") != null;
+            if (fs == null && !noPhotoAbroad) {
                 r.setScore(null);
                 unanalyzed.add(r);
                 continue;
             }
-            double face  = ((Number) fs).doubleValue();
+            if (noPhotoAbroad) r.setComment("写真がないため鬼眼の対象外（統計で評価）");
+            double face  = noPhotoAbroad ? faceMean : ((Number) fs).doubleValue();
             Object ss = row.get("score");
             double stats = ss != null ? ((Number) ss).doubleValue() : face;
             double composite = face * FACE_WEIGHT + stats * STATS_WEIGHT;

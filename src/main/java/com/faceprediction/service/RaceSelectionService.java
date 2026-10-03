@@ -68,7 +68,7 @@ public class RaceSelectionService {
             "SELECT sp.race_id, MIN(re.race_name) AS race_name FROM stats_prediction sp " +
             "JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id ";
         List<Map<String, Object>> rows;
-        if (raceId != null && raceId.matches("\\d{12}")) {
+        if (raceId != null && raceId.matches("\\d{4}[0-9A-Z]{8}")) {
             rows = jdbc.queryForList(sql + "WHERE sp.race_id = ? GROUP BY sp.race_id", raceId);
             if (!rows.isEmpty()) return rows.get(0);
         }

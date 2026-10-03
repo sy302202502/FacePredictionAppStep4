@@ -28,7 +28,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
-from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, surface_of_distance_cell
+from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, surface_of_distance_cell, is_race_id, is_abroad
 from race_condition import resolve_condition
 from pace_analyzer import running_style, predict_pace, pace_adjustment
 import tenkai
@@ -695,7 +695,7 @@ def main():
     # 解決後も race_id を保持し、出走表取得までその開催に固定する
     # （同名の最新開催に付け替えると、指定と異なる開催を予想してしまう）
     requested_race_id = None
-    if race_name.isdigit():
+    if is_race_id(race_name):   # 中央は12桁の数字、海外は英字入り（例 2026C8010105）
         requested_race_id = race_name
         conn0 = get_conn()
         cur0 = conn0.cursor()
@@ -744,7 +744,7 @@ def main():
     print(f"      {cond_info['reason']}\n")
 
     # 調教評価をレース単位で一括取得（1リクエスト）
-    oikiri = fetch_oikiri_data(race_id)
+    oikiri = {} if is_abroad(race_id) else fetch_oikiri_data(race_id)   # 海外レースに調教ページは無い
     if oikiri:
         n_time = sum(1 for v in oikiri.values() if v.get('has_time'))
         print(f"調教評価: {len(oikiri)}頭分取得（うちタイム付き {n_time}頭）\n")
@@ -812,7 +812,7 @@ def main():
 
     # 専門紙補正（東スポ競馬の指数・記者印。TOSPO_ENABLED=1 のときだけ）。
     # 規約上、生データは detail にもログにも残さず、補正値だけを使う
-    tospo_adj = fetch_tospo_adjustments(race_id)
+    tospo_adj = {} if is_abroad(race_id) else fetch_tospo_adjustments(race_id)   # 海外レースは対象外
     if tospo_adj:
         print(f"専門紙補正: {len(tospo_adj)}頭分を反映\n")
 

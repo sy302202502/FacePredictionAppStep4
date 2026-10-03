@@ -8,6 +8,7 @@ Ollama + llava:7b モデルを使って競走馬の写真を解析し、
   python face_analyzer_local.py 大阪杯
 """
 
+from constants import is_race_id
 import sys, os, json, time, requests, random
 import psycopg2
 from datetime import datetime
@@ -406,7 +407,7 @@ def main():
     race_name = sys.argv[1] if len(sys.argv) > 1 else '大阪杯'
     # 第2引数に race_id（推奨）。指定時は開催を一意に特定できるため、
     # 年またぎ同名レースの残存行を誤って対象にしない。
-    race_id = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].isdigit() else None
+    race_id = sys.argv[2] if len(sys.argv) > 2 and is_race_id(sys.argv[2]) else None
 
     print(f"{'='*60}")
     print(f"  llava顔面分析: {race_name}" + (f" (race_id={race_id})" if race_id else ''))

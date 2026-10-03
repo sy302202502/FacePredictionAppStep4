@@ -140,6 +140,22 @@ def parse_course(text):
     return surface, int(m.group(3))
 
 
+def is_race_id(s):
+    """netkeiba の race_id か（中央は12桁の数字、海外は「2026C8010105」のように英字が入る）"""
+    import re as _re
+    return bool(s) and bool(_re.fullmatch(r'\d{4}[0-9A-Z]{8}', str(s)))
+
+
+def is_abroad(race_id):
+    """海外のレース（race_id に英字が入る）か。出馬表は shutuba_abroad.html、JRA の枠は無い"""
+    return bool(race_id) and not str(race_id).isdigit()
+
+
+def shutuba_url(race_id):
+    page = 'shutuba_abroad' if is_abroad(race_id) else 'shutuba'
+    return f"https://race.netkeiba.com/race/{page}.html?race_id={race_id}"
+
+
 def surface_of_distance_cell(cell):
     """馬の成績表「距離」列（例: 芝2000 / ダ1800 / 障3000）→ '芝' / 'ダート' / '障害'。"""
     cell = (cell or '').strip()

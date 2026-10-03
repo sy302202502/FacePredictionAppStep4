@@ -223,6 +223,10 @@ def estimate_condition(place, race_date):
 def resolve_condition(race_id, race_date, place=None):
     """馬場を確定 or 推定して dict で返す。必ず dict（不明時は condition=None）。"""
     place = place or place_from_race_id(race_id)
+    if race_id and not str(race_id).isdigit():
+        # 海外のレース: 当日の馬場表記・天気予報の地点が無い
+        return {'condition': None, 'source': 'なし', 'confidence': 'none',
+                'reason': '海外のレースのため馬場は不明（中立扱い）', 'weather': None}
 
     actual, tenki = fetch_actual_condition(race_id)
     if actual:

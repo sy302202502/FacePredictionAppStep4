@@ -15,7 +15,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, is_garbled, parse_course
+from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, is_garbled, parse_course, is_abroad, shutuba_url
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 UPLOAD_DIR = os.environ.get('UPLOAD_DIR_CANDIDATES', os.path.join(os.path.dirname(__file__), '../uploads/candidates'))
@@ -82,8 +82,9 @@ def fetch_upcoming_grade_races(query=None):
 
 def fetch_shutuba_entries(race_id):
     """出馬表ページから出走馬リストを取得"""
-    url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
-    resp = fetch_with_retry(url, timeout=15, min_sleep=1.5, max_sleep=3.0)
+    # 海外のレースは出馬表のページが別（shutuba_abroad）。1列目は枠ではなくゲート番号なので枠番は持たない
+    abroad = is_abroad(race_id)
+    resp = fetch_with_retry(shutuba_url(race_id), timeout=15, min_sleep=1.5, max_sleep=3.0)
     soup = BeautifulSoup(decode_netkeiba(resp), 'lxml')
 
     # 距離・馬場を取得
@@ -99,6 +100,10 @@ def fetch_shutuba_entries(race_id):
     venue_el = soup.find('span', class_='RaceData02')
     if venue_el:
         venue = venue_el.text.strip()[:10]
+    if abroad and soup.title:
+        # 例「凱旋門賞(G1) 出馬表 | 2026年10月4日 パリロンシャン5R レース情報(海外競馬)」
+        m = re.search(r'\d{4}年\d{1,2}月\d{1,2}日\s*(\S+?)\d+R', soup.title.get_text())
+        venue = m.group(1)[:10] if m else venue
 
     entries = []
     table = soup.find('table', class_='Shutuba_Table')
@@ -132,7 +137,7 @@ def fetch_shutuba_entries(race_id):
                     sex = m.group(1)
                     break
             entries.append({
-                'post_position': int(post_pos) if post_pos.isdigit() else None,
+                'post_position': int(post_pos) if post_pos.isdigit() and not abroad else None,
                 'horse_number':  int(horse_num) if horse_num.isdigit() else None,
                 'horse_name': horse_name,
                 'horse_id':   horse_id,

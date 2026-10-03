@@ -147,7 +147,7 @@ public class ReviewController {
     public Map<String, Object> api(@RequestParam String raceId) {
         Map<String, Object> out = new LinkedHashMap<>();
         // 公開範囲は /review 画面と同じ（結果記録済みの直近レース）。形式外の ID や範囲外は返さない
-        if (!raceId.matches("\\d{12}")) {
+        if (!raceId.matches("\\d{4}[0-9A-Z]{8}")) {
             out.put("available", false);
             return out;
         }

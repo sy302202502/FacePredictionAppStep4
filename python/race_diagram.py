@@ -50,8 +50,8 @@ def shutuba_info(race_id):
     info = {'direction': None, 'jockeys': {}}
     try:
         from bs4 import BeautifulSoup
-        r = requests.get(f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}",
-                         headers=HEADERS, timeout=15)
+        from constants import shutuba_url
+        r = requests.get(shutuba_url(race_id), headers=HEADERS, timeout=15)
         html = decode_netkeiba(r)
         m = re.search(r'\d{3,4}m\s*\((右|左|直線)', html)
         info['direction'] = m.group(1) if m else None
@@ -216,12 +216,15 @@ def pace_forecast(horses, stats=None):
 
 
 # ── 本体 ─────────────────────────────────────────────
-def build(horses, pace, direction, course_key=None):
+def build(horses, pace, direction, course_key=None, abroad=False):
     """horses: column_writer の馬リスト（num, waku, style, detail, stats_score, mark, name, tenkai, jockey_id）。
     mark（鬼眼の印）は表示用で、位置の計算には使わない。
     戻り値は画面に渡す辞書（JSON にして race_column.diagram へ保存する）"""
     n = len(horses)
     if n < 2:
+        return None
+    # 位置取りの材料（近走の通過順・脚質）がほとんど無いレース（海外など）は、図を描いても根拠が無いので描かない
+    if sum(1 for h in horses if h.get('tenkai') or h.get('style')) < n / 2:
         return None
     stats = tenkai.load_stats()
     trend = tenkai.course_trend(course_key, stats) if course_key else None
@@ -247,7 +250,9 @@ def build(horses, pace, direction, course_key=None):
     scene2 = _assign_lanes(ordered2, pref2)
 
     def pack(scene, why):
-        return [{'num': h['num'], 'waku': h['waku'] or waku_of(h['num'], n), 'mark': h['mark'], 'style': h['style'],
+        # 海外のレースには JRA の枠が無いので、枠の色を補わない（丸は灰色）
+        return [{'num': h['num'], 'waku': h['waku'] or (None if abroad else waku_of(h['num'], n)),
+                 'mark': h['mark'], 'style': h['style'],
                  'name': h['name'], 'x': round(x, 3), 'lane': lane, 'why': why(h)} for h, x, lane in scene]
 
     # 末脚の順位（近走の上がり3F が、そのレースの後半3F より何秒速かったかの平均で比べる）

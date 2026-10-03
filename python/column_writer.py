@@ -183,7 +183,7 @@ def load_facts(conn, race_id, grade=None):
     cur.execute("""
         SELECT sp.horse_name, re.horse_number, re.post_position, sp.face_score, sp.score,
                sp.score_detail, sp.comment, sp.face_comment,
-               re.race_name, re.race_date, re.distance, re.surface, sp.tenkai
+               re.race_name, re.race_date, re.distance, re.surface, re.venue, sp.tenkai
         FROM stats_prediction sp
         JOIN race_entry re ON re.race_id = sp.race_id AND re.horse_id = sp.horse_id
         WHERE sp.race_id = %s
@@ -201,7 +201,7 @@ def load_facts(conn, race_id, grade=None):
 
     shutuba = race_diagram.shutuba_info(race_id)   # 回り・騎手（展開図の材料）
     horses = []
-    for name, num, waku, face, stats, detail_json, comment, face_comment, *_, tenkai_json in rows:
+    for name, num, waku, face, stats, detail_json, comment, face_comment, *_, venue_db, tenkai_json in rows:
         try:
             detail = json.loads(detail_json) if detail_json else {}
         except ValueError:
@@ -250,7 +250,8 @@ def load_facts(conn, race_id, grade=None):
     # 展開の想定図（本文と同じ材料から作る。図の要点は本文の材料にも入れて文章と図をそろえる）
     pace_label = (d0.get('想定ペース') or '').split('（')[0]
     diagram = race_diagram.build(horses, pace_label, shutuba['direction'],
-                                 tenkai.course_key(tenkai.venue_of_race_id(race_id), surface, distance))
+                                 tenkai.course_key(tenkai.venue_of_race_id(race_id), surface, distance),
+                                 abroad=not str(race_id).isdigit())
     evidence = race_diagram.evidence_lines(diagram)
 
     roster = {h['num']: h for h in horses}
@@ -258,7 +259,7 @@ def load_facts(conn, race_id, grade=None):
         'レース': race_name,
         '格付け': grade,
         '開催日': str(race_date),
-        '競馬場': place_from_race_id(race_id),
+        '競馬場': place_from_race_id(race_id) or rows[0][12],   # 海外は出馬表の開催地（例 パリロンシャン）
         'コース': f"{surface}{distance}m" if distance else surface,
         '出走頭数': len(horses),
         '当日の馬場': d0.get('当日馬場') or '不明',
@@ -308,6 +309,8 @@ def _valid(col, facts):
     top = facts['鬼眼の印'][0]
     if top['馬名'] not in body:
         return '◎の馬名がない'
+    if not facts.get('_diagram') and re.search(r'図[12１２]', text):
+        return '展開図が無いのに図に触れている'
     if body.count('！') + body.count('!') > MAX_EXCLAIM:
         return '「！」が多い（語り口）'
     return _check_facts(text, facts)
@@ -366,12 +369,16 @@ def _check_facts(text, facts):
 
 
 LLM_TRIES = 3   # 検査・校閲で問題が出たら、指摘を添えて書き直させる回数（合計）
+# 展開図についての指示（図が無いレース＝海外などでは指示から外し、本文で図に触れさせない）
+DIAGRAM_TASK = 'コラムには展開の想定図が2枚付く（図1=スタート〜最初のコーナー、図2=最後の直線。中身は材料の「図1_…」「図2_…」）。\n3と4の段落では「図1のように」「図2を見てほしい」と自然に触れてよい。図の並びと違うことは書かない。\n図の位置には「図1の根拠」「図2の根拠」に近走の数字がある。1〜2個を選んで「近6走の最初のコーナーは平均2.1番手相当」のように根拠として添えてよい（数字は材料のとおりに。材料に無い数字は書かない）。\n'
 
 
 def write_with_llm(facts):
     """AI で書き、機械的な検査（_valid）と AI の校閲（column_review）の両方に通るまで最大 LLM_TRIES 回書き直す。
     通らなければ (None, 最後の理由)。呼び出し側はテンプレート文章に切り替える"""
     prompt = TASK.format(race=facts['レース'], facts=json.dumps(_public(facts), ensure_ascii=False, indent=1))
+    if not facts.get('_diagram'):
+        prompt = prompt.replace(DIAGRAM_TASK, '')
     extra, reason = '', None
     for _ in range(LLM_TRIES):
         text = generate_text(prompt + extra, system=PERSONA, json_output=True, temperature=0.9)

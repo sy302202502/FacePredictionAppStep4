@@ -27,6 +27,7 @@ public class JobsController {
         LABELS.put("odds",     "オッズ更新（土日9〜15時）");
         LABELS.put("results",  "結果取得（土日18・22時／毎朝10時）");
         LABELS.put("cleanup",  "画像整理（月曜5時）");
+        LABELS.put("columns",  "夜のコラム（木・金・土20時）");
     }
 
     @Autowired private JdbcTemplate jdbc;

@@ -236,6 +236,17 @@ def face_analysis_done(conn, race_id):
     finally:
         cur.close()
 
+def has_race_column(conn, race_id):
+    """鬼眼コラム（race_column）が公開済みか。テーブルが無ければ False"""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT 1 FROM race_column WHERE race_id = %s", (race_id,))
+        return cur.fetchone() is not None
+    except Exception:
+        return False
+    finally:
+        cur.close()
+
 def has_recent_facts(conn, race_id):
     """週中コラムの材料（stats_prediction.recent＝近走の事実）が8割以上の馬にそろっているか。
     列が無い（stats_predictor がまだ一度も新しい形で保存していない）ときも False"""
@@ -396,7 +407,11 @@ def main():
             is_imminent  = 0 <= days_to_race <= 1
             if is_imminent and reeval_count < REEVAL_LIMIT:
                 if grade_no in (1, 2, 3):
-                    needs_reeval = True
+                    # 夜に鬼眼コラムを公開した重賞は再評価しない（コラム・X に載せた画像の印と
+                    # 予想画面の印が食い違わないように。night_columns.py 参照）
+                    needs_reeval = not has_race_column(conn, race_id)
+                    if not needs_reeval:
+                        log(f"  → 統計予想: 鬼眼コラム公開済みのため再評価しない（印を固定）")
                 else:
                     cur_n = conn.cursor()
                     cur_n.execute("SELECT COUNT(*) FROM race_entry WHERE race_id = %s", (race_id,))
@@ -444,32 +459,16 @@ def main():
             # 終了コードだけでなく DB 上の完了も確認する（重賞以外も同じ基準で判定）
             ok3 = ok3 and face_analysis_done(conn, race_id)
 
-        # 5. 鬼眼コラム（重賞のみ）。枠順確定後に作成し、馬場確定などで材料が変われば書き直す。
-        #    失敗しても予想そのものには影響しないので、レースの成否には数えない
-        if is_graded and ok3:
+        # 5. 鬼眼コラム（重賞のみ）。公開は夜（night_columns.py: 金曜夜=土曜の重賞、土曜夜=日曜の重賞）。
+        #    朝は、レース当日なのにまだコラムが無いとき（夜の処理の失敗など）だけ作る。書き直しはしない
+        if is_graded and ok3 and race['race_date'] == datetime.now().date() and not has_race_column(conn, race_id):
             okc, _ = run_script('column_writer.py',
                                 [race_id, '--grade', {1: 'G1', 2: 'G2', 3: 'G3'}[grade_no]],
-                                '鬼眼コラム')
+                                '鬼眼コラム（夜の公開が無かったため）')
             if not okc:
                 log(f"  ⚠️ コラム作成に失敗（予想は公開済み）")
 
-        # 6. 週中コラム（重賞のみ・木曜と金曜）。事実だけで書き、顔面分析は使わない。
-        #    近走の事実がまだ保存されていない（予想を最初に作ったのが機能追加より前など）なら、
-        #    統計予想を再評価して保存してから書く。失敗しても予想そのものには影響しない
-        weekday = datetime.now().weekday()
-        days_ahead = (race['race_date'] - datetime.now().date()).days
-        if is_graded and weekday in (3, 4) and 1 <= days_ahead <= 4:
-            if not has_recent_facts(conn, race_id):
-                run_script('stats_predictor.py', [race_id, '--update'], '統計予想（近走の事実を保存）')
-            if has_recent_facts(conn, race_id):
-                okw, _ = run_script('week_column.py',
-                                    [race_id, '--grade', {1: 'G1', 2: 'G2', 3: 'G3'}[grade_no],
-                                     '--edition', 'thu' if weekday == 3 else 'fri'],
-                                    '週中コラム')
-                if not okw:
-                    log(f"  ⚠️ 週中コラムの作成に失敗（予想は公開済み）")
-            else:
-                log(f"  ⚠️ 近走の事実がそろわないため週中コラムは見送り")
+        # （週中コラムは夜の night_columns.py で書く）
 
         results.append({
             'race': race_name,

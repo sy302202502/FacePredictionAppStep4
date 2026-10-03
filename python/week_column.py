@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta, timezone
 from column_writer import get_conn, VOICE, VOICE_NG, SOURCE_NG, MAX_EXCLAIM, scrub_sources
 from llm_client import generate_text
 from race_condition import place_from_race_id
+import column_review
 import race_facts
 
 TOP_HORSES = 5
@@ -135,8 +136,11 @@ def load_facts(conn, race_id, grade, edition):
                        '_runs': [(re.sub(r'\(.*?\)', '', x['race']), x['rank']) for x in rec['runs']]})
     venue = place_from_race_id(race_id)
     trends = race_facts.past_trends(conn, race_name, race_date, venue, surface, distance)
-    stage = ('出走予定馬（特別登録）の段階。出走はまだ確定していない' if edition == 'thu'
-             else '出走馬が確定した段階')
+    # 出走馬は木曜の午後（出馬投票の締め切り後）に確定する。夜に書く木曜版は確定後
+    thursday = race_date - timedelta(days=(race_date.weekday() - 3) % 7)
+    confirmed = datetime.now(timezone(timedelta(hours=9))).replace(tzinfo=None) >= datetime(
+        thursday.year, thursday.month, thursday.day, 16)
+    stage = '出走馬が確定した段階' if confirmed else '出走予定馬（特別登録）の段階。出走はまだ確定していない'
     facts = {
         'レース': race_name,
         '格付け': grade,
@@ -144,7 +148,7 @@ def load_facts(conn, race_id, grade, edition):
         '競馬場': venue,
         'コース': f"{surface}{distance}m" if distance else surface,
         '段階': stage,
-        ('登録頭数' if edition == 'thu' else '出走頭数'): f"{len(rows)}頭",
+        ('出走頭数' if confirmed else '登録頭数'): f"{len(rows)}頭",
         'データ上の有力馬（アプリの統計スコア上位。近走成績・距離・馬場・調教などの集計）': horses,
         '過去の同じレース': trends or '記録なし',
     }
@@ -259,20 +263,36 @@ def check(col, facts):
     return None
 
 
+LLM_TRIES = 3   # 検査・校閲で問題が出たら、指摘を添えて書き直させる回数（合計）
+
+
 def write_with_llm(facts, edition):
-    text = generate_text(TASK.format(race=facts['レース'], edition=EDITIONS[edition],
-                                     facts=json.dumps(_public(facts), ensure_ascii=False, indent=1)),
-                         system=PERSONA, json_output=True, temperature=0.8)
-    if not text:
-        return None, 'LLM応答なし'
-    try:
-        col = json.loads(text[text.find('{'): text.rfind('}') + 1])
-    except ValueError:
-        return None, 'JSON解析失敗'
-    reason = check(col, facts)
-    if reason:
-        return None, reason
-    return {'title': col['title'].strip()[:60], 'body': col['body'].strip()}, None
+    """AI で書き、機械的な検査（check）と AI の校閲（column_review）の両方に通るまで最大 LLM_TRIES 回書き直す"""
+    prompt = TASK.format(race=facts['レース'], edition=EDITIONS[edition],
+                         facts=json.dumps(_public(facts), ensure_ascii=False, indent=1))
+    extra, reason = '', None
+    for _ in range(LLM_TRIES):
+        text = generate_text(prompt + extra, system=PERSONA, json_output=True, temperature=0.8)
+        if not text:
+            return None, 'LLM応答なし'
+        try:
+            col = json.loads(text[text.find('{'): text.rfind('}') + 1])
+        except ValueError:
+            reason, extra = 'JSON解析失敗', ''
+            continue
+        reason = check(col, facts)
+        if reason:
+            extra = column_review.feedback([reason])
+            continue
+        problems, ran = column_review.review(col['title'] + '\n' + col['body'], _public(facts),
+                                             extra='7. 馬の顔つき・顔面分析・鬼眼の印に触れている（このコラムは事実だけで書く）')
+        if problems:
+            reason = '校閲: ' + ' / '.join(problems)
+            extra = column_review.feedback(problems)
+            continue
+        return {'title': col['title'].strip()[:60], 'body': col['body'].strip(),
+                '_review': '機械検査・AI校閲とも合格' if ran else '機械検査は合格（AI校閲は実行できず）'}, None
+    return None, reason
 
 
 def write_template(facts, edition):

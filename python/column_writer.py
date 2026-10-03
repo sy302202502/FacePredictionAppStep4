@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 
 from llm_client import generate_text
 from race_condition import place_from_race_id
+import column_review
 import race_diagram
 import tenkai
 
@@ -364,22 +365,37 @@ def _check_facts(text, facts):
     return None
 
 
+LLM_TRIES = 3   # 検査・校閲で問題が出たら、指摘を添えて書き直させる回数（合計）
+
+
 def write_with_llm(facts):
-    text = generate_text(TASK.format(race=facts['レース'],
-                                     facts=json.dumps(_public(facts), ensure_ascii=False, indent=1)),
-                         system=PERSONA, json_output=True, temperature=0.9)
-    if not text:
-        return None, 'LLM応答なし'
-    try:
-        col = json.loads(text[text.find('{'): text.rfind('}') + 1])
-    except ValueError:
-        return None, 'JSON解析失敗'
-    reason = _valid(col, facts)
-    if reason:
-        return None, reason
-    col['title'] = col['title'].strip()[:60]
-    col['body'] = col['body'].strip()
-    return col, None
+    """AI で書き、機械的な検査（_valid）と AI の校閲（column_review）の両方に通るまで最大 LLM_TRIES 回書き直す。
+    通らなければ (None, 最後の理由)。呼び出し側はテンプレート文章に切り替える"""
+    prompt = TASK.format(race=facts['レース'], facts=json.dumps(_public(facts), ensure_ascii=False, indent=1))
+    extra, reason = '', None
+    for _ in range(LLM_TRIES):
+        text = generate_text(prompt + extra, system=PERSONA, json_output=True, temperature=0.9)
+        if not text:
+            return None, 'LLM応答なし'
+        try:
+            col = json.loads(text[text.find('{'): text.rfind('}') + 1])
+        except ValueError:
+            reason, extra = 'JSON解析失敗', ''
+            continue
+        reason = _valid(col, facts)
+        if reason:
+            extra = column_review.feedback([reason])
+            continue
+        problems, ran = column_review.review(col['title'] + '\n' + col['body'], _public(facts))
+        if problems:
+            reason = '校閲: ' + ' / '.join(problems)
+            extra = column_review.feedback(problems)
+            continue
+        col['title'] = col['title'].strip()[:60]
+        col['body'] = col['body'].strip()
+        col['_review'] = '機械検査・AI校閲とも合格' if ran else '機械検査は合格（AI校閲は実行できず）'
+        return col, None
+    return None, reason
 
 
 # ------------------------------------------------------------------

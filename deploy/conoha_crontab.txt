@@ -24,6 +24,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # ── 的中記録の自動取得（土日夜 + 毎朝10時: 未記録分のみ処理・冪等）──
 0 18,22 * * 6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py results result_auto_fetcher.py >> logs/results_cron.log 2>&1
 0 10 * * * cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py results result_auto_fetcher.py >> logs/results_cron.log 2>&1
+# 夜のコラム（木=週中コラム木曜版 / 金=土曜重賞の鬼眼コラム＋日曜重賞の金曜版 / 土=日曜重賞の鬼眼コラム）
+0 20 * * 4,5,6 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py columns night_columns.py >> logs/columns_cron.log 2>&1
 
 # ── 本番DBの日次バックアップ（4時: 14日保持・空ダンプ検知付き）──
 0 4 * * * /opt/faceprediction/deploy/vps_backup.sh >> /opt/faceprediction/logs/backup.log 2>&1

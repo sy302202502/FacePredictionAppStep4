@@ -1,7 +1,8 @@
 // prediction_shot.mjs — 予想画面を X の「予想詳細」リプ用の画像にする（Mac で実行。画面なしの Chrome を DevTools プロトコルで直接操作）
 //
-//   node tools/prediction_shot.mjs <URL> <出力の頭.png>
+//   node tools/prediction_shot.mjs <URL> <出力の頭.png> [nophoto]
 //   ・URL=/predict-v2?raceId=…
+//   ・nophoto: 馬の写真を外して撮る（写真には撮影元のロゴが入っているので、X には写真なしで載せる）
 //   ・スマホの幅（390px・3倍の解像度）で4枚撮る:
 //       <出力>_1.png ◎○ / _2.png ▲△ / _3.png 注☆ （印の上位6頭のカード、2頭ずつ）
 //       <出力>_4.png 鬼眼買い目
@@ -10,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-const [url, out] = process.argv.slice(2);
+const [url, out, opt] = process.argv.slice(2);
 const port = 9334;
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'pshot-'))}`,
@@ -35,6 +36,7 @@ await sleep(5000);   // フォントの読み込み待ち
 await send('Runtime.evaluate', { awaitPromise: true, expression:
   `(async () => { const cards = [...document.querySelectorAll('div.horse-card')].slice(0, 6);
      for (const c of cards) { c.scrollIntoView({block: 'center'}); await new Promise(r => setTimeout(r, 400)); }
+     if (${JSON.stringify(opt === 'nophoto')}) cards.forEach(c => c.querySelectorAll('.horse-img').forEach(i => (i.parentElement.children.length === 1 ? i.parentElement : i).style.display = 'none'));
      cards.forEach(c => { c.classList.add('revealed'); c.style.transitionDelay = '0ms';
        const f = c.querySelector('.score-bar-fill'); if (f && f.dataset.width) f.style.width = f.dataset.width + '%'; });
      await Promise.all([...document.images].filter(i => !i.complete).map(i => new Promise(r => { i.onload = i.onerror = r; setTimeout(r, 5000); })));

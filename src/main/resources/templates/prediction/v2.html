@@ -1502,10 +1502,10 @@
                             <span class="odds-val" th:text="${od.winOdds + '倍'}">3.5倍</span>
                         </span>
                     </div>
-                    <!-- コメント1行目（太字評価文）を馬名直下に配置 -->
+                    <!-- コメント1行目（太字評価文）を馬名直下に配置。先頭の「【5番】」は馬番バッジと重なるので外す -->
                     <div class="comment-headline-row" th:if="${r.comment != null}">
                         <span class="comment-headline"
-                              th:text="${#strings.arraySplit(r.comment, '　')[0]}"></span>
+                              th:text="${#strings.arraySplit(r.comment.replaceFirst('^【[0-9]+番】', ''), '　')[0]}"></span>
                     </div>
 
                     <div class="score-row">
@@ -1529,7 +1529,7 @@
                         <!-- コメントが1パーツのみの場合は comment-headline の下に再掲 -->
                         <span th:if="${!#strings.contains(r.comment, '　')}"
                               class="comment-sub"
-                              th:text="${r.comment}">
+                              th:text="${r.comment.replaceFirst('^【[0-9]+番】', '')}">
                         </span>
                     </div>
                 </div>

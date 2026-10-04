@@ -1,9 +1,9 @@
 // prediction_shot.mjs — 予想画面を X の「予想詳細」リプ用の画像にする（Mac で実行。画面なしの Chrome を DevTools プロトコルで直接操作）
 //
-//   node tools/prediction_shot.mjs <URL> <出力の頭.png> [nophoto]
+//   node tools/prediction_shot.mjs <URL> <出力の頭.png> [photo]
 //   ・URL=/predict-v2?raceId=…
-//   ・既定は馬の写真つき（2026-10-04 本人の判断。写真の撮影元ロゴは消さず、そのまま写す）
-//   ・nophoto: 馬の写真を外して撮る
+//   ・既定は馬の写真なし（X に載せる画像には写真を使わない。2026-10-04 本人の判断。アプリの画面には写真を出したまま）
+//   ・photo: 写真つきで撮る（撮影元のロゴは消さない）
 //   ・スマホの幅（390px・3倍の解像度）で4枚撮る:
 //       <出力>_1.png ◎○ / _2.png ▲△ / _3.png 注☆ （印の上位6頭のカード、2頭ずつ）
 //       <出力>_4.png 鬼眼買い目
@@ -37,7 +37,7 @@ await sleep(5000);   // フォントの読み込み待ち
 await send('Runtime.evaluate', { awaitPromise: true, expression:
   `(async () => { const cards = [...document.querySelectorAll('div.horse-card')].slice(0, 6);
      for (const c of cards) { c.scrollIntoView({block: 'center'}); await new Promise(r => setTimeout(r, 400)); }
-     if (${JSON.stringify(opt === 'nophoto')}) cards.forEach(c => c.querySelectorAll('.horse-img').forEach(i => (i.parentElement.children.length === 1 ? i.parentElement : i).style.display = 'none'));
+     if (${JSON.stringify(opt !== 'photo')}) cards.forEach(c => c.querySelectorAll('.horse-img').forEach(i => (i.parentElement.children.length === 1 ? i.parentElement : i).style.display = 'none'));
      cards.forEach(c => { c.classList.add('revealed'); c.style.transitionDelay = '0ms';
        const f = c.querySelector('.score-bar-fill'); if (f && f.dataset.width) f.style.width = f.dataset.width + '%'; });
      await Promise.all([...document.images].filter(i => !i.complete).map(i => new Promise(r => { i.onload = i.onerror = r; setTimeout(r, 5000); })));

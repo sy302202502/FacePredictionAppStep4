@@ -884,7 +884,37 @@ def main():
             soup = fetch_result_page(rid)
             np_ = save_payouts(conn, rid, parse_payouts(soup)) if soup else 0
             nb = backfill_horse_numbers(conn, rid, soup) if soup else 0
+            if soup:
+                tenkai_check.record(conn, rid, soup)   # 同じページで答え合わせも（追加のアクセスなし）
             print(f"  {rid}: 払戻 {np_}件" + (f"・馬番 {nb}頭を補完" if nb else ""))
+            time.sleep(1.5)
+
+        # 展開図つきのコラムがあるのに、展開図の答え合わせ（tenkai_check）が抜けているレースを補う。
+        # 対象は展開図のある重賞だけ（週に数レース）。1回の実行で最大10ページまで（一括取得はしない）
+        try:
+            tenkai_check.ensure_table(conn)
+            cur_t = conn.cursor()
+            cur_t.execute("""
+                SELECT DISTINCT rc.race_id FROM race_column rc
+                JOIN race_specific_accuracy rsa ON rsa.race_id = rc.race_id AND rsa.data_source = 'stats'
+                WHERE rc.diagram IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM tenkai_check tc WHERE tc.race_id = rc.race_id)
+                LIMIT 10
+            """)
+            no_check = [r[0] for r in cur_t.fetchall()]
+            cur_t.close()
+        except Exception as e:
+            conn.rollback()
+            no_check = []
+            print(f"[展開図の答え合わせ] 補完対象の確認に失敗: {e}")
+        if no_check:
+            print(f"\n展開図の答え合わせの未保存: {len(no_check)}レース")
+        for rid in no_check:
+            if dry_run:
+                continue
+            soup = fetch_result_page(rid)
+            if soup:
+                tenkai_check.record(conn, rid, soup)
             time.sleep(1.5)
 
         if not dry_run:

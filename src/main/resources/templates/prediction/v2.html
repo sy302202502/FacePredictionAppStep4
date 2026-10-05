@@ -1436,7 +1436,8 @@
             <div class="neon-divider"></div>
 
             <!-- 1位スーパーチャット風バナー -->
-            <div th:if="${results != null and !#lists.isEmpty(results)}" class="superchat-banner">
+            <!-- 先頭の馬に鬼眼スコアがあるときだけ（全馬が未分析のときに「本命」と出さない） -->
+            <div th:if="${results != null and !#lists.isEmpty(results) and results[0].score != null}" class="superchat-banner">
                 🏆 本命 ◎ — <span th:text="${results[0].horseName}">馬名</span>
             </div>
 
@@ -1520,17 +1521,13 @@
                         </div>
                     </div>
 
-                    <div class="horse-comment" th:if="${r.comment != null}">
+                    <div class="horse-comment" th:if="${r.comment != null and #strings.contains(r.comment, '　')}">
                         <span th:each="part,stat : ${#strings.arraySplit(r.comment, '　')}"
                               th:if="${stat.index > 0 and !#strings.isEmpty(part)}"
                               class="comment-sub"
                               th:text="${part}">
                         </span>
-                        <!-- コメントが1パーツのみの場合は comment-headline の下に再掲 -->
-                        <span th:if="${!#strings.contains(r.comment, '　')}"
-                              class="comment-sub"
-                              th:text="${r.comment.replaceFirst('^【[0-9]+番】', '')}">
-                        </span>
+                        <!-- コメントが1パーツだけのとき（例: 写真がないため鬼眼の対象外）は見出しに出ているので再掲しない -->
                     </div>
                 </div>
             </div>

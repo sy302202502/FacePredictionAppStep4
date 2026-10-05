@@ -143,16 +143,27 @@ def run_script(script_name, args, desc):
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1, env=env,
-        cwd=os.path.dirname(SCRIPT_DIR)
+        cwd=os.path.dirname(SCRIPT_DIR),
+        start_new_session=True,   # 子が起動した孫プロセスもまとめて止められるように（job_runner と同じ）
     )
 
-    # タイムアウト監視: 期限超過でプロセスツリーを強制終了する
+    # タイムアウト監視: 期限超過でプロセスグループごと強制終了する（TERM → 猶予 → KILL）
     timed_out = {'flag': False}
     def _killer():
+        import signal
         timed_out['flag'] = True
+        # TERM で止まらない孫が残らないよう、猶予のあとグループ全体に必ず KILL を送る
         try:
-            proc.kill()
-        except Exception:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
             pass
     timer = threading.Timer(SCRIPT_TIMEOUT, _killer)
     timer.start()

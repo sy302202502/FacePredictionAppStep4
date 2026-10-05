@@ -62,16 +62,32 @@ def main():
         print('RESULT:{"success": true, "skipped": "not_night"}')
         return
     sat, sun = weekend(today)
-    races = [r for r in fetch_upcoming_grade_races(days=(sun - today).days)
-             if r.get('grade_no') in GRADE and r['race_date'] in (sat, sun)]
+    weekend_races = [r for r in fetch_upcoming_grade_races(days=(sun - today).days) if r['race_date'] in (sat, sun)]
+    races = [r for r in weekend_races if r.get('grade_no') in GRADE]
     log(f"夜のコラム（{mode}）: 対象の重賞 {len(races)}件 — "
         + '、'.join(f"{r['race_date'].month}/{r['race_date'].day} {r['race_name']}" for r in races))
+    if not weekend_races and not dry:
+        # 週末の重賞・OP・リステッドが1件も読めないのは「重賞が無い週」ではなく、レース一覧の取得失敗とみなす
+        # （中央競馬の開催週には必ずオープン以上のレースがある）。成功扱いにして見逃さない
+        send_discord("⚠️ **夜のコラム**: 週末のレース一覧が読めませんでした（取得の失敗か、ページの形の変化）。"
+                     "コラムは作っていません。/jobs のログを確認してください。")
+        print('RESULT:{"success": false, "reason": "race_list_empty"}')
+        sys.exit(1)
     if dry or not races:
         print(f'RESULT:{{"success": true, "races": {len(races)}}}')
         return
 
     # 1. 出馬表と同期（今日から日曜まで）。回避馬を外し、変わったレースは予想を作り直す
-    run_script('entry_fetcher.py', ['--sync', '--days', str((sun - today).days)], '出馬表 同期')
+    synced, _ = run_script('entry_fetcher.py', ['--sync', '--days', str((sun - today).days)], '出馬表 同期')
+    if not synced and mode != 'thu':
+        # 金・土の夜は出走馬（取消・頭数・枠）が確定している前提でコラムを書くので、同期に失敗したら書かない。
+        # 公開済みのコラムはそのまま残す（古い出走表で書き直さない）。木曜の週中コラムは登録馬で書くので続ける
+        send_discord("⛔ **夜のコラム**: 出馬表の同期に失敗したため、今夜のコラムは作っていません"
+                     "（公開済みのコラムはそのまま）。/jobs のログを確認し、直ったら夜のコラムを手動で実行してください。")
+        print('RESULT:{"success": false, "reason": "sync_failed"}')
+        sys.exit(1)
+    if not synced:
+        log("  ⚠️ 出馬表の同期に失敗（木曜は登録馬で週中コラムを書くので続行）")
 
     conn = get_conn()
     report, fails = [], 0

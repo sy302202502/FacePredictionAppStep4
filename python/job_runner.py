@@ -114,13 +114,20 @@ def main():
             exit_code = rc if rc >= 0 else 128 - rc
         except subprocess.TimeoutExpired:
             # 子が起動した孫プロセスごと止める（TERM → 猶予 → KILL）
-            for sig in (signal.SIGTERM, signal.SIGKILL):
-                try:
-                    os.killpg(proc.pid, sig)
-                    proc.wait(timeout=15)
-                    break
-                except (subprocess.TimeoutExpired, ProcessLookupError):
-                    continue
+            # TERM → 猶予 → グループ全体に必ず KILL（子が先に終わっても、TERM を無視した孫を残さない）
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+                proc.wait(timeout=15)
+            except (subprocess.TimeoutExpired, ProcessLookupError):
+                pass
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
             exit_code = 124  # timeout(1) と同じ慣例
             tail.append(f"タイムアウト（{TIMEOUT_SEC // 60}分）で打ち切り")
         reader.join(timeout=5)

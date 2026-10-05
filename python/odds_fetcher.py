@@ -137,8 +137,8 @@ def save_odds(conn, race_id, race_name, horse_map, odds_map):
         horse_name, horse_id = info
         cur.execute("""
             INSERT INTO race_odds (race_id, race_name, horse_name, horse_id, win_odds, popularity, fetched_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (race_id, race_name, horse_name, horse_id, odds_val, pop))
+            VALUES (%s, %s, %s, %s, %s, %s, NOW() AT TIME ZONE 'Asia/Tokyo')
+        """, (race_id, race_name, horse_name, horse_id, odds_val, pop))   # 画面の「オッズ更新」時刻は日本時間で出す
     conn.commit()
     cur.close()
 

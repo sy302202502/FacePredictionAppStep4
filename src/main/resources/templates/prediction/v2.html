@@ -1215,6 +1215,19 @@
             font-size: 13px; line-height: 1.6; resize: vertical; margin-bottom: 8px;
         }
         @media (max-width: 640px) { .column-inner { padding: 14px; } .column-p { font-size: 13.5px; } }
+        /* 予想の要約（ページ上部。スマホで買い目・ランキングまで遠い問題の対策） */
+        .pred-summary { margin: 0 0 18px; padding: 14px 16px; border: 1px solid rgba(245,216,120,0.35);
+                        border-radius: 8px; background: rgba(20,16,4,0.6); }
+        .pred-summary .ps-honmei { font-size: 17px; font-weight: 900; color: var(--gold-light); margin-bottom: 6px; }
+        .pred-summary .ps-row { font-size: 14px; line-height: 1.9; color: #d9e6d2; }
+        .pred-summary .ps-row b { color: var(--neon); margin-right: 6px; font-weight: 700; }
+        .pred-summary .ps-marks span { margin-right: 10px; white-space: nowrap; }
+        .pred-summary .ps-links { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+        .pred-summary .ps-links a { font-size: 13px; padding: 6px 12px; border-radius: 999px; text-decoration: none;
+                                    border: 1px solid rgba(125,255,79,0.45); color: var(--neon); }
+        .odds-updated { font-size: 12px; color: #9bb592; margin: -4px 0 10px; }
+        .odds-updated.stale { color: #6f7a69; }
+        .bet-reason { font-size: 14px; color: #c9d6c2; line-height: 1.8; padding: 12px 14px; }
         .bet-jump {
             display: block; text-align: right; margin: -6px 0 14px;
             font-size: 12px; color: var(--gold-light); text-decoration: none;
@@ -1331,6 +1344,27 @@
         <!-- 分析結果 -->
         <div th:if="${selectedRace != null}">
 
+            <!-- 予想の要約：本命・上位5頭・想定ペース・オッズ更新と、各欄へのジャンプ -->
+            <div class="pred-summary" th:if="${results != null and !#lists.isEmpty(results) and results[0].score != null}">
+                <div class="ps-honmei">🏆 本命 ◎
+                    <span th:if="${results[0].horseNumber != null}" th:text="${results[0].horseNumber + '番'}">6番</span>
+                    <span th:text="${results[0].horseName}">馬名</span></div>
+                <div class="ps-row ps-marks"><b>上位5頭</b>
+                    <span th:each="r,st : ${results}" th:if="${st.index < 5 and r.score != null}"
+                          th:text="${(st.index == 0 ? '◎' : st.index == 1 ? '○' : st.index == 2 ? '▲' : st.index == 3 ? '△' : '注')
+                                    + (r.horseNumber != null ? r.horseNumber + ' ' : '') + r.horseName}">◎6 馬名</span>
+                </div>
+                <div class="ps-row" th:if="${column != null and column.evidence != null and column.evidence.pace != null and column.evidence.pace != ''}">
+                    <b>想定ペース</b><span th:text="${column.evidence.pace}">スローペース</span></div>
+                <div class="ps-row" th:if="${oddsUpdated != null}"><b>オッズ</b>
+                    <span th:text="${oddsUpdated + ' 時点' + (oddsStale ? '（少し前の数字です）' : '')}">10/4 11:52 時点</span></div>
+                <div class="ps-links">
+                    <a th:if="${column != null}" href="#column">📝 鬼眼コラム</a>
+                    <a href="#ranking">🏆 ランキング</a>
+                    <a th:if="${(bets != null and !#lists.isEmpty(bets)) or betReason != null}" href="#bets">🎫 鬼眼買い目</a>
+                </div>
+            </div>
+
             <div th:if="${pattern != null}">
                 <div class="section-heading">
                     <span th:text="${selectedRace}"></span> — 分析のまとめ
@@ -1378,7 +1412,7 @@
 
             <!-- 鬼眼コラム（重賞・枠順確定後） -->
             <div th:if="${column != null}">
-                <div class="section-heading">鬼眼コラム</div>
+                <div class="section-heading" id="column">鬼眼コラム</div>
                 <div class="glass-card column-card"
                      th:attr="data-race-id=${selectedRaceId},data-diagram=${column.diagram == null ? 'none' : (column.scenes == null ? 'broken' : 'ok')}">
                     <div class="column-inner">
@@ -1432,22 +1466,17 @@
                 </div>
             </div>
 
-            <div class="section-heading">鬼眼スコア ランキング</div>
+            <div class="section-heading" id="ranking">鬼眼スコア ランキング</div>
             <div class="neon-divider"></div>
+            <div class="odds-updated" th:if="${oddsUpdated != null}" th:classappend="${oddsStale ? 'stale' : ''}"
+                 th:text="${'オッズ・人気は ' + oddsUpdated + ' 時点' + (oddsStale ? '（少し前の数字です。最新は発売所・公式でご確認ください）' : '')}">オッズ 10/4 11:52 時点</div>
 
-            <!-- 1位スーパーチャット風バナー -->
-            <!-- 先頭の馬に鬼眼スコアがあるときだけ（全馬が未分析のときに「本命」と出さない） -->
-            <div th:if="${results != null and !#lists.isEmpty(results) and results[0].score != null}" class="superchat-banner">
-                🏆 本命 ◎ — <span th:text="${results[0].horseName}">馬名</span>
-            </div>
 
             <div th:if="${results != null and !#lists.isEmpty(results) and !entriesFinal}" class="entry-notice">
                 📋 枠順確定前（登録馬 <span th:text="${#lists.size(results)}">22</span>頭）の予想です。
                 登録馬がフルゲート（最大18頭・コースによってはそれ未満）を超える場合は除外・抽選があり、
                 確定メンバーと馬番はレース前日の出馬表確定後に反映されます。
             </div>
-
-            <a th:if="${bets != null and !#lists.isEmpty(bets)}" href="#bets" class="bet-jump">🎫 鬼眼買い目（<span th:text="${betPoints}">20</span>点）を見る ↓</a>
 
             <!-- レース結果が記録済みなら答え合わせへ -->
             <a th:if="${reviewRaceId != null}" class="review-link"
@@ -1530,6 +1559,12 @@
                         <!-- コメントが1パーツだけのとき（例: 写真がないため鬼眼の対象外）は見出しに出ているので再掲しない -->
                     </div>
                 </div>
+            </div>
+
+            <!-- 買い目を出せないときは理由を出す（欄ごと消えて分からない、を防ぐ） -->
+            <div th:if="${betReason != null}">
+                <div class="section-heading" id="bets">鬼眼買い目</div>
+                <div class="glass-card"><div class="bet-reason" th:text="${betReason}">理由</div></div>
             </div>
 
             <!-- 鬼眼買い目（◎〜注の5頭が顔面分析済みのときだけ） -->

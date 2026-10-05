@@ -85,6 +85,11 @@ public class RacePredictionV2Controller {
             List<BetLine> bets = bettingService.suggest(results);
             model.addAttribute("bets", bets);
             model.addAttribute("betPoints", bettingService.totalPoints(bets));
+            // 買い目を出せないときの理由（欄ごと消えて理由が分からない、を防ぐ）
+            long scored = results.stream().filter(r -> r.getScore() != null).count();
+            model.addAttribute("betReason", !results.isEmpty() && bets.isEmpty()
+                ? "鬼眼スコアのある馬が5頭そろっていないため（いま" + scored + "頭）、買い目はまだ出していません。顔面分析が終わると表示されます。"
+                : null);
 
             String latestRaceId = selectedId;
 
@@ -105,6 +110,13 @@ public class RacePredictionV2Controller {
             Map<String, RaceOdds> oddsMap = oddsList.stream()
                 .collect(Collectors.toMap(RaceOdds::getHorseName, o -> o, (a, b) -> a));
             model.addAttribute("oddsMap", oddsMap);
+            // オッズの取得時刻（日本時間で保存）。2時間より古ければ「古い」として薄く出す
+            java.time.LocalDateTime oddsAt = oddsList.stream().map(RaceOdds::getFetchedAt)
+                .filter(java.util.Objects::nonNull).max(java.util.Comparator.naturalOrder()).orElse(null);
+            model.addAttribute("oddsUpdated", oddsAt == null ? null
+                : oddsAt.format(java.time.format.DateTimeFormatter.ofPattern("M/d HH:mm")));
+            model.addAttribute("oddsStale", oddsAt != null
+                && oddsAt.isBefore(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Tokyo")).minusHours(2)));
         } else {
             model.addAttribute("results", List.of());
             model.addAttribute("oddsMap", Map.of());

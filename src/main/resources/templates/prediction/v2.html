@@ -1221,7 +1221,19 @@
         .pred-summary .ps-honmei { font-size: 17px; font-weight: 900; color: var(--gold-light); margin-bottom: 6px; }
         .pred-summary .ps-row { font-size: 14px; line-height: 1.9; color: #d9e6d2; }
         .pred-summary .ps-row b { color: var(--neon); margin-right: 6px; font-weight: 700; }
-        .pred-summary .ps-marks span { margin-right: 10px; white-space: nowrap; }
+        .pred-summary .ps-label { font-size: 13px; color: var(--neon); font-weight: 700; margin: 4px 0 4px; }
+        .pred-summary .ps-top5 { list-style: none; margin: 0 0 6px; padding: 0; }
+        .pred-summary .ps-top5 li { display: grid; grid-template-columns: 30px 48px 1fr; align-items: center;
+                                    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 15px; }
+        .pred-summary .ps-top5 li:last-child { border-bottom: none; }
+        .pred-summary .ps-mark { font-weight: 900; font-size: 17px; text-align: center; }
+        .pred-summary .ps-num { font-size: 13px; color: #b9cdb2; text-align: right; padding-right: 10px; }
+        .pred-summary .ps-name { color: #eef5ea; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pred-summary .m0 .ps-mark { color: var(--gold-light); }
+        .pred-summary .m1 .ps-mark { color: var(--neon); }
+        .pred-summary .m2 .ps-mark { color: #b39ddb; }
+        .pred-summary .m3 .ps-mark { color: #ff8000; }
+        .pred-summary .m4 .ps-mark { color: #5fd3e0; }
         .pred-summary .ps-links { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
         .pred-summary .ps-links a { font-size: 13px; padding: 6px 12px; border-radius: 999px; text-decoration: none;
                                     border: 1px solid rgba(125,255,79,0.45); color: var(--neon); }
@@ -1349,11 +1361,15 @@
                 <div class="ps-honmei">🏆 本命 ◎
                     <span th:if="${results[0].horseNumber != null}" th:text="${results[0].horseNumber + '番'}">6番</span>
                     <span th:text="${results[0].horseName}">馬名</span></div>
-                <div class="ps-row ps-marks"><b>上位5頭</b>
-                    <span th:each="r,st : ${results}" th:if="${st.index < 5 and r.score != null}"
-                          th:text="${(st.index == 0 ? '◎' : st.index == 1 ? '○' : st.index == 2 ? '▲' : st.index == 3 ? '△' : '注')
-                                    + (r.horseNumber != null ? r.horseNumber + ' ' : '') + r.horseName}">◎6 馬名</span>
-                </div>
+                <div class="ps-label">上位5頭</div>
+                <ol class="ps-top5">
+                    <li th:each="r,st : ${results}" th:if="${st.index < 5 and r.score != null}"
+                        th:classappend="${'m' + st.index}">
+                        <span class="ps-mark" th:text="${st.index == 0 ? '◎' : st.index == 1 ? '○' : st.index == 2 ? '▲' : st.index == 3 ? '△' : '注'}">◎</span>
+                        <span class="ps-num" th:text="${r.horseNumber != null ? r.horseNumber + '番' : ''}">6番</span>
+                        <span class="ps-name" th:text="${r.horseName}">馬名</span>
+                    </li>
+                </ol>
                 <div class="ps-row" th:if="${column != null and column.evidence != null and column.evidence.pace != null and column.evidence.pace != ''}">
                     <b>想定ペース</b><span th:text="${column.evidence.pace}">スローペース</span></div>
                 <div class="ps-row" th:if="${oddsUpdated != null}"><b>オッズ</b>

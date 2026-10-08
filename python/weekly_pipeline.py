@@ -362,7 +362,8 @@ def main():
     log("─" * 50)
     # 金曜は日曜のレースまで同期する（木曜に出走が確定した日曜の重賞から回避馬を外し、
     # 週中コラムの金曜版が回避馬や古い頭数で書かれないように）
-    sync_days = ['--days', '2'] if datetime.now().weekday() == 4 else []
+    # （祝日の月曜開催がある週も、金曜に月曜分まで同期しておく。開催の無い日は何も取得されない）
+    sync_days = ['--days', '3'] if datetime.now().weekday() == 4 else []
     ok_sync, _ = run_script('entry_fetcher.py', ['--sync'] + sync_days, '出馬表 同期')
     if not ok_sync:
         log("  ⚠️ 同期失敗（取消馬の反映ができていない可能性）")

@@ -1,12 +1,13 @@
 """
 night_columns.py — 木曜・金曜・土曜の夜（20時）にコラムを作って公開する
 
-  python3 python/night_columns.py [--mode thu|fri|sat] [--dry-run]
-  --mode を省くと実行した曜日で決める（木=thu、金=fri、土=sat。それ以外の曜日は何もしない）
+  python3 python/night_columns.py [--mode thu|fri|sat|sun] [--dry-run]
+  --mode を省くと実行した曜日で決める（木=thu、金=fri、土=sat、日=sun。それ以外の曜日は何もしない）
 
-  木曜の夜 … 週末（土・日）の重賞の週中コラム（木曜版）
-  金曜の夜 … 土曜の重賞の鬼眼コラム（展開図つき）＋ 日曜の重賞の週中コラム（金曜版）
+  木曜の夜 … 週末（土・日。祝日の月曜開催があれば月も）の重賞の週中コラム（木曜版）
+  金曜の夜 … 土曜の重賞の鬼眼コラム（展開図つき）＋ 日曜・月曜の重賞の週中コラム（金曜版）
   土曜の夜 … 日曜の重賞の鬼眼コラム（展開図つき）
+  日曜の夜 … 月曜（祝日の3日間開催）の重賞の鬼眼コラム。月曜に開催が無ければ何もしない
 
 手順（レースごと）:
   1. 出馬表と同期する（entry_fetcher --sync。1レース1ページ。回避馬を外し、頭数・枠を最新に）
@@ -30,9 +31,13 @@ GRADE = {1: 'G1', 2: 'G2', 3: 'G3'}
 
 
 def weekend(today):
-    """その週の土曜・日曜の日付"""
-    sat = today + timedelta(days=(5 - today.weekday()) % 7)
-    return sat, sat + timedelta(days=1)
+    """その週末の開催日の候補（土・日・月）。日曜に実行したときは前日を土曜とする。
+    月曜は祝日の3日間開催のときだけレースがある（レース一覧に載っているかで判断する）"""
+    if today.weekday() == 6:
+        sat = today - timedelta(days=1)
+    else:
+        sat = today + timedelta(days=(5 - today.weekday()) % 7)
+    return sat, sat + timedelta(days=1), sat + timedelta(days=2)
 
 
 def column_status(conn, race_id, table, edition=None):
@@ -56,14 +61,20 @@ def main():
     dry = '--dry-run' in sys.argv
     today = datetime.now().date()
     mode = sys.argv[sys.argv.index('--mode') + 1] if '--mode' in sys.argv else \
-        {3: 'thu', 4: 'fri', 5: 'sat'}.get(today.weekday())
-    if mode not in ('thu', 'fri', 'sat'):
-        print("夜のコラムは木・金・土だけ（--mode で指定可）")
+        {3: 'thu', 4: 'fri', 5: 'sat', 6: 'sun'}.get(today.weekday())
+    if mode not in ('thu', 'fri', 'sat', 'sun'):
+        print("夜のコラムは木・金・土・日だけ（--mode で指定可）")
         print('RESULT:{"success": true, "skipped": "not_night"}')
         return
-    sat, sun = weekend(today)
-    weekend_races = [r for r in fetch_upcoming_grade_races(days=(sun - today).days) if r['race_date'] in (sat, sun)]
-    races = [r for r in weekend_races if r.get('grade_no') in GRADE]
+    sat, sun, mon = weekend(today)
+    weekend_races = [r for r in fetch_upcoming_grade_races(days=max(0, (mon - today).days))
+                     if r['race_date'] in (sat, sun, mon)]
+    if mode == 'sun' and not any(r['race_date'] == mon for r in weekend_races):
+        print("月曜の開催が無いので、日曜の夜は何もしない")
+        print('RESULT:{"success": true, "skipped": "no_monday"}')
+        return
+    races = [r for r in weekend_races if r.get('grade_no') in GRADE
+             and (mode != 'sun' or r['race_date'] == mon)]   # 日曜の夜は月曜の重賞だけ
     log(f"夜のコラム（{mode}）: 対象の重賞 {len(races)}件 — "
         + '、'.join(f"{r['race_date'].month}/{r['race_date'].day} {r['race_name']}" for r in races))
     if not weekend_races and not dry:
@@ -78,7 +89,8 @@ def main():
         return
 
     # 1. 出馬表と同期（今日から日曜まで）。回避馬を外し、変わったレースは予想を作り直す
-    synced, _ = run_script('entry_fetcher.py', ['--sync', '--days', str((sun - today).days)], '出馬表 同期')
+    last = max(r['race_date'] for r in races)
+    synced, _ = run_script('entry_fetcher.py', ['--sync', '--days', str(max(0, (last - today).days))], '出馬表 同期')
     if not synced and mode != 'thu':
         # 金・土の夜は出走馬（取消・頭数・枠）が確定している前提でコラムを書くので、同期に失敗したら書かない。
         # 公開済みのコラムはそのまま残す（古い出走表で書き直さない）。木曜の週中コラムは登録馬で書くので続ける
@@ -93,7 +105,7 @@ def main():
     report, fails = [], 0
     for r in races:
         rid, name, grade = r['race_id'], r['race_name'], GRADE[r['grade_no']]
-        if mode == 'thu' or (mode == 'fri' and r['race_date'] == sun):
+        if mode == 'thu' or (mode == 'fri' and r['race_date'] in (sun, mon)):
             edition = 'thu' if mode == 'thu' else 'fri'
             if not has_recent_facts(conn, rid):
                 run_script('stats_predictor.py', [rid, '--update'], f'{name} 統計予想（近走の事実を保存）')
@@ -103,7 +115,8 @@ def main():
                                                      lambda: run_script('week_column.py', args, f'{name} 週中コラム（書き直し）'), log)
             st = column_status(conn, rid, 'week_column', edition) if passed else None
             kind = f"週中コラム（{'木曜版' if edition == 'thu' else '金曜版'}）"
-        elif (mode == 'fri' and r['race_date'] == sat) or (mode == 'sat' and r['race_date'] == sun):
+        elif ((mode == 'fri' and r['race_date'] == sat) or (mode == 'sat' and r['race_date'] == sun)
+              or (mode == 'sun' and r['race_date'] == mon)):
             args = [rid, '--grade', grade, '--force']
             ok, _ = run_script('column_writer.py', args, f'{name} 鬼眼コラム')
             passed, problems = column_audit.enforce(conn, rid, None,

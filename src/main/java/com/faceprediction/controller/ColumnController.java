@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
  * 事実だけで組み立て、顔面分析・鬼眼の印は使わない）を週ごとにまとめて表示する。
  * 土日の「鬼眼コラム」（予想画面）があるレースは、そこへの導線も出す。
  *   /column            … いちばん新しい週
- *   /column?week=…     … その週（月曜の日付 yyyy-MM-dd）
+ *   /column?week=…     … その週（月曜の日付 yyyy-MM-dd。週は火曜〜翌月曜で、祝日の月曜開催も同じ週末に入る）
  */
 @Controller
 @RequestMapping("/column")
@@ -39,7 +39,8 @@ public class ColumnController {
         List<LocalDate> weeks;
         try {
             weeks = jdbc.queryForList(
-                "SELECT DISTINCT date_trunc('week', race_date)::date AS wk FROM week_column " +
+                // 週の区切りは「火曜〜翌月曜」（祝日の月曜開催を同じ週末にまとめる）。キーはその週の月曜
+                "SELECT DISTINCT date_trunc('week', race_date - 1)::date AS wk FROM week_column " +
                 "WHERE race_date IS NOT NULL ORDER BY wk DESC LIMIT 26", Date.class)
                 .stream().map(Date::toLocalDate).collect(Collectors.toList());
         } catch (Exception e) {
@@ -54,13 +55,20 @@ public class ColumnController {
         }
         model.addAttribute("weeks", weeks.stream().map(w -> Map.of(
             "key", w.toString(),
-            "label", w.plusDays(5).format(MD) + "・" + w.plusDays(6).format(MD) + "の週"))
+            "label", weekendLabel(w) + "の週"))
             .collect(Collectors.toList()));
         model.addAttribute("selectedWeek", selected == null ? null : selected.toString());
-        model.addAttribute("weekLabel", selected == null ? null
-            : selected.plusDays(5).format(MD) + "・" + selected.plusDays(6).format(MD));
+        model.addAttribute("weekLabel", selected == null ? null : weekendLabel(selected));
         model.addAttribute("races", selected == null ? List.of() : racesOf(selected));
         return "column/index";
+    }
+
+    /** 週末の開催日の表示（土・日。祝日の月曜開催にコラムがあれば月も）例: 10月10日・10月11日・10月12日 */
+    private String weekendLabel(LocalDate monday) {
+        String label = monday.plusDays(5).format(MD) + "・" + monday.plusDays(6).format(MD);
+        Integer mon = jdbc.queryForObject("SELECT COUNT(*) FROM week_column WHERE race_date = ?",
+            Integer.class, Date.valueOf(monday.plusDays(7)));
+        return mon != null && mon > 0 ? label + "・" + monday.plusDays(7).format(MD) : label;
     }
 
     /** その週のレースごとに、金曜版（無ければ木曜版）を本文として、もう一方を「前の版」として返す */
@@ -72,7 +80,7 @@ public class ColumnController {
             "FROM week_column wc WHERE wc.race_date >= ? AND wc.race_date < ? " +
             // 同じレースは 金曜版 → 木曜版 の順（新しい版を本文に。文字列順の DESC だと thu が先に来てしまう）
             "ORDER BY wc.race_date, wc.grade, wc.race_id, CASE wc.edition WHEN 'fri' THEN 0 ELSE 1 END",
-            Date.valueOf(monday), Date.valueOf(monday.plusDays(7)));
+            Date.valueOf(monday.plusDays(1)), Date.valueOf(monday.plusDays(8)));
         Map<String, Map<String, Object>> byRace = new LinkedHashMap<>();
         for (Map<String, Object> r : rows) {
             Map<String, Object> race = byRace.computeIfAbsent((String) r.get("race_id"), k -> {

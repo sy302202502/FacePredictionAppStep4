@@ -136,10 +136,14 @@ def load_facts(conn, race_id, grade, edition):
                        '_runs': [(re.sub(r'\(.*?\)', '', x['race']), x['rank']) for x in rec['runs']]})
     venue = place_from_race_id(race_id)
     trends = race_facts.past_trends(conn, race_name, race_date, venue, surface, distance)
-    # 出走馬は木曜の午後（出馬投票の締め切り後）に確定する。夜に書く木曜版は確定後
-    thursday = race_date - timedelta(days=(race_date.weekday() - 3) % 7)
+    # 出走馬は木曜の午後（出馬投票の締め切り後）に確定する。夜に書く木曜版は確定後。
+    # 祝日の月曜開催（3日間開催）は確定が遅いので、安全側に前々日（土曜）の午後までは「出走予定」として書く
+    if race_date.weekday() == 0:
+        decide = race_date - timedelta(days=2)
+    else:
+        decide = race_date - timedelta(days=(race_date.weekday() - 3) % 7)
     confirmed = datetime.now(timezone(timedelta(hours=9))).replace(tzinfo=None) >= datetime(
-        thursday.year, thursday.month, thursday.day, 16)
+        decide.year, decide.month, decide.day, 16)
     stage = '出走馬が確定した段階' if confirmed else '出走予定馬（特別登録）の段階。出走はまだ確定していない'
     facts = {
         'レース': race_name,

@@ -120,6 +120,22 @@ def _headcount(text, field, problems):
             problems.append(f'本文の「{m.group(0)}」が出走頭数 {field}頭 と違う（…{around}…）')
 
 
+# 週中コラムで「今回のレースの出走頭数」を言っている表現だけ（近走の「（14頭・芝1200m）」「16頭立ての3着」など
+# 過去のレースの頭数は対象にしない）。「出走は17頭」「17頭が出走」「出走頭数17頭」「17頭で争われ」
+WEEK_FIELD = re.compile(r'出走(?:頭数)?(?:は|が|予定は)?\s*(\d{1,2})頭|(\d{1,2})頭(?:が出走|で争|がそろ|が揃|の争い|の戦い)')
+
+
+def _week_headcount(text, field, problems):
+    """週中コラムの頭数: 今回の出走頭数を言っている表現だけを確かめる（登録頭数・過去のレースの頭数は見ない）"""
+    for m in WEEK_FIELD.finditer(text):
+        n = int(m.group(1) or m.group(2))
+        around = text[max(0, m.start() - 8): m.end() + 4]
+        if '登録' in around or '予定' in around:
+            continue                       # 登録頭数・出走予定（木曜の段階）は出走頭数と違ってよい
+        if n != field:
+            problems.append(f'本文の「{m.group(0)}」が出走頭数 {field}頭 と違う（…{around}…）')
+
+
 def _words(text, problems):
     t = _norm(text)
     for w in _ng_words():
@@ -283,7 +299,7 @@ def audit_week_column(race_id, edition, base=None):
             problems.append(f'週中コラムに顔の話「{w}」がある')
     cards = _cards(_get(f'{base}/predict-v2?raceId={race_id}'))
     if cards:
-        _headcount(body, len(cards), problems)
+        _week_headcount(body, len(cards), problems)
     else:
         problems.append('出走馬カードが読めない（頭数を確かめられない）')
     _words(title + body, problems)
@@ -326,7 +342,7 @@ def enforce(conn, race_id, week_edition, rewrite, log=print):
 
 def gate_after_write(conn, race_id, week_edition=None, log=print):
     """コラムを保存した処理の最後に、書いた側が自分で呼ぶ関門（書き直しはしない）。
-    コラムが公開されていれば監査し、不合格なら取り下げる。戻り値: 合格（またはコラムが無い）なら True"""
+    コラムが公開されていれば監査し、不合格なら取り下げる。戻り値: (合格（またはコラムが無い）なら True, 問題のリスト)"""
     cur = conn.cursor()
     if week_edition:
         cur.execute("SELECT 1 FROM week_column WHERE race_id = %s AND edition = %s", (race_id, week_edition))
@@ -335,10 +351,10 @@ def gate_after_write(conn, race_id, week_edition=None, log=print):
     exists = cur.fetchone() is not None
     cur.close()
     if not exists:
-        return True
+        return True, []
     passed, problems = enforce(conn, race_id, week_edition, None, log)
     log("ページ監査: 合格" if passed else "ページ監査: 不合格 → 公開を取り下げ（" + ' / '.join(problems) + "）")
-    return passed
+    return passed, problems
 
 
 def main():

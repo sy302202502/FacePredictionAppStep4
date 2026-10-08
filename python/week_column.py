@@ -1,7 +1,8 @@
 """
 week_column.py — 木曜・金曜に出す重賞の「週中コラム」を舞鬼法師の語り口で書く
 
-  python3 python/week_column.py <race_id> [--grade G2] [--edition thu|fri] [--force] [--dry-run]
+  python3 python/week_column.py <race_id> [--grade G2] [--edition thu|fri] [--force] [--dry-run] [--trends-only]
+  --trends-only: 出走馬の名前・頭数に触れず、過去の傾向だけで書く（監査で頭数・馬名が通らなかったときの書き直し用）
   --edition を省くと実行した曜日で決める（木曜=thu、金曜=fri、それ以外は書かない）
 
 【材料】事実だけ。顔面分析・鬼眼の印は使わない（予想画面と土日の鬼眼コラムの役目）
@@ -61,6 +62,33 @@ TASK = """以下の「材料」だけを使って、{race}の週中コラム（{
 材料:
 {facts}
 """
+
+# 頭数・馬名で監査に通らなかったときの書き直し用（--trends-only）: 出走馬の話をせず、過去の傾向だけで書く
+TASK_TRENDS = """以下の「材料」だけを使って、{race}の週中コラム（{edition}）を書いてください。
+今回は **出走馬の名前・頭数には一切触れず**、過去の同じレースの傾向だけで書きます。
+
+構成（見出しは付けず、段落で流れを作る。全体で400〜600字）:
+1. つかみ（レース名とコース。出走馬・頭数は書かない）
+2. 過去の同じレースの傾向（材料の数字を3〜4個使い、そこから言えることを推測の言い方で。人気・脚質・枠など）
+3. 傾向から見た「今年注目したい条件」（例:「先行できる馬」「上位人気」など。具体的な馬名は出さない）
+4. 締め（ここは熱量を上げてよい。週末が楽しみという一言と、「レース当日の鬼眼コラムでは出走馬と枠順をふまえた展開図も描く」という予告）
+
+過去のレースは必ずレース名で書く。「同レース」「そのレース」「同じレース」のように指す先があいまいな言い方はしない。
+出力はJSONのみ: {{"title": "30字以内の見出し", "body": "本文（段落は改行2つで区切る）"}}
+
+材料:
+{facts}
+"""
+
+
+def trends_only(facts):
+    """出走馬・頭数を材料から外す（--trends-only）"""
+    f = {k: v for k, v in facts.items()
+         if k not in ('出走頭数', '登録頭数', 'データ上の有力馬（アプリの統計スコア上位。近走成績・距離・馬場・調教などの集計）')}
+    f['データ上の有力馬（アプリの統計スコア上位。近走成績・距離・馬場・調教などの集計）'] = []
+    f['_trends_only'] = True
+    return f
+
 
 # 本文に出てよいカタカナ語（馬名・レース名以外）。これ以外のカタカナ語が材料に無ければ作り話とみなす
 KATAKANA_OK = {
@@ -229,6 +257,12 @@ def check(col, facts):
         if t not in allowed:
             return f'材料にない数字「{t}」'
     # 馬について書いた部分の数字は、その馬の事実にあるものだけ。着順はレース名（または「前走」）と組で照合
+    if facts.get('_trends_only'):
+        for name in facts['_roster']:
+            if name and name in text:
+                return f'傾向だけのコラムに出走馬の名前「{name}」'
+        if re.search(r'\d{1,2}頭(?:が出走|立て|が登録|の戦い|で争)|(?:出走|登録)(?:頭数)?(?:は|が)?\s*\d{1,2}頭', text):
+            return '傾向だけのコラムに今回の頭数'
     hs = {h['馬名']: h for h in facts['データ上の有力馬（アプリの統計スコア上位。近走成績・距離・馬場・調教などの集計）']}
     for name, part in _horse_clauses(text, facts['_roster']):
         if not name:
@@ -272,7 +306,7 @@ LLM_TRIES = 3   # 検査・校閲で問題が出たら、指摘を添えて書�
 
 def write_with_llm(facts, edition):
     """AI で書き、機械的な検査（check）と AI の校閲（column_review）の両方に通るまで最大 LLM_TRIES 回書き直す"""
-    prompt = TASK.format(race=facts['レース'], edition=EDITIONS[edition],
+    prompt = (TASK_TRENDS if facts.get('_trends_only') else TASK).format(race=facts['レース'], edition=EDITIONS[edition],
                          facts=json.dumps(_public(facts), ensure_ascii=False, indent=1))
     extra, reason = '', None
     for _ in range(LLM_TRIES):
@@ -303,7 +337,7 @@ def write_template(facts, edition):
     """AI が使えない・検査に通らないときの文章（材料をそのまま並べる）"""
     name = facts['レース']
     p = [f"みんな、{facts['開催日']}は{facts['競馬場']}{facts['コース']}の{name}です。"
-         f"今は{facts['段階'].split('。')[0]}です。"]
+         + ('' if facts.get('_trends_only') else f"今は{facts['段階'].split('。')[0]}です。")]
     t = facts['過去の同じレース']
     if isinstance(t, dict):
         agg = [t[k] for k in ('1番人気の成績', '人気', '脚質') if t.get(k)]
@@ -323,7 +357,8 @@ def write_template(facts, edition):
             lines.append(f"{h['馬名']}は前走が{last}" + (f"、{same.replace('の成績: ', 'は')}" if same else ''))
         p.append("データ上の有力馬の近走もチェックしておきましょう。" + '。'.join(f"{x}です" for x in lines) + '。')
     p.append("レース当日の鬼眼コラムでは、枠順をふまえた展開図も描いていきます。週末が楽しみです！")
-    return {'title': f"{name} {EDITIONS[edition]}・過去の傾向と有力馬の近走", 'body': '\n\n'.join(p)}
+    title = f"{name} {EDITIONS[edition]}・" + ('過去の傾向から読む' if facts.get('_trends_only') else '過去の傾向と有力馬の近走')
+    return {'title': title, 'body': '\n\n'.join(p)}
 
 
 def main():
@@ -344,6 +379,8 @@ def main():
     conn = get_conn()
     ensure_table(conn)
     facts, why = load_facts(conn, race_id, grade, edition)
+    if facts and '--trends-only' in sys.argv:
+        facts = trends_only(facts)   # 監査で頭数・馬名が通らなかったときの書き直し: 出走馬に触れず傾向だけで書く
     if not facts:
         print(f"週中コラムを書かない: {why}")
         print(f"RESULT:{json.dumps({'success': True, 'skipped': why}, ensure_ascii=False)}")
@@ -401,17 +438,18 @@ def gated_main():
         return
     conn = get_conn()
     try:
-        passed = column_audit.gate_after_write(conn, race_id, edition)
+        passed, problems = column_audit.gate_after_write(conn, race_id, edition)
     except Exception as e:
         # 監査そのものが動かない（DB など）→ 確かめられていないコラムを残さない
         print(f"ページ監査を実行できなかった: {e} → 公開を取り下げ")
         conn.rollback()
         column_audit.take_down(conn, race_id, edition)
-        passed = False
+        passed, problems = False, [f'監査を実行できなかった: {e}']
     finally:
         conn.close()
     if not passed:
-        notify_discord(f"⛔ {race_id} の{'週中' if edition else '鬼眼'}コラムはページ監査に通らず公開を取り下げました")
+        notify_discord(f"⛔ {race_id} の{'週中' if edition else '鬼眼'}コラムはページ監査に通らず公開を取り下げました: "
+                       + ' / '.join(problems)[:500])
         print('RESULT:{"success": false, "audit": "failed"}')
         sys.exit(1)
 

@@ -111,8 +111,10 @@ def main():
                 run_script('stats_predictor.py', [rid, '--update'], f'{name} 統計予想（近走の事実を保存）')
             args = [rid, '--grade', grade, '--edition', edition, '--force']
             ok, _ = run_script('week_column.py', args, f'{name} 週中コラム（{edition}）')
+            # 監査に通らなければ、出走馬の名前・頭数に触れず過去の傾向だけで書き直す（頭数・馬名の食い違いを避ける）
             passed, problems = column_audit.enforce(conn, rid, edition,
-                                                     lambda: run_script('week_column.py', args, f'{name} 週中コラム（書き直し）'), log)
+                                                     lambda: run_script('week_column.py', args + ['--trends-only'],
+                                                                        f'{name} 週中コラム（傾向だけで書き直し）'), log)
             st = column_status(conn, rid, 'week_column', edition) if passed else None
             kind = f"週中コラム（{'木曜版' if edition == 'thu' else '金曜版'}）"
         elif ((mode == 'fri' and r['race_date'] == sat) or (mode == 'sat' and r['race_date'] == sun)

@@ -679,17 +679,18 @@ def gated_main():
     edition = None
     conn = get_conn()
     try:
-        passed = column_audit.gate_after_write(conn, race_id, edition)
+        passed, problems = column_audit.gate_after_write(conn, race_id, edition)
     except Exception as e:
         # 監査そのものが動かない（DB など）→ 確かめられていないコラムを残さない
         print(f"ページ監査を実行できなかった: {e} → 公開を取り下げ")
         conn.rollback()
         column_audit.take_down(conn, race_id, edition)
-        passed = False
+        passed, problems = False, [f'監査を実行できなかった: {e}']
     finally:
         conn.close()
     if not passed:
-        notify_discord(f"⛔ {race_id} の{'週中' if edition else '鬼眼'}コラムはページ監査に通らず公開を取り下げました")
+        notify_discord(f"⛔ {race_id} の{'週中' if edition else '鬼眼'}コラムはページ監査に通らず公開を取り下げました: "
+                       + ' / '.join(problems)[:500])
         print('RESULT:{"success": false, "audit": "failed"}')
         sys.exit(1)
 

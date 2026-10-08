@@ -148,6 +148,12 @@ def audit_race_column(race_id, base=None):
     base = resolve_base(base)
     problems = []
     soup = _get(f'{base}/predict-v2?raceId={race_id}')
+    for _ in range(2):   # 同期・作り直しの直後でカードが一瞬読めないときは、少し待って読み直す
+        if _cards(soup):
+            break
+        import time
+        time.sleep(20)
+        soup = _get(f'{base}/predict-v2?raceId={race_id}')
     col = soup.select_one('.column-card')
     if not col:
         return ['鬼眼コラムが表示されていない']
@@ -275,6 +281,18 @@ def _expected_start_side(course, venue):
     return race_diagram.start_side(m.group(1), m.group(2), int(m.group(3)), m.group(4))
 
 
+def _cards_with_retry(base, race_id, tries=3, wait=20):
+    """出馬表の同期・予想の作り直しの直後は、カードが一瞬読めないことがある。少し待って読み直す"""
+    import time
+    for i in range(tries):
+        cards = _cards(_get(f'{base}/predict-v2?raceId={race_id}'))
+        if cards:
+            return cards
+        if i < tries - 1:
+            time.sleep(wait)
+    return {}
+
+
 def audit_week_column(race_id, edition, base=None):
     """週中コラム（指定した版）の監査 → 問題のリスト（空なら合格）"""
     base = resolve_base(base)
@@ -297,11 +315,13 @@ def audit_week_column(race_id, edition, base=None):
     for w in ('顔', '目つき', '眼差し'):
         if w in body:
             problems.append(f'週中コラムに顔の話「{w}」がある')
-    cards = _cards(_get(f'{base}/predict-v2?raceId={race_id}'))
-    if cards:
-        _week_headcount(body, len(cards), problems)
-    else:
-        problems.append('出走馬カードが読めない（頭数を確かめられない）')
+    # 頭数を言っている表現があるときだけ、予想画面のカードの数と比べる（傾向だけのコラムには頭数が無いので読まない）
+    if WEEK_FIELD.search(body):
+        cards = _cards_with_retry(base, race_id)
+        if cards:
+            _week_headcount(body, len(cards), problems)
+        else:
+            problems.append('出走馬カードが読めない（頭数を確かめられない）')
     _words(title + body, problems)
     return problems
 

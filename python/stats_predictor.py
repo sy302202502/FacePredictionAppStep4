@@ -620,10 +620,13 @@ def build_comment(results, dist, surf, detail, today_condition=None):
         ranks = [r['rank'] for r in recent5 if r['rank'] <= r['horses']]
         if ranks:
             avg = sum(ranks) / len(ranks)
+            # 走った数に合わせて書く（2歳戦などで1〜2戦しかない馬に「直近5走」と書かない）
+            n = len(ranks)
+            span = f"直近{n}走" if n >= 2 else "前走"
             if avg <= 2.5:
-                parts.append("直近5走の状態が非常に良い")
+                parts.append(f"{span}の状態が非常に良い" if n >= 2 else "前走の内容が非常に良い")
             elif avg <= 4.0:
-                parts.append("直近5走は安定した走り")
+                parts.append(f"{span}は安定した走り" if n >= 2 else "前走は上々の内容")
             else:
                 parts.append("直近成績は苦戦傾向")
 

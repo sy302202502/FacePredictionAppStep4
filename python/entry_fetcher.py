@@ -329,6 +329,7 @@ def sync_with_latest_shutuba(days=1):
 
         print(f"{len(races)}件のレースを確認します\n")
         failed = []   # 出馬表を取れなかった・異常スキップしたレース
+        failed_ids = []   # 同じく race_id（呼び出し元が、失敗したレースだけを止められるように）
         changed = []  # 出走馬が増減したレース（予想の再計算が必要）
 
         for race_id, race_name, race_date in races:
@@ -339,6 +340,7 @@ def sync_with_latest_shutuba(days=1):
             if not entries:
                 print(f"  出馬表未確定のためスキップ")
                 failed.append(race_name)
+                failed_ids.append(race_id)
                 polite_sleep(1.0, 2.0)
                 continue
 
@@ -358,6 +360,7 @@ def sync_with_latest_shutuba(days=1):
                 print(f"  ⚠️ 除外判定が{len(removed)}/{len(db_names)}頭と異常に多いためスキップ"
                       f"（スクレイピング失敗の可能性）")
                 failed.append(race_name)
+                failed_ids.append(race_id)
                 polite_sleep(1.0, 2.0)
                 continue
 
@@ -466,11 +469,13 @@ def sync_with_latest_shutuba(days=1):
             if rc != 0:
                 print(f"  ⚠️ 再予想に失敗（rc={rc}）")
                 failed.append(f"{race_name}(再予想)")
+                failed_ids.append(race_id)
 
         print(f"\n=== 同期完了: {len(races) - len(failed)}/{len(races)}レース ===")
         if failed:
             # 取消馬を含んだまま予想・買い目を公開しないよう、呼び出し元(cron/パイプライン)へ失敗を伝える
             print(f"  同期できなかったレース: {', '.join(failed)}")
+            print(f"FAILED_RACE_IDS: {','.join(dict.fromkeys(failed_ids))}")
             return False
         return True
 

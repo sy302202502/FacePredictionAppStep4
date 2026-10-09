@@ -90,21 +90,37 @@ def main():
 
     # 1. 出馬表と同期（今日から日曜まで）。回避馬を外し、変わったレースは予想を作り直す
     last = max(r['race_date'] for r in races)
-    synced, _ = run_script('entry_fetcher.py', ['--sync', '--days', str(max(0, (last - today).days))], '出馬表 同期')
-    if not synced and mode != 'thu':
-        # 金・土の夜は出走馬（取消・頭数・枠）が確定している前提でコラムを書くので、同期に失敗したら書かない。
-        # 公開済みのコラムはそのまま残す（古い出走表で書き直さない）。木曜の週中コラムは登録馬で書くので続ける
-        send_discord("⛔ **夜のコラム**: 出馬表の同期に失敗したため、今夜のコラムは作っていません"
+    synced, out = run_script('entry_fetcher.py', ['--sync', '--days', str(max(0, (last - today).days))], '出馬表 同期')
+    # 同期は「今日〜最終日の全レース」が対象で、1レースでも取れないと失敗になる（出馬表の出ていない月曜の平場など）。
+    # 失敗したレースの race_id を受け取り、そのレースだけ止める。一覧が取れない（同期そのものが落ちた）ときは全部止める
+    failed_ids = None
+    for line in out or []:
+        if line.startswith('FAILED_RACE_IDS:'):
+            failed_ids = {x for x in line.split(':', 1)[1].strip().split(',') if x}
+    if synced:
+        failed_ids = set()
+    if failed_ids is None and mode != 'thu':
+        send_discord("⛔ **夜のコラム**: 出馬表の同期が途中で止まったため、今夜のコラムは作っていません"
                      "（公開済みのコラムはそのまま）。/jobs のログを確認し、直ったら夜のコラムを手動で実行してください。")
         print('RESULT:{"success": false, "reason": "sync_failed"}')
         sys.exit(1)
-    if not synced:
-        log("  ⚠️ 出馬表の同期に失敗（木曜は登録馬で週中コラムを書くので続行）")
-
+    failed_ids = failed_ids or set()
+    if failed_ids:
+        log(f"  ⚠️ 同期できなかったレース: {', '.join(sorted(failed_ids))}（このうち今夜の対象だけ止める）")
     conn = get_conn()
     report, fails = [], 0
+    skipped = []
     for r in races:
         rid, name, grade = r['race_id'], r['race_name'], GRADE[r['grade_no']]
+        target = (mode == 'thu' or (mode == 'fri' and r['race_date'] in (sat, sun, mon))
+                  or (mode == 'sat' and r['race_date'] == sun) or (mode == 'sun' and r['race_date'] == mon))
+        if not target:
+            continue
+        if rid in failed_ids and mode != 'thu':
+            # 出走馬（取消・枠）が最新か確かめられないレースは書かない（公開済みのコラムはそのまま）
+            skipped.append(f"・{name}（{grade}）: ⛔ 出馬表の同期に失敗したため作っていません")
+            fails += 1
+            continue
         if mode == 'thu' or (mode == 'fri' and r['race_date'] in (sun, mon)):
             edition = 'thu' if mode == 'thu' else 'fri'
             if not has_recent_facts(conn, rid):
@@ -133,9 +149,9 @@ def main():
         report.append(f"・{name}（{grade}）{kind}: {how}")
     conn.close()
 
-    send_discord("🌙 **夜のコラムを公開しました**\n" + '\n'.join(report)
+    send_discord("🌙 **夜のコラムを公開しました**\n" + '\n'.join(report + skipped)
                  + "\n21時ごろ、Mac の Claude が最終確認をして X の下書きを作ります。")
-    print(f'RESULT:{{"success": {"true" if fails == 0 else "false"}, "published": {len(report) - fails}, "fails": {fails}}}')
+    print(f'RESULT:{{"success": {"true" if fails == 0 else "false"}, "published": {len(report) - (fails - len(skipped))}, "fails": {fails}}}')
     if fails:
         sys.exit(1)
 

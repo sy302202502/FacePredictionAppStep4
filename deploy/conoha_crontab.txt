@@ -25,7 +25,11 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 0 18,22 * * 6,0,1 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py results result_auto_fetcher.py >> logs/results_cron.log 2>&1
 0 10 * * * cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py results result_auto_fetcher.py >> logs/results_cron.log 2>&1
 # 夜のコラム（木=週中コラム木曜版 / 金=土曜重賞の鬼眼コラム＋日・月重賞の金曜版 / 土=日曜重賞の鬼眼コラム / 日=祝日の月曜重賞の鬼眼コラム。月曜開催が無い日曜は何もしない）
+#   18時 データ確定（同期・統計で印を確定）→ 20時 執筆 → 21時・22時 出ていないコラムだけ自動でやり直し
+0 18 * * 4,5,6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py columns night_columns.py --prep >> logs/columns_cron.log 2>&1
 0 20 * * 4,5,6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py columns night_columns.py >> logs/columns_cron.log 2>&1
+0 21 * * 4,5,6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py columns night_columns.py --retry >> logs/columns_cron.log 2>&1
+0 22 * * 4,5,6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py columns night_columns.py --retry --final >> logs/columns_cron.log 2>&1
 
 # ── 本番DBの日次バックアップ（4時: 14日保持・空ダンプ検知付き）──
 0 4 * * * /opt/faceprediction/deploy/vps_backup.sh >> /opt/faceprediction/logs/backup.log 2>&1

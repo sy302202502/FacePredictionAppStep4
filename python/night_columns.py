@@ -1,7 +1,10 @@
 """
-night_columns.py — 木曜・金曜・土曜の夜（20時）にコラムを作って公開する
+night_columns.py — 木曜・金曜・土曜（祝日の月曜開催があれば日曜も）の夜にコラムを作って公開する
 
-  python3 python/night_columns.py [--mode thu|fri|sat|sun] [--dry-run]
+  python3 python/night_columns.py --prep            # 18時「データ確定」（出馬表の同期・統計の再計算で今夜の印と材料を確定）
+  python3 python/night_columns.py                   # 20時「執筆」（確定したデータで書いて監査）
+  python3 python/night_columns.py --retry [--final] # 21時・22時の自動再実行（公開済みは飛ばし、出ていないコラムだけ書く）
+  共通: [--mode thu|fri|sat|sun] [--dry-run]
   --mode を省くと実行した曜日で決める（木=thu、金=fri、土=sat、日=sun。それ以外の曜日は何もしない）
 
   木曜の夜 … 週末（土・日。祝日の月曜開催があれば月も）の重賞の週中コラム（木曜版）
@@ -9,11 +12,13 @@ night_columns.py — 木曜・金曜・土曜の夜（20時）にコラムを作
   土曜の夜 … 日曜の重賞の鬼眼コラム（展開図つき）
   日曜の夜 … 月曜（祝日の3日間開催）の重賞の鬼眼コラム。月曜に開催が無ければ何もしない
 
-手順（レースごと）:
-  1. 出馬表と同期する（entry_fetcher --sync。1レース1ページ。回避馬を外し、頭数・枠を最新に）
-  2. 週中コラムの材料（近走の事実）が無ければ統計予想を再評価して保存する
-  3. コラムを書く。AI の文章は 機械的な検査 と AI の校閲 の両方に通るまで書き直し、通らなければテンプレート文章
-  4. Discord に公開したコラムの一覧と検査の結果を送る
+手順:
+  18時 データ確定 … 出馬表と同期（失敗したレースだけ止める）し、鬼眼コラムのレースは確定した枠順で統計を再計算して
+                     印を確定する。結果は night_prep に記録。20時以降はその夜のうちに同期・再計算をしない（印が動かない）
+  20時 執筆       … 確定した材料で書く。AI の文章は機械的な検査と AI の校閲に通るまで書き直し、だめならテンプレート文章。
+                     書いたらページ監査。週中コラムが通らなければ「傾向だけ」で書き直す
+  21時・22時       … 出ていないコラムだけ自動でやり直す（データ確定の失敗もここでやり直す）。22時でもだめなら Discord で知らせる
+  Mac の Claude が 21〜23時に投稿セットを用意し、翌朝8時にリマインダーで知らせる（投稿は本人が朝に）
 夜に公開した鬼眼コラムは、レース当日の朝には書き直さない（X に載せた画像と食い違わないように。
 weekly_pipeline 側でも、鬼眼コラムのある重賞は直前再評価・コラムの書き直しをしない）。
 出走取消で出走馬が変わったときだけは、予想の作り直しと一緒にコラムも書き直される（predict_by_race_id）。
@@ -57,6 +62,228 @@ def column_status(conn, race_id, table, edition=None):
         cur.close()
 
 
+PREP_TABLE = """
+    CREATE TABLE IF NOT EXISTS night_prep (
+        night_date  DATE NOT NULL,
+        race_id     VARCHAR(20) NOT NULL,
+        race_name   TEXT,
+        grade       VARCHAR(4),
+        race_date   DATE,
+        kind        VARCHAR(8) NOT NULL,      -- week（週中コラム）/ kigan（鬼眼コラム）
+        edition     VARCHAR(4),               -- 週中コラムの版 thu / fri
+        ok          BOOLEAN NOT NULL,         -- データ確定に成功したか（同期・統計の再計算）
+        note        TEXT,
+        prepared_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'Asia/Tokyo'),
+        PRIMARY KEY (night_date, race_id)
+    )
+"""
+
+
+def targets_for(mode, races, sat, sun, mon):
+    """その夜に書くコラム → [(race, kind, edition)]"""
+    out = []
+    for r in races:
+        d = r['race_date']
+        if mode == 'thu':
+            out.append((r, 'week', 'thu'))
+        elif mode == 'fri' and d == sat:
+            out.append((r, 'kigan', None))
+        elif mode == 'fri' and d in (sun, mon):
+            out.append((r, 'week', 'fri'))
+        elif (mode == 'sat' and d == sun) or (mode == 'sun' and d == mon):
+            out.append((r, 'kigan', None))
+    return out
+
+
+def parse_failed(synced, out):
+    """entry_fetcher --sync の結果 → 同期に失敗した race_id の集合。同期そのものが落ちた（一覧が読めない）ときは None"""
+    if synced:
+        return set()
+    for line in out or []:
+        if line.startswith('FAILED_RACE_IDS:'):
+            return {x.strip() for x in line.split(':', 1)[1].split(',') if x.strip()}
+    return None
+
+
+def prep(mode, today, dry):
+    """18時「データ確定」: 出馬表の同期と統計の再計算をして、今夜のコラムの材料と印を確定する。
+    ここで確定した印は、出走取消以外ではその夜のうちに動かさない（20時以降は同期・再計算をしない）。
+    何度実行しても安全: 対象を先に「準備中」で全部登録し、確定に成功したレースは二度と再計算しない"""
+    sat, sun, mon = weekend(today)
+    weekend_races = [r for r in fetch_upcoming_grade_races(days=max(0, (mon - today).days))
+                     if r['race_date'] in (sat, sun, mon)]
+    if not weekend_races and not dry:
+        # 「月曜開催なし」より先に見る（一覧が読めないのを開催なしと取り違えない）
+        send_discord("⚠️ **夜のコラム（データ確定）**: 週末のレース一覧が読めませんでした（取得の失敗か、ページの形の変化）。"
+                     "このあと自動でやり直します。")
+        return 'race_list_empty'
+    if mode == 'sun' and not any(r['race_date'] == mon for r in weekend_races):
+        print("月曜の開催が無いので、日曜の夜は何もしない")
+        return 'no_monday'
+    races = [r for r in weekend_races if r.get('grade_no') in GRADE
+             and (mode != 'sun' or r['race_date'] == mon)]
+    targets = targets_for(mode, races, sat, sun, mon)
+    log(f"データ確定（{mode}）: 今夜のコラム {len(targets)}本 — "
+        + '、'.join(f"{r['race_date'].month}/{r['race_date'].day} {r['race_name']}" for r, _, _ in targets))
+    if dry or not targets:
+        return 'ok'
+
+    # 1. 対象を全部「準備中」で登録する（途中で落ちても、20時以降に未確定のレースとして拾える）。確定済みの行は残す
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(PREP_TABLE)
+    for r, kind, edition in targets:
+        cur.execute("""INSERT INTO night_prep (night_date, race_id, race_name, grade, race_date, kind, edition, ok, note)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,FALSE,'準備中') ON CONFLICT (night_date, race_id) DO NOTHING""",
+                    (today, r['race_id'], r['race_name'], GRADE[r['grade_no']], r['race_date'], kind, edition))
+    conn.commit()
+    cur.execute("SELECT race_id FROM night_prep WHERE night_date = %s AND ok", (today,))
+    done = {x[0] for x in cur.fetchall()}
+    cur.close()
+    todo = [t for t in targets if t[0]['race_id'] not in done]
+    if not todo:
+        conn.close()
+        return 'ok'
+
+    # 2. 出馬表の同期（失敗したレースだけを止める）
+    last = max(r['race_date'] for r, _, _ in todo)
+    synced, out = run_script('entry_fetcher.py', ['--sync', '--days', str(max(0, (last - today).days))], '出馬表 同期')
+    failed_ids = parse_failed(synced, out)
+
+    # 3. レースごとに確定（1レースの例外で残りを止めない）
+    lines = []
+    for r, kind, edition in todo:
+        rid, name = r['race_id'], r['race_name']
+        try:
+            if failed_ids is None or rid in failed_ids:
+                ok, note = False, '出馬表の同期に失敗'
+            elif kind == 'kigan' or not has_recent_facts(conn, rid):
+                # 鬼眼コラムは確定した枠順で印を確定。週中コラムは近走の事実がそろっていれば再計算しない
+                okp, _ = run_script('stats_predictor.py', [rid, '--update'], f'{name} 統計予想（データ確定）')
+                ok, note = okp, (None if okp else '統計予想の再計算に失敗')
+            else:
+                ok, note = True, None
+        except Exception as e:
+            conn.rollback()
+            ok, note = False, f'データ確定でエラー: {e}'[:200]
+        try:
+            c2 = conn.cursor()
+            c2.execute("UPDATE night_prep SET ok = %s, note = %s, prepared_at = NOW() AT TIME ZONE 'Asia/Tokyo' "
+                       "WHERE night_date = %s AND race_id = %s", (ok, note, today, rid))
+            conn.commit()
+            c2.close()
+        except Exception:
+            conn.rollback()
+            conn.close()
+            conn = get_conn()
+        lines.append(f"・{name}: {'✅' if ok else '⛔ ' + note}")
+    conn.close()
+    if any('⛔' in l for l in lines):
+        send_discord("🗂 **夜のコラム（データ確定）**\n" + '\n'.join(lines)
+                     + "\n⛔ のレースは20時以降も自動でやり直します（22時でもだめなら手動）。")
+    return 'ok'
+
+
+def published_since(conn, rid, kind, edition, since):
+    """since（日本時間の naive datetime）以降に更新されたコラムの (generator, updated_at)。無ければ None"""
+    st = column_status(conn, rid, 'week_column' if kind == 'week' else 'race_column', edition)
+    return st if st and st[1] and st[1] >= since else None
+
+
+def published_tonight(conn, rid, kind, edition, today):
+    """今夜（今日の17時以降。updated_at は日本時間の naive timestamp）に公開済みで、ページ監査にも通っているか"""
+    if not published_since(conn, rid, kind, edition, datetime(today.year, today.month, today.day, 17)):
+        return False
+    return not column_audit.audit(rid, edition if kind == 'week' else None)
+
+
+def load_prep(conn, today):
+    cur = conn.cursor()
+    cur.execute(PREP_TABLE)
+    conn.commit()
+    cur.execute("""SELECT race_id, race_name, grade, kind, edition, ok, note FROM night_prep
+                   WHERE night_date = %s ORDER BY race_date, race_id""", (today,))
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+
+def write_one(conn, rid, name, grade, kind, edition, label):
+    """1本書いて監査する → (公開できたか, 結果の文)"""
+    started = datetime.now()   # 執筆前の時刻。これより後に更新されていなければ「今回は公開できていない」
+    if kind == 'week':
+        args = [rid, '--grade', grade, '--edition', edition, '--force']
+        okw, _ = run_script('week_column.py', args, f'{name} {label}')
+        rewrite = lambda: run_script('week_column.py', args + ['--trends-only'], f'{name} 週中コラム（傾向だけで書き直し）')
+    else:
+        args = [rid, '--grade', grade, '--force']
+        okw, _ = run_script('column_writer.py', args, f'{name} 鬼眼コラム')
+        rewrite = lambda: run_script('column_writer.py', args, f'{name} 鬼眼コラム（書き直し）')
+    # 監査に通らなければ書き直し（週中コラムは「傾向だけ」）。それでもだめなら取り下げ
+    passed, problems = column_audit.enforce(conn, rid, edition if kind == 'week' else None, rewrite, log)
+    st = published_since(conn, rid, kind, edition, started) if passed else None
+    if st:
+        return True, f"・{name}（{grade}）{label}: " + ('AIの文章' if st[0] != 'template' else 'テンプレートの文章') + '・ページ監査に合格'
+    why = ' / '.join(problems) if problems else ('執筆に失敗' if not okw else '今回の更新が見当たらない')
+    return False, f"・{name}（{grade}）{label}: ⛔ {why}"
+
+
+def write(mode, today, retry, final):
+    """20時の執筆・21時/22時の自動再実行。確定済みの材料で書くだけ（同期・印の再計算はしない）。
+    公開済みで監査に通っているコラムは飛ばすので、何度実行しても同じコラムを二重に書かない"""
+    conn = get_conn()
+    rows = load_prep(conn, today)
+    if not rows or (retry and any(not ok for _, _, _, _, _, ok, _ in rows)):
+        # 18時のデータ確定が無い・未確定のレースがある → データ確定からやり直す（確定済みは再計算しない）
+        conn.close()
+        st = prep(mode, today, False)
+        if st == 'no_monday':
+            print('RESULT:{"success": true, "skipped": "no_monday"}')
+            return 0
+        conn = get_conn()
+        rows = load_prep(conn, today)
+        if not rows:
+            conn.close()
+            if final:
+                send_discord("⛔ **夜のコラム**: 今夜のデータ確定ができず、コラムを作れませんでした。"
+                             "/jobs のログを確認し、手動で夜のコラムを実行してください。")
+                return 1
+            print(f'RESULT:{{"success": false, "prep": "{st}"}}')
+            return 0 if st == 'ok' else 1
+
+    report, missing = [], []
+    for rid, name, grade, kind, edition, ok, note in rows:
+        label = f"週中コラム（{'木曜版' if edition == 'thu' else '金曜版'}）" if kind == 'week' else '鬼眼コラム（展開図つき）'
+        try:
+            if published_tonight(conn, rid, kind, edition, today):
+                continue
+            if not ok:
+                missing.append(f"・{name}（{grade}）{label}: ⛔ {note}")
+                continue
+            done, line = write_one(conn, rid, name, grade, kind, edition, label)
+            (report if done else missing).append(line)
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                conn = get_conn()
+            missing.append(f"・{name}（{grade}）{label}: ⛔ エラー: {e}"[:300])
+    conn.close()
+
+    when = '22時の最終やり直し' if final else ('21時のやり直し' if retry else '20時')
+    if report or (missing and (final or not retry)):
+        msg = f"🌙 **夜のコラム（{when}）**\n" + '\n'.join(report + missing)
+        if missing and not final:
+            msg += "\n⛔ のコラムは、このあと自動でやり直します。"
+        elif missing:
+            msg += "\n⛔ のコラムは自動では作れませんでした。/jobs のログを確認し、手動で夜のコラムを実行してください。"
+        else:
+            msg += "\nMac の Claude が最終確認をして投稿セットを用意し、翌朝8時にリマインダーで知らせます。"
+        send_discord(msg)
+    print(f'RESULT:{{"success": {"true" if not missing else "false"}, "published": {len(report)}, "missing": {len(missing)}}}')
+    return 1 if (missing and final) else 0
+
+
 def main():
     dry = '--dry-run' in sys.argv
     today = datetime.now().date()
@@ -66,94 +293,15 @@ def main():
         print("夜のコラムは木・金・土・日だけ（--mode で指定可）")
         print('RESULT:{"success": true, "skipped": "not_night"}')
         return
-    sat, sun, mon = weekend(today)
-    weekend_races = [r for r in fetch_upcoming_grade_races(days=max(0, (mon - today).days))
-                     if r['race_date'] in (sat, sun, mon)]
-    if mode == 'sun' and not any(r['race_date'] == mon for r in weekend_races):
-        print("月曜の開催が無いので、日曜の夜は何もしない")
-        print('RESULT:{"success": true, "skipped": "no_monday"}')
+    if '--prep' in sys.argv or dry:
+        st = prep(mode, today, dry)
+        print(f'RESULT:{{"success": {"true" if st in ("ok", "no_monday") else "false"}, "prep": "{st}"}}')
+        if st not in ('ok', 'no_monday'):
+            sys.exit(1)
         return
-    races = [r for r in weekend_races if r.get('grade_no') in GRADE
-             and (mode != 'sun' or r['race_date'] == mon)]   # 日曜の夜は月曜の重賞だけ
-    log(f"夜のコラム（{mode}）: 対象の重賞 {len(races)}件 — "
-        + '、'.join(f"{r['race_date'].month}/{r['race_date'].day} {r['race_name']}" for r in races))
-    if not weekend_races and not dry:
-        # 週末の重賞・OP・リステッドが1件も読めないのは「重賞が無い週」ではなく、レース一覧の取得失敗とみなす
-        # （中央競馬の開催週には必ずオープン以上のレースがある）。成功扱いにして見逃さない
-        send_discord("⚠️ **夜のコラム**: 週末のレース一覧が読めませんでした（取得の失敗か、ページの形の変化）。"
-                     "コラムは作っていません。/jobs のログを確認してください。")
-        print('RESULT:{"success": false, "reason": "race_list_empty"}')
-        sys.exit(1)
-    if dry or not races:
-        print(f'RESULT:{{"success": true, "races": {len(races)}}}')
-        return
-
-    # 1. 出馬表と同期（今日から日曜まで）。回避馬を外し、変わったレースは予想を作り直す
-    last = max(r['race_date'] for r in races)
-    synced, out = run_script('entry_fetcher.py', ['--sync', '--days', str(max(0, (last - today).days))], '出馬表 同期')
-    # 同期は「今日〜最終日の全レース」が対象で、1レースでも取れないと失敗になる（出馬表の出ていない月曜の平場など）。
-    # 失敗したレースの race_id を受け取り、そのレースだけ止める。一覧が取れない（同期そのものが落ちた）ときは全部止める
-    failed_ids = None
-    for line in out or []:
-        if line.startswith('FAILED_RACE_IDS:'):
-            failed_ids = {x for x in line.split(':', 1)[1].strip().split(',') if x}
-    if synced:
-        failed_ids = set()
-    if failed_ids is None and mode != 'thu':
-        send_discord("⛔ **夜のコラム**: 出馬表の同期が途中で止まったため、今夜のコラムは作っていません"
-                     "（公開済みのコラムはそのまま）。/jobs のログを確認し、直ったら夜のコラムを手動で実行してください。")
-        print('RESULT:{"success": false, "reason": "sync_failed"}')
-        sys.exit(1)
-    failed_ids = failed_ids or set()
-    if failed_ids:
-        log(f"  ⚠️ 同期できなかったレース: {', '.join(sorted(failed_ids))}（このうち今夜の対象だけ止める）")
-    conn = get_conn()
-    report, fails = [], 0
-    skipped = []
-    for r in races:
-        rid, name, grade = r['race_id'], r['race_name'], GRADE[r['grade_no']]
-        target = (mode == 'thu' or (mode == 'fri' and r['race_date'] in (sat, sun, mon))
-                  or (mode == 'sat' and r['race_date'] == sun) or (mode == 'sun' and r['race_date'] == mon))
-        if not target:
-            continue
-        if rid in failed_ids and mode != 'thu':
-            # 出走馬（取消・枠）が最新か確かめられないレースは書かない（公開済みのコラムはそのまま）
-            skipped.append(f"・{name}（{grade}）: ⛔ 出馬表の同期に失敗したため作っていません")
-            fails += 1
-            continue
-        if mode == 'thu' or (mode == 'fri' and r['race_date'] in (sun, mon)):
-            edition = 'thu' if mode == 'thu' else 'fri'
-            if not has_recent_facts(conn, rid):
-                run_script('stats_predictor.py', [rid, '--update'], f'{name} 統計予想（近走の事実を保存）')
-            args = [rid, '--grade', grade, '--edition', edition, '--force']
-            ok, _ = run_script('week_column.py', args, f'{name} 週中コラム（{edition}）')
-            # 監査に通らなければ、出走馬の名前・頭数に触れず過去の傾向だけで書き直す（頭数・馬名の食い違いを避ける）
-            passed, problems = column_audit.enforce(conn, rid, edition,
-                                                     lambda: run_script('week_column.py', args + ['--trends-only'],
-                                                                        f'{name} 週中コラム（傾向だけで書き直し）'), log)
-            st = column_status(conn, rid, 'week_column', edition) if passed else None
-            kind = f"週中コラム（{'木曜版' if edition == 'thu' else '金曜版'}）"
-        elif ((mode == 'fri' and r['race_date'] == sat) or (mode == 'sat' and r['race_date'] == sun)
-              or (mode == 'sun' and r['race_date'] == mon)):
-            args = [rid, '--grade', grade, '--force']
-            ok, _ = run_script('column_writer.py', args, f'{name} 鬼眼コラム')
-            passed, problems = column_audit.enforce(conn, rid, None,
-                                                     lambda: run_script('column_writer.py', args, f'{name} 鬼眼コラム（書き直し）'), log)
-            st = column_status(conn, rid, 'race_column') if passed else None
-            kind = '鬼眼コラム（展開図つき）'
-        else:
-            continue
-        fails += 0 if (ok and st) else 1
-        how = (('AIの文章' if st[0] != 'template' else 'テンプレートの文章') + '・ページ監査に合格') if st \
-            else ('⛔ 監査に通らず公開を取り下げ: ' + ' / '.join(problems) if problems else '公開できず')
-        report.append(f"・{name}（{grade}）{kind}: {how}")
-    conn.close()
-
-    send_discord("🌙 **夜のコラムを公開しました**\n" + '\n'.join(report + skipped)
-                 + "\n21時ごろ、Mac の Claude が最終確認をして X の下書きを作ります。")
-    print(f'RESULT:{{"success": {"true" if fails == 0 else "false"}, "published": {len(report) - (fails - len(skipped))}, "fails": {fails}}}')
-    if fails:
-        sys.exit(1)
+    rc = write(mode, today, '--retry' in sys.argv, '--final' in sys.argv)
+    if rc:
+        sys.exit(rc)
 
 
 if __name__ == '__main__':

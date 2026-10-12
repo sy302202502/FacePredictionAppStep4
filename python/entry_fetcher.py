@@ -297,12 +297,12 @@ def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, su
     finally:
         cur.close()
 
-def sync_with_latest_shutuba(days=1):
+def sync_with_latest_shutuba(days=1, only_ids=None):
     """
     DBのrace_entryを出馬表と同期し、除外・取消馬を自動削除 + race_specific_resultを再ランク付け
 
     実行タイミング：レース当日朝（出馬表確定後）に実行することを推奨
-      python entry_fetcher.py --sync
+      python entry_fetcher.py --sync [--days N] [--race-ids id1,id2]   # --race-ids で対象レースだけに絞る
     """
     conn = get_conn()
     cur = conn.cursor()
@@ -317,6 +317,12 @@ def sync_with_latest_shutuba(days=1):
             ORDER BY race_date, race_name
         """, (today, today + timedelta(days=days)))
         races = cur.fetchall()
+        not_in_db = set()
+        if only_ids:
+            # 呼び出し元が対象を絞ったとき（夜のコラムは今夜書くレースだけ。取得ページを最小にする）
+            races = [r for r in races if r[0] in only_ids]
+            # 出走表がまだ DB に無い（取り込み前）レースは同期できていない → 成功扱いにしない
+            not_in_db = set(only_ids) - {r[0] for r in races}
         # SELECT で開いた暗黙トランザクションをここで閉じる。
         # この後は netkeiba へのネットワーク取得（数十秒〜数分）が続くため、
         # 開いたままだと race_entry の ACCESS SHARE ロックを持ち続け、
@@ -324,12 +330,16 @@ def sync_with_latest_shutuba(days=1):
         conn.rollback()
 
         if not races:
+            if not_in_db:
+                print(f"同期対象のレースが DB にありません: {', '.join(sorted(not_in_db))}")
+                print(f"FAILED_RACE_IDS: {','.join(sorted(not_in_db))}")
+                return False
             print("同期対象のレースがありません（本日〜翌日）。")
             return
 
         print(f"{len(races)}件のレースを確認します\n")
         failed = []   # 出馬表を取れなかった・異常スキップしたレース
-        failed_ids = []   # 同じく race_id（呼び出し元が、失敗したレースだけを止められるように）
+        failed_ids = sorted(not_in_db)   # 同じく race_id（呼び出し元が、失敗したレースだけを止められるように）
         changed = []  # 出走馬が増減したレース（予想の再計算が必要）
 
         for race_id, race_name, race_date in races:
@@ -472,6 +482,8 @@ def sync_with_latest_shutuba(days=1):
                 failed_ids.append(race_id)
 
         print(f"\n=== 同期完了: {len(races) - len(failed)}/{len(races)}レース ===")
+        if not_in_db:
+            failed.extend(f"{x}(出走表が未取り込み)" for x in sorted(not_in_db))
         if failed:
             # 取消馬を含んだまま予想・買い目を公開しないよう、呼び出し元(cron/パイプライン)へ失敗を伝える
             print(f"  同期できなかったレース: {', '.join(failed)}")
@@ -515,7 +527,8 @@ def main():
     if '--sync' in sys.argv:
         print("=== 出走馬同期開始（出馬表との差異チェック） ===")
         days = int(sys.argv[sys.argv.index('--days') + 1]) if '--days' in sys.argv else 1
-        if sync_with_latest_shutuba(days) is False:
+        only = set(sys.argv[sys.argv.index('--race-ids') + 1].split(',')) if '--race-ids' in sys.argv else None
+        if sync_with_latest_shutuba(days, only) is False:
             sys.exit(1)
         return
 

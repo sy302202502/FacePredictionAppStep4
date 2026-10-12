@@ -105,19 +105,23 @@ def parse_failed(synced, out):
     return None
 
 
-def prep(mode, today, dry):
+def prep(mode, today, dry, notify=True):
     """18時「データ確定」: 出馬表の同期と統計の再計算をして、今夜のコラムの材料と印を確定する。
     ここで確定した印は、出走取消以外ではその夜のうちに動かさない（20時以降は同期・再計算をしない）。
     何度実行しても安全: 対象を先に「準備中」で全部登録し、確定に成功したレースは二度と再計算しない"""
     sat, sun, mon = weekend(today)
-    weekend_races = [r for r in fetch_upcoming_grade_races(days=max(0, (mon - today).days))
+    failed_dates = set()
+    weekend_races = [r for r in fetch_upcoming_grade_races(days=max(0, (mon - today).days), failed_dates=failed_dates)
                      if r['race_date'] in (sat, sun, mon)]
-    if not weekend_races and not dry:
+    # 今夜の対象日の一覧が1日でも読めなかったら「部分的」。読めた分は進め、読めなかった日は次の回でもう一度見る
+    need = {'thu': (sat, sun, mon), 'fri': (sat, sun, mon), 'sat': (sun,), 'sun': (mon,)}[mode]
+    partial = bool(failed_dates & set(need))
+    if partial and not weekend_races and not dry:
         # 「月曜開催なし」より先に見る（一覧が読めないのを開催なしと取り違えない）
-        send_discord("⚠️ **夜のコラム（データ確定）**: 週末のレース一覧が読めませんでした（取得の失敗か、ページの形の変化）。"
+        notify and send_discord("⚠️ **夜のコラム（データ確定）**: 週末のレース一覧が読めませんでした（取得の失敗か、ページの形の変化）。"
                      "このあと自動でやり直します。")
         return 'race_list_empty'
-    if mode == 'sun' and not any(r['race_date'] == mon for r in weekend_races):
+    if mode == 'sun' and not partial and not any(r['race_date'] == mon for r in weekend_races):
         print("月曜の開催が無いので、日曜の夜は何もしない")
         return 'no_monday'
     races = [r for r in weekend_races if r.get('grade_no') in GRADE
@@ -125,7 +129,13 @@ def prep(mode, today, dry):
     targets = targets_for(mode, races, sat, sun, mon)
     log(f"データ確定（{mode}）: 今夜のコラム {len(targets)}本 — "
         + '、'.join(f"{r['race_date'].month}/{r['race_date'].day} {r['race_name']}" for r, _, _ in targets))
-    if dry or not targets:
+    if partial and not dry and notify:
+        send_discord("⚠️ **夜のコラム（データ確定）**: 週末のレース一覧の一部（"
+                     + '・'.join(f"{d.month}/{d.day}" for d in sorted(failed_dates & set(need)))
+                     + "）が読めませんでした。読めた分は進め、残りは次の回でもう一度見ます。")
+    if not targets:
+        return 'race_list_partial' if partial else 'no_targets'   # 本当に今夜書く重賞が無いときだけ静かに終わる
+    if dry:
         return 'ok'
 
     # 1. 対象を全部「準備中」で登録する（途中で落ちても、20時以降に未確定のレースとして拾える）。確定済みの行は残す
@@ -143,11 +153,14 @@ def prep(mode, today, dry):
     todo = [t for t in targets if t[0]['race_id'] not in done]
     if not todo:
         conn.close()
-        return 'ok'
+        return 'race_list_partial' if partial else 'ok'
 
     # 2. 出馬表の同期（失敗したレースだけを止める）
     last = max(r['race_date'] for r, _, _ in todo)
-    synced, out = run_script('entry_fetcher.py', ['--sync', '--days', str(max(0, (last - today).days))], '出馬表 同期')
+    # 今夜書くレースだけを同期する（取得ページを最小に。関係のないレースの失敗で止まらない）
+    synced, out = run_script('entry_fetcher.py', ['--sync', '--days', str(max(0, (last - today).days)),
+                                                  '--race-ids', ','.join(r['race_id'] for r, _, _ in todo)],
+                             '出馬表 同期（今夜の対象だけ）')
     failed_ids = parse_failed(synced, out)
 
     # 3. レースごとに確定（1レースの例外で残りを止めない）
@@ -178,10 +191,10 @@ def prep(mode, today, dry):
             conn = get_conn()
         lines.append(f"・{name}: {'✅' if ok else '⛔ ' + note}")
     conn.close()
-    if any('⛔' in l for l in lines):
+    if any('⛔' in l for l in lines) and notify:
         send_discord("🗂 **夜のコラム（データ確定）**\n" + '\n'.join(lines)
                      + "\n⛔ のレースは20時以降も自動でやり直します（22時でもだめなら手動）。")
-    return 'ok'
+    return 'race_list_partial' if partial else 'ok'
 
 
 def published_since(conn, rid, kind, edition, since):
@@ -231,27 +244,26 @@ def write_one(conn, rid, name, grade, kind, edition, label):
 def write(mode, today, retry, final):
     """20時の執筆・21時/22時の自動再実行。確定済みの材料で書くだけ（同期・印の再計算はしない）。
     公開済みで監査に通っているコラムは飛ばすので、何度実行しても同じコラムを二重に書かない"""
+    # 毎回まずデータ確定を通す（何度実行しても安全。確定済みのレースは何もしない。18時に一覧が読めなかった・
+    # 途中で落ちた・あとから一覧に出たレースもここで拾う）
+    st = prep(mode, today, False, notify=final)   # 途中の回は個別に知らせず、最後のまとめ（Discord）で知らせる
+    if st in ('no_monday', 'no_targets'):
+        print(f'RESULT:{{"success": true, "skipped": "{st}"}}')
+        return 0
     conn = get_conn()
     rows = load_prep(conn, today)
-    if not rows or (retry and any(not ok for _, _, _, _, _, ok, _ in rows)):
-        # 18時のデータ確定が無い・未確定のレースがある → データ確定からやり直す（確定済みは再計算しない）
+    if not rows:
         conn.close()
-        st = prep(mode, today, False)
-        if st == 'no_monday':
-            print('RESULT:{"success": true, "skipped": "no_monday"}')
-            return 0
-        conn = get_conn()
-        rows = load_prep(conn, today)
-        if not rows:
-            conn.close()
-            if final:
-                send_discord("⛔ **夜のコラム**: 今夜のデータ確定ができず、コラムを作れませんでした。"
-                             "/jobs のログを確認し、手動で夜のコラムを実行してください。")
-                return 1
-            print(f'RESULT:{{"success": false, "prep": "{st}"}}')
-            return 0 if st == 'ok' else 1
+        if final:
+            send_discord("⛔ **夜のコラム**: 今夜のデータ確定ができず、コラムを作れませんでした。"
+                         "/jobs のログを確認し、手動で夜のコラムを実行してください。")
+            return 1
+        print(f'RESULT:{{"success": false, "prep": "{st}"}}')
+        return 1 if st == 'race_list_empty' else 0
 
     report, missing = [], []
+    if st == 'race_list_partial' and final:
+        missing.append("・⚠️ 週末のレース一覧の一部が読めず、重賞を取りこぼしている可能性があります")
     for rid, name, grade, kind, edition, ok, note in rows:
         label = f"週中コラム（{'木曜版' if edition == 'thu' else '金曜版'}）" if kind == 'week' else '鬼眼コラム（展開図つき）'
         try:
@@ -284,8 +296,39 @@ def write(mode, today, retry, final):
     return 1 if (missing and final) else 0
 
 
+def single_run():
+    """同じコンテナで夜のコラムが同時に2つ動かないようにする（20時の執筆が長引いて21時のやり直しと重なる、など）。
+    取れなければ None（前の実行が続いている）"""
+    import fcntl
+    f = open('/tmp/night_columns.lock', 'w')
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return f
+    except OSError:
+        f.close()
+        return None
+
+
 def main():
     dry = '--dry-run' in sys.argv
+    lock = None if dry else single_run()
+    if not dry and lock is None and '--final' in sys.argv:
+        # 22時の最終やり直しは、前の回が終わるのを最大45分待つ（ここで飛ばすと「作れなかった」通知が出ない）
+        import time
+        for _ in range(90):   # 最大45分（job_runner の上限3時間の範囲内）
+            time.sleep(30)
+            lock = single_run()
+            if lock:
+                break
+        if lock is None:
+            send_discord("⛔ **夜のコラム（22時の最終やり直し）**: 前の回の実行が45分以上続いていて、最終確認ができませんでした。"
+                         "/jobs のログを確認し、終わったら手動で夜のコラムを実行してください。")
+            print('RESULT:{"success": false, "reason": "previous_run_still_running"}')
+            sys.exit(1)
+    if not dry and lock is None:
+        print("前の夜のコラムの実行がまだ続いているので、今回は何もしない（次の回で拾う）")
+        print('RESULT:{"success": true, "skipped": "running"}')
+        return
     today = datetime.now().date()
     mode = sys.argv[sys.argv.index('--mode') + 1] if '--mode' in sys.argv else \
         {3: 'thu', 4: 'fri', 5: 'sat', 6: 'sun'}.get(today.weekday())
@@ -295,8 +338,8 @@ def main():
         return
     if '--prep' in sys.argv or dry:
         st = prep(mode, today, dry)
-        print(f'RESULT:{{"success": {"true" if st in ("ok", "no_monday") else "false"}, "prep": "{st}"}}')
-        if st not in ('ok', 'no_monday'):
+        print(f'RESULT:{{"success": {"true" if st in ("ok", "no_monday", "no_targets") else "false"}, "prep": "{st}"}}')
+        if st not in ('ok', 'no_monday', 'no_targets'):
             sys.exit(1)
         return
     rc = write(mode, today, '--retry' in sys.argv, '--final' in sys.argv)

@@ -456,3 +456,18 @@ ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_eyes double pr
 ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_coat double precision;
 ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_muscle double precision;
 ALTER TABLE public.stats_prediction ADD COLUMN IF NOT EXISTS face_vitality double precision;
+
+-- 2026-10-12 追加: 夜のコラムの「データ確定」（18時）の記録。20時の執筆・21/22時のやり直しが参照する（python/night_columns.py）
+CREATE TABLE IF NOT EXISTS public.night_prep (
+    night_date  DATE NOT NULL,
+    race_id     VARCHAR(20) NOT NULL,
+    race_name   TEXT,
+    grade       VARCHAR(4),
+    race_date   DATE,
+    kind        VARCHAR(8) NOT NULL,
+    edition     VARCHAR(4),
+    ok          BOOLEAN NOT NULL,
+    note        TEXT,
+    prepared_at TIMESTAMP DEFAULT (NOW() AT TIME ZONE 'Asia/Tokyo'),
+    PRIMARY KEY (night_date, race_id)
+);

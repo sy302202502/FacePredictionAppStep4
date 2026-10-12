@@ -27,8 +27,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
-def fetch_upcoming_grade_races(days=14):
-    """今日から days 日以内の重賞・OP・リステッドを返す"""
+def fetch_upcoming_grade_races(days=14, failed_dates=None):
+    """今日から days 日以内の重賞・OP・リステッドを返す。
+    failed_dates（集合）を渡すと、一覧の取得に失敗した日付を入れて返す（「本当に0件」と「読めなかった」を区別するため）"""
     today = datetime.now()
     results = []
     for delta in range(0, days + 1):
@@ -37,6 +38,13 @@ def fetch_upcoming_grade_races(days=14):
         try:
             resp = fetch_with_retry(url, timeout=10, min_sleep=1.0, max_sleep=2.0)
             resp.encoding = 'utf-8'
+            # 正常な一覧ページには、開催の無い日でも目印（block=race_list_sub と RaceList_Box）がある。
+            # 無ければエラーページ・アクセス制限・ページの形の変化 →「0件」ではなく「読めなかった」とする
+            if 'race_list_sub' not in resp.text or 'RaceList_Box' not in resp.text:
+                log(f"  [警告] {d.strftime('%Y%m%d')} のレース一覧が正常なページではありません")
+                if failed_dates is not None:
+                    failed_dates.add(d.date())
+                continue
             soup = BeautifulSoup(resp.text, 'lxml')
             for li in soup.find_all('li', class_='RaceList_DataItem'):
                 grade_span = li.find('span', class_=re.compile(r'Icon_GradeType\d'))
@@ -62,6 +70,8 @@ def fetch_upcoming_grade_races(days=14):
                     })
         except Exception as e:
             log(f"  [警告] {d.strftime('%Y%m%d')} の取得失敗: {e}")
+            if failed_dates is not None:
+                failed_dates.add(d.date())
     # race_id で重複排除（リンク形式変更などで同一レースを二重に拾った場合の保険）
     seen = set()
     unique = []

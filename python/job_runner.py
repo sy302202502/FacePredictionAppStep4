@@ -3,7 +3,7 @@ job_runner.py — cron ジョブの実行履歴を job_run テーブルに記録
 
   python3 python/job_runner.py <ジョブ名> <スクリプト.py> [引数...]
   例: python3 python/job_runner.py pipeline weekly_pipeline.py
-  ジョブ名は英字キー（pipeline / sync / odds / results / cleanup）。日本語表記は画面側で付ける
+  ジョブ名は英字キー（pipeline / sync / odds / results / cleanup / columns / highdiv）。日本語表記は画面側で付ける
 
 ・子スクリプトの出力はそのまま標準出力へ流す（cron のログファイルは従来どおり）
 ・開始/終了時刻・終了コード・最後の RESULT 行（無ければ末尾の1行）を記録する

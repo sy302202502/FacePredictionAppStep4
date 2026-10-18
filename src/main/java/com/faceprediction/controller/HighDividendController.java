@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -11,9 +13,9 @@ import java.util.concurrent.Executors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -59,6 +61,21 @@ public class HighDividendController {
         emitter.onTimeout(()    -> emitters.remove(STREAM_KEY, emitter));
         emitter.onError(e       -> emitters.remove(STREAM_KEY, emitter));
 
+        // python3 の無い環境（本番の app コンテナ）では起動しない。選定は python コンテナの cron が行う
+        // （ボタンは非表示だが、URL を直接開いたときに別コンテナで二重に動かないように）
+        if (!com.faceprediction.config.ScriptExecAdvice.isPythonAvailable()) {
+            executor.submit(() -> {
+                try {
+                    emitter.send(SseEmitter.event().data("この環境では実行できません（選定はレース当日 9:30 に自動で行います）"));
+                    emitter.send(SseEmitter.event().data("__DONE__"));
+                    emitter.complete();
+                } catch (Exception e) {
+                    log.warn("SSE送信失敗: {}", e.getMessage());
+                }
+            });
+            return emitter;
+        }
+
         // 既に実行中の場合は既存エミッターに追加し既存ログを送信
         if (running.getOrDefault(STREAM_KEY, false)) {
             emitters.put(STREAM_KEY, emitter);
@@ -84,36 +101,57 @@ public class HighDividendController {
     }
 
     // ── GET /high-dividend/result ──────────────────────────────
+    // 今日（日本時間）の選定があればそれ、無ければ直近の選定を返す（today=false で「本日分はまだ」と分かるように）
     @GetMapping("/result")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> result() {
+        List<Map<String, Object>> rows;
         try {
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT race_name, race_id, horse_count, favorite_odds, chaos_score," +
-                " selection_reason, analyzed_at" +
+            rows = jdbcTemplate.queryForList(
+                "SELECT race_name, race_id, venue, race_date, race_number, horse_count, favorite_odds," +
+                " chaos_score, selection_reason, top5_json, candidate_count, source, prediction_ready, analyzed_at" +
                 " FROM high_dividend_selection" +
-                " ORDER BY analyzed_at DESC" +
+                " ORDER BY race_date DESC NULLS LAST, id DESC" +
                 " LIMIT 1");
-
-            if (rows.isEmpty()) {
+        } catch (BadSqlGrammarException e) {
+            // 新しい列がまだ無いDB（選定が新方式で一度も動いていない）では、以前の列だけで読む。
+            // 接続断などの障害は握りつぶさずにエラーで返す（「選定なし」に見せない）
+            try {
+                rows = jdbcTemplate.queryForList(
+                    "SELECT race_name, race_id, venue, race_date, horse_count, favorite_odds," +
+                    " chaos_score, selection_reason, top5_json, analyzed_at" +
+                    " FROM high_dividend_selection" +
+                    " ORDER BY race_date DESC NULLS LAST, id DESC" +
+                    " LIMIT 1");
+            } catch (BadSqlGrammarException e2) {
+                // テーブルが存在しない
                 return ResponseEntity.ok(Map.of());
             }
-
-            Map<String, Object> row = rows.get(0);
-            Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("raceName",        row.get("race_name"));
-            resp.put("raceId",          row.get("race_id"));
-            resp.put("horseCount",      row.get("horse_count"));
-            resp.put("favoriteOdds",    row.get("favorite_odds"));
-            resp.put("chaosScore",      row.get("chaos_score"));
-            resp.put("selectionReason", row.get("selection_reason"));
-            resp.put("analyzedAt",      row.get("analyzed_at"));
-            return ResponseEntity.ok(resp);
-
-        } catch (DataAccessException e) {
-            // テーブルが存在しない / データなし
+        }
+        if (rows.isEmpty()) {
             return ResponseEntity.ok(Map.of());
         }
+
+        Map<String, Object> row = rows.get(0);
+        Object raceDate = row.get("race_date");
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Tokyo"));
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("raceName",        row.get("race_name"));
+        resp.put("raceId",          row.get("race_id"));
+        resp.put("venue",           row.get("venue"));
+        resp.put("raceDate",        raceDate != null ? raceDate.toString() : null);
+        resp.put("today",           raceDate != null && today.toString().equals(raceDate.toString()));
+        resp.put("raceNumber",      row.get("race_number"));
+        resp.put("horseCount",      row.get("horse_count"));
+        resp.put("favoriteOdds",    row.get("favorite_odds"));
+        resp.put("chaosScore",      row.get("chaos_score"));
+        resp.put("selectionReason", row.get("selection_reason"));
+        resp.put("candidateCount",  row.get("candidate_count"));
+        resp.put("source",          row.get("source"));
+        // false＝予想画面を作れていない。NULL（以前の行）は不明なので準備中とは扱わない
+        resp.put("predictionReady", row.get("prediction_ready"));
+        resp.put("analyzedAt",      row.get("analyzed_at"));
+        return ResponseEntity.ok(resp);
     }
 
     // ── 内部: スクリプト起動 ──────────────────────────────────

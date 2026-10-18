@@ -23,11 +23,12 @@ public class JobsController {
     private static final Map<String, String> LABELS = new LinkedHashMap<>();
     static {
         LABELS.put("pipeline", "週次パイプライン（毎朝9時）");
-        LABELS.put("sync",     "出馬表同期（土日11・13・15時）");
+        LABELS.put("sync",     "出馬表同期（土日・祝月11・13・15時）");
         LABELS.put("odds",     "オッズ更新（土日9〜15時）");
         LABELS.put("results",  "結果取得（土日18・22時／毎朝10時）");
         LABELS.put("cleanup",  "画像整理（月曜5時）");
         LABELS.put("columns",  "夜のコラム（木・金・土20時）");
+        LABELS.put("highdiv",  "万馬券チャレンジ選定（土日9:30・11:20）");
     }
 
     @Autowired private JdbcTemplate jdbc;

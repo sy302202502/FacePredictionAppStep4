@@ -15,11 +15,17 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # ── 週次予想パイプライン（毎朝9時: 出馬表→統計予想→顔面分析→重賞検証）──
 0 9 * * * cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py pipeline weekly_pipeline.py >> logs/weekly_cron.log 2>&1
 
-# ── レース当日の出馬表同期（土日 11/13/15時: 取消馬の除外・馬番確定）──
-0 11,13,15 * * 6,0 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py sync entry_fetcher.py --sync >> logs/sync_cron.log 2>&1
+# ── レース当日の出馬表同期（土日・祝日の月曜 11/13/15時: 取消馬の除外・馬番確定）──
+0 11,13,15 * * 6,0,1 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py sync entry_fetcher.py --sync >> logs/sync_cron.log 2>&1
 
 # ── レース当日のオッズ更新（土日・祝日の月曜 9/11/13/15時: predict-v2のオッズバッジ用）──
 0 9,11,13,15 * * 6,0,1 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py odds odds_fetcher.py >> logs/odds_cron.log 2>&1
+
+# ── 万馬券チャレンジの選定（土日・祝日の月曜 9:30: 9時のオッズ取得のあと。予想済みレース＋未予想の特別・OP最大5レースから1レース）──
+#   netkeiba の読み取りは1日1回・最大7回。選んだレースが未予想ならそのレースだけ予想を作る（毎朝のパイプラインの終了を待つ）
+30 9 * * 6,0,1 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py highdiv high_dividend_selector.py >> logs/highdiv_cron.log 2>&1
+#   11:20 は、9:30 の回で予想画面を作れなかったときだけ予想作成をやり直す（--retry-only: netkeiba のオッズは読まない）
+20 11 * * 6,0,1 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py highdiv high_dividend_selector.py --retry-only >> logs/highdiv_cron.log 2>&1
 
 # ── 的中記録の自動取得（土日・祝日の月曜の夜 + 毎朝10時: 未記録分のみ処理・冪等）──
 0 18,22 * * 6,0,1 cd /opt/faceprediction && docker compose exec -T python python3 python/job_runner.py results result_auto_fetcher.py >> logs/results_cron.log 2>&1

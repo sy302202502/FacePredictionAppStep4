@@ -298,7 +298,7 @@
     <!-- ページヘッダー -->
     <div class="page-header">
         <div class="page-title">💰 万馬券チャレンジ</div>
-        <div class="page-subtitle">単勝オッズから「人気が割れて荒れやすい」週末レースを自動厳選</div>
+        <div class="page-subtitle">レース当日の朝、単勝オッズから「人気が割れて荒れやすい」1レースを自動厳選（土日・祝の月曜 9:30ごろ）</div>
         <div class="hd-badge">🎯 万馬券チャレンジ</div>
     </div>
 
@@ -309,7 +309,7 @@
     <div class="glass-card">
         <div class="glass-card-inner">
             <button class="btn-run" id="run-btn" onclick="startStream()">
-                今週末のレースを厳選する
+                今日のレースを厳選する
             </button>
             <div id="log-panel"></div>
         </div>
@@ -321,8 +321,9 @@
         <div class="section-heading">選択中のレース</div>
         <div class="glass-card">
             <div class="result-inner">
-                <div class="result-label">🎯 今週の万馬券ターゲット</div>
+                <div class="result-label" id="result-label">🎯 万馬券ターゲット</div>
                 <div class="result-race-name" id="result-race-name">—</div>
+                <div class="selection-reason" id="result-note" style="display:none"></div>
 
                 <div class="result-stats">
                     <div class="stat-item">
@@ -418,7 +419,7 @@ function addLog(text, cls) {
 function resetBtn() {
     const btn = document.getElementById('run-btn');
     btn.disabled = false;
-    btn.innerHTML = '今週末のレースを厳選する';
+    btn.innerHTML = '今日のレースを厳選する';
 }
 
 function fetchResult(raceNameHint) {
@@ -428,7 +429,23 @@ function fetchResult(raceNameHint) {
             if (!data || Object.keys(data).length === 0) return;
 
             const raceName = data.raceName || raceNameHint || '—';
-            document.getElementById('result-race-name').textContent = raceName;
+            const where = (data.venue || '') + (data.raceNumber ? data.raceNumber + 'R ' : '');
+            document.getElementById('result-race-name').textContent = where + raceName;
+
+            // 日付（今日の分か、前回の分か）
+            let md = '';
+            if (data.raceDate) {
+                const p = data.raceDate.split('-');
+                md = Number(p[1]) + '/' + Number(p[2]) + ' の';
+            }
+            document.getElementById('result-label').textContent = '🎯 ' + md + '万馬券ターゲット'
+                + (data.candidateCount ? '（' + data.candidateCount + 'レースから選定）' : '');
+            const notes = [];
+            if (data.today === false) notes.push('今日の分は、レース当日の 9:30 ごろに選びます（表示は前回の結果）');
+            if (data.predictionReady === false) notes.push('予想画面を準備中です');
+            const noteEl = document.getElementById('result-note');
+            noteEl.textContent = notes.join(' ／ ');
+            noteEl.style.display = notes.length ? 'block' : 'none';
             document.getElementById('result-horse-count').textContent =
                 data.horseCount != null ? data.horseCount + '頭' : '—';
             document.getElementById('result-fav-odds').textContent =
@@ -443,8 +460,12 @@ function fetchResult(raceNameHint) {
             document.getElementById('result-chaos-bar').style.width = pct + '%';
 
             // 予想ページへのリンク
-            const link = '/predict-v2?raceName=' + encodeURIComponent(raceName);
-            document.getElementById('btn-predict').href = link;
+            const link = data.raceId
+                ? '/predict-v2?raceId=' + encodeURIComponent(data.raceId)
+                : '/predict-v2?raceName=' + encodeURIComponent(raceName);
+            const btnPredict = document.getElementById('btn-predict');
+            btnPredict.href = link;
+            btnPredict.style.display = data.predictionReady === false ? 'none' : '';
 
             // カードをアニメーション付きで表示
             const card = document.getElementById('result-card');

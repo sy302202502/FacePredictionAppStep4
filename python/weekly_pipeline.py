@@ -123,9 +123,12 @@ def send_discord(content):
 def acquire_pipeline_lock():
     """同一パイプラインの並行実行を防ぐ排他ロックを取得。
     既に別プロセスが実行中の場合は終了する（cron の二重起動対策）。"""
-    f = open(LOCK_FILE, 'w')
+    # 'w' で開くとロックを取る前に中身を消してしまう（万馬券チャレンジもこのロックで待ち合わせる）
+    f = open(LOCK_FILE, 'a')
     try:
         _fcntl.flock(f, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        f.seek(0)
+        f.truncate()
         f.write(str(os.getpid()))
         f.flush()
         return f

@@ -55,20 +55,32 @@ SOURCE_REPLACE = (('netkeiba確定', '確定'), ('気象庁予報', '予報'),
 MAX_EXCLAIM = 4     # 本文の「！」の上限（要所だけ熱く）
 
 
+def _jp_kanji(c):
+    """日本で使う漢字か（JIS X 0213 か cp932 のどちらかにあれば可。剝・頰・髙・﨑 などを落とさない）"""
+    for enc in ('euc_jis_2004', 'cp932'):
+        try:
+            c.encode(enc)
+            return True
+        except UnicodeEncodeError:
+            pass
+    return False
+
+
 def text_problems(text):
     """文章そのものの崩れ（2026-11-12 週中コラムで発生）→ 問題のリスト。
     ・文字化け（置換文字・私用領域の文字）… 取り込んだ馬名などが化けたまま本文に入った
-    ・日本語にない漢字（「東海赛」の「赛」など。日本の文字コード cp932 に無い漢字）… AI が中国語の字を混ぜた
+    ・日本語にない漢字（「東海赛」の「赛」など。JIS X 0213 に無い漢字）… AI が中国語の字を混ぜた
     絵文字や記号は対象外（漢字だけを見る）"""
     out = []
     if '\ufffd' in text or any(0xE000 <= ord(c) <= 0xF8FF for c in text):
         out.append('文字化けがある')
     foreign = []
     for c in text:
-        if 0x3400 <= ord(c) <= 0x9FFF or 0xF900 <= ord(c) <= 0xFAFF:
-            try:
-                c.encode('cp932')
-            except UnicodeEncodeError:
+        o = ord(c)
+        if 0x3400 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF:    # 拡張面（𠮷 など）は見ない
+            if _jp_kanji(c):
+                continue
+            if True:
                 if c not in foreign:
                     foreign.append(c)
     if foreign:

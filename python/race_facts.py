@@ -134,6 +134,9 @@ def past_editions(conn, race_name, before):
     return rows[:PAST_YEARS]
 
 
+_REFETCH_FAILED = set()   # 化けた保存分の読み直しに失敗した race_id（この実行の間だけ覚える）
+
+
 def _garbled(data):
     """保存した過去の結果が文字化けしているか（馬名のどれかが化けていれば True）"""
     return any(is_garbled(h.get('name') or '') for h in (data or {}).get('horses', []))
@@ -149,15 +152,19 @@ def past_result(conn, race_id, race_name, race_date, venue):
         cached = json.loads(row[0])
         if not _garbled(cached):
             return cached
+        if race_id in _REFETCH_FAILED:
+            return None      # この実行の中ですでに読み直して失敗した → 同じ実行では取りに行かない
         # 2026-11-12: db.netkeiba が UTF-8 に移行したのに EUC-JP で読んでいた頃の保存分は馬名が化け、
         # 「通過」列も見つからず全頭「通過不明」になっている → 1回だけ読み直して上書きする
     polite_sleep(1.5, 2.5)
     r = requests.get(f"https://db.netkeiba.com/race/{race_id}/", headers=HEADERS, timeout=15)
-    if r.status_code != 200:
-        return None
-    decode_netkeiba(r)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
-    data = tenkai.parse_result_soup(BeautifulSoup(r.text, 'lxml'), race_id)
+    data = None
+    if r.status_code == 200:
+        decode_netkeiba(r)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
+        data = tenkai.parse_result_soup(BeautifulSoup(r.text, 'lxml'), race_id)
     if not data or not any(h.get('rank') == 1 for h in data['horses']) or _garbled(data):
+        if row:
+            _REFETCH_FAILED.add(race_id)   # 読み直しは1回の実行につき1レース1回まで（次の実行でまた1回）
         return None          # 化けたものは保存もコラムの材料にもしない
     cur = conn.cursor()
     cur.execute("INSERT INTO past_race_result (race_id, race_name, race_date, venue, data) VALUES (%s,%s,%s,%s,%s) "

@@ -304,7 +304,9 @@ def check(col, facts):
         if w not in material and w not in KATAKANA_OK and not any(w in k or k in w for k in KATAKANA_OK):
             return f'材料にないカタカナ語「{w}」'
         # 途中で切れた名前（材料の「ジャパンダートクラシック」を「ジャパンダートクラシ」と書いた等。2026-11-12）
-        if w in material and w not in mat_kata and w not in KATAKANA_OK and any(k.startswith(w) for k in mat_kata):
+        # 末尾が1〜3文字だけ欠けたものに限る（「ステイヤーズ」のような自然な略し方は落とさない）
+        if w in material and w not in mat_kata and w not in KATAKANA_OK and \
+                any(k.startswith(w) and 1 <= len(k) - len(w) <= 3 for k in mat_kata):
             return f'途中で切れた名前「{w}」'
     return None
 

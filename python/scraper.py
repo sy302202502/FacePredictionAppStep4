@@ -16,7 +16,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
-from constants import parse_course
+from constants import parse_course, decode_netkeiba
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -73,7 +73,7 @@ def fetch_grade_races(year):
     )
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(resp.text, 'lxml')
     except Exception as e:
         print(f"  [警告] {year}年のレース一覧取得失敗: {e}")
@@ -129,7 +129,7 @@ def fetch_race_results(race_id):
     url = f"https://db.netkeiba.com/race/{race_id}/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(resp.text, 'lxml')
     except Exception as e:
         print(f"  [警告] レース結果取得失敗 race_id={race_id}: {e}")
@@ -182,7 +182,7 @@ def get_horse_photo_no(horse_id):
     url = f"https://db.netkeiba.com/horse/{horse_id}/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(resp.text, 'lxml')
         import re
         for img in soup.find_all('img'):

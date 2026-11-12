@@ -141,6 +141,8 @@ def _words(text, problems):
     for w in _ng_words():
         if _norm(w) in t:
             problems.append(f'使わない言葉「{w}」がある')
+    from column_writer import text_problems      # 文字化け・日本語にない漢字（2026-11-12）
+    problems.extend(text_problems(text))
 
 
 def audit_race_column(race_id, base=None):
@@ -323,6 +325,10 @@ def audit_week_column(race_id, edition, base=None):
         else:
             problems.append('出走馬カードが読めない（頭数を確かめられない）')
     _words(title + body, problems)
+    if 'みんな' not in body:
+        problems.append('呼びかけ「みんな」が無い（語り口）')
+    if body.count('通過不明') >= 3:
+        problems.append('過去の勝ち馬の通過順がほとんど読めていない（取り込みの失敗を疑う）')
     return problems
 
 

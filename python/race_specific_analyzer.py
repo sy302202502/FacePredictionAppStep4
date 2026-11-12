@@ -183,7 +183,7 @@ def fetch_past_editions(race_name, years, search_word=None):
         )
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15)
-            text = resp.content.decode('EUC-JP', errors='replace')
+            text = decode_netkeiba(resp)
             soup = BeautifulSoup(text, 'lxml')
             table = soup.find('table', class_='nk_tb_common')
             if not table:
@@ -309,7 +309,7 @@ def fetch_similar_races_by_condition(venue, distance, surface, years):
         )
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15)
-            text = resp.content.decode('EUC-JP', errors='replace')
+            text = decode_netkeiba(resp)
             soup = BeautifulSoup(text, 'lxml')
             table = soup.find('table', class_='nk_tb_common')
             if not table:
@@ -377,7 +377,7 @@ def fetch_all_finishers(race_id):
     url = f"https://db.netkeiba.com/race/{race_id}/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(resp.text, 'lxml')
     except Exception as e:
         print(f"    [エラー] レース結果取得失敗: {e}")
@@ -430,7 +430,7 @@ def get_horse_photo_no(horse_id):
     url = f"https://db.netkeiba.com/horse/{horse_id}/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(resp.text, 'lxml')
         for img in soup.find_all('img'):
             src = img.get('src', '')
@@ -498,7 +498,7 @@ def get_sire_name(horse_id):
     url = f"https://db.netkeiba.com/horse/ped/{horse_id}/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(resp.text, 'lxml')
         table = soup.find('table', class_='blood_table')
         if table:

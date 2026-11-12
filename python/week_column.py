@@ -20,7 +20,7 @@ import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 
-from column_writer import get_conn, notify_discord, VOICE, VOICE_NG, SOURCE_NG, MAX_EXCLAIM, scrub_sources
+from column_writer import get_conn, notify_discord, VOICE, VOICE_NG, SOURCE_NG, MAX_EXCLAIM, scrub_sources, text_problems
 from llm_client import generate_text
 from race_condition import place_from_race_id
 import column_review
@@ -241,6 +241,11 @@ def check(col, facts):
         return f'文字数 {len(body)}'
     if body.count('！') + body.count('!') > MAX_EXCLAIM:
         return '「！」が多い（語り口）'
+    bad = text_problems(text)
+    if bad:
+        return bad[0]
+    if 'みんな' not in body:
+        return '呼びかけ「みんな」が無い（語り口）'
     for w in ('同レース', 'そのレース', '同じレースに', '同競走'):
         if w in text:
             return f'指す先があいまいな言い方「{w}」'
@@ -294,9 +299,13 @@ def check(col, facts):
                 elif '前走' in seg and runs and int(m.group(1)) != runs[0][1]:
                     return f"{name}の前走の着順が違う（{m.group(1)}着）"
     # カタカナ語は 材料にある（馬名・レース名）か、一般語のリストにあるものだけ
+    mat_kata = set(re.findall(r'[ァ-ヴー]{3,}', material))
     for w in re.findall(r'[ァ-ヴー]{3,}', text):
         if w not in material and w not in KATAKANA_OK and not any(w in k or k in w for k in KATAKANA_OK):
             return f'材料にないカタカナ語「{w}」'
+        # 途中で切れた名前（材料の「ジャパンダートクラシック」を「ジャパンダートクラシ」と書いた等。2026-11-12）
+        if w in material and w not in mat_kata and w not in KATAKANA_OK and any(k.startswith(w) for k in mat_kata):
+            return f'途中で切れた名前「{w}」'
     return None
 
 

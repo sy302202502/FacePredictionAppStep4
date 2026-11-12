@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 
 import race_diagram
 import tenkai
-from constants import HEADERS
+from constants import HEADERS, decode_netkeiba
 
 
 def ensure_table(conn):
@@ -160,7 +160,7 @@ if __name__ == '__main__':
         sys.exit(1)
     rid = sys.argv[1]
     r = requests.get(f"https://db.netkeiba.com/race/{rid}/", headers=HEADERS, timeout=15)
-    r.encoding = 'EUC-JP'
+    decode_netkeiba(r)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
     conn = get_conn()
     try:
         record(conn, rid, BeautifulSoup(r.text, 'lxml') if r.status_code == 200 else None)

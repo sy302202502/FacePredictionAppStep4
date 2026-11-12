@@ -22,7 +22,7 @@ import requests
 from bs4 import BeautifulSoup
 
 import tenkai
-from constants import HEADERS, polite_sleep
+from constants import HEADERS, polite_sleep, decode_netkeiba, is_garbled
 
 PAST_YEARS = 5          # 過去何回分の同じレースを見るか
 RECENT_RUNS = 5         # 保存する近走の数
@@ -134,6 +134,11 @@ def past_editions(conn, race_name, before):
     return rows[:PAST_YEARS]
 
 
+def _garbled(data):
+    """保存した過去の結果が文字化けしているか（馬名のどれかが化けていれば True）"""
+    return any(is_garbled(h.get('name') or '') for h in (data or {}).get('horses', []))
+
+
 def past_result(conn, race_id, race_name, race_date, venue):
     """過去の結果（保存済みならそれを、無ければ結果ページを1回だけ読んで保存）"""
     cur = conn.cursor()
@@ -141,18 +146,22 @@ def past_result(conn, race_id, race_name, race_date, venue):
     row = cur.fetchone()
     cur.close()
     if row:
-        return json.loads(row[0])
+        cached = json.loads(row[0])
+        if not _garbled(cached):
+            return cached
+        # 2026-11-12: db.netkeiba が UTF-8 に移行したのに EUC-JP で読んでいた頃の保存分は馬名が化け、
+        # 「通過」列も見つからず全頭「通過不明」になっている → 1回だけ読み直して上書きする
     polite_sleep(1.5, 2.5)
     r = requests.get(f"https://db.netkeiba.com/race/{race_id}/", headers=HEADERS, timeout=15)
     if r.status_code != 200:
         return None
-    r.encoding = 'EUC-JP'
+    decode_netkeiba(r)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
     data = tenkai.parse_result_soup(BeautifulSoup(r.text, 'lxml'), race_id)
-    if not data or not any(h.get('rank') == 1 for h in data['horses']):
-        return None
+    if not data or not any(h.get('rank') == 1 for h in data['horses']) or _garbled(data):
+        return None          # 化けたものは保存もコラムの材料にもしない
     cur = conn.cursor()
     cur.execute("INSERT INTO past_race_result (race_id, race_name, race_date, venue, data) VALUES (%s,%s,%s,%s,%s) "
-                "ON CONFLICT (race_id) DO NOTHING",
+                "ON CONFLICT (race_id) DO UPDATE SET data = EXCLUDED.data, fetched_at = NOW()",
                 (race_id, race_name, race_date, venue, json.dumps(data, ensure_ascii=False)))
     conn.commit()
     cur.close()

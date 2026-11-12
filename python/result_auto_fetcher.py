@@ -25,6 +25,7 @@ from datetime import date
 from dotenv import load_dotenv
 
 import tenkai_check
+from constants import decode_netkeiba
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'), override=False)
 
@@ -143,7 +144,7 @@ def scrape_actual_results(race_id):
     url = f"https://db.netkeiba.com/race/{race_id}/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(resp.text, 'lxml')
     except Exception as e:
         print(f"    [スクレイピングエラー] {e}")
@@ -238,7 +239,7 @@ def search_race_id_from_netkeiba(race_name, race_date=None):
             for attempt in range(3):
                 try:
                     resp = requests.get(url, headers=HEADERS, timeout=15)
-                    resp.encoding = 'EUC-JP'
+                    decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
                     soup = BeautifulSoup(resp.text, 'lxml')
                     break
                 except Exception as e:
@@ -601,7 +602,7 @@ def fetch_result_page(race_id):
         if resp.status_code != 200:
             print(f"    [スキップ] 結果ページ HTTP {resp.status_code}")
             return None
-        resp.encoding = 'EUC-JP'
+        decode_netkeiba(resp)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         return BeautifulSoup(resp.text, 'lxml')
     except Exception as e:
         print(f"    [スクレイピングエラー] {e}")

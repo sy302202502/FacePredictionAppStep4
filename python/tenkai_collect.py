@@ -49,7 +49,7 @@ def collect_races(race_ids):
             continue
         try:
             r = requests.get(f'https://db.netkeiba.com/race/{rid}/', headers=HEADERS, timeout=20)
-            r.encoding = 'EUC-JP'
+            decode_netkeiba(r)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
             data = tenkai.parse_result_soup(BeautifulSoup(r.text, 'lxml'), rid) if r.status_code == 200 else None
         except Exception as e:
             print(f'  {rid} 取得失敗: {e}', flush=True)

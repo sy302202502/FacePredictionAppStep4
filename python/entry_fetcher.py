@@ -178,7 +178,7 @@ def get_horse_photo_no(horse_id):
     from bs4 import BeautifulSoup
     try:
         r = fetch_with_retry(f"https://db.netkeiba.com/horse/{horse_id}/", timeout=15, min_sleep=1.0, max_sleep=2.0)
-        r.encoding = 'EUC-JP'
+        decode_netkeiba(r)   # 文字コードはページごとに判定（2026-11 db.netkeiba も UTF-8 に移行）
         soup = BeautifulSoup(r.text, 'lxml')
         for img in soup.find_all('img'):
             m = re.search(r'show_photo\.php\?horse_id=\w+&no=(\d+)', img.get('src', ''))   # 海外馬の horse_id は英数字

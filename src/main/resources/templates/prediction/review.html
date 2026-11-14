@@ -301,6 +301,38 @@
                 </div>
             </div>
 
+            <!-- 通算（固定保存のある全レース） -->
+            <div th:if="${allTime != null}">
+                <div class="section-heading"><span th:text="${'通算 ' + allTime.races + 'レース（' + allTime.since + ' から）'}">通算</span></div>
+                <div class="glass-card">
+                    <div class="card-inner">
+                        <div class="stat-grid">
+                            <div class="stat-box">
+                                <div class="val"><span th:text="${allTime.win}">0</span><small> / <span th:text="${allTime.races}">0</span></small></div>
+                                <div class="lbl">◎ 1着</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="val"><span th:text="${allTime.place}">0</span><small> / <span th:text="${allTime.races}">0</span></small></div>
+                                <div class="lbl">◎ 3着以内</div>
+                            </div>
+                            <div class="stat-box recovery">
+                                <div class="val"><span th:text="${allTime.recovery}">75</span><small>%</small></div>
+                                <div class="lbl">単勝・複勝の回収率</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="val"><span th:text="${allTime.winRecovery}">72</span><small>%</small></div>
+                                <div class="lbl">単勝の回収率</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="val"><span th:text="${allTime.placeRecovery}">77</span><small>%</small></div>
+                                <div class="lbl">複勝の回収率</div>
+                            </div>
+                        </div>
+                        <div class="bet-note">直近の数字は偶然で大きく振れます。長い目で見た成績はこちらで確かめてください（◎の単勝・複勝を毎回100円ずつ買った場合）。</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- レース選択 -->
             <div class="glass-card">
                 <form class="race-bar" method="get" th:action="@{/review}">

@@ -76,6 +76,7 @@ public class ReviewController {
             model.addAttribute("tenkai", loadTenkaiCheck(selected.getRaceId()));
         }
         model.addAttribute("tenkaiSummary", tenkaiSummary());
+        model.addAttribute("allTime", allTimeSummary());
 
         model.addAttribute("summary", summarize(reviews));
         return "prediction/review";
@@ -121,6 +122,47 @@ public class ReviewController {
     }
 
     /** 展開図の答え合わせの通算（レース数・前4頭の平均的中・ペース的中率）。無ければ null */
+    /**
+     * 鬼眼の ◎ の通算成績（固定保存した印と払戻がそろう全レース）。直近30レースだけでは偶然の振れが大きいため、
+     * 通算の ◎1着・3着内と、単勝・複勝を毎回100円ずつ買った場合の回収率を出す。記録が無ければ null
+     */
+    private Map<String, Object> allTimeSummary() {
+        try {
+            Map<String, Object> r = jdbc.queryForMap(
+                "SELECT COUNT(*) AS races," +
+                "       COUNT(*) FILTER (WHERE a.actual_rank = 1) AS win," +
+                "       COUNT(*) FILTER (WHERE a.actual_rank <= 3) AS place," +
+                "       COALESCE(SUM(w.payout), 0) AS win_return," +
+                "       COALESCE(SUM(p.payout), 0) AS place_return," +
+                "       MIN(re.race_date) AS since " +
+                "FROM prediction_snapshot s " +
+                "JOIN (SELECT DISTINCT race_id, race_date FROM race_entry) re ON re.race_id = s.race_id " +
+                "JOIN race_specific_accuracy a ON a.race_id = s.race_id AND a.horse_name = s.horse_name" +
+                "     AND a.data_source = 'stats' " +
+                "LEFT JOIN race_payout w ON w.race_id = s.race_id AND w.bet_type = '単勝'" +
+                "     AND w.combo = CAST(s.horse_number AS VARCHAR) " +
+                "LEFT JOIN race_payout p ON p.race_id = s.race_id AND p.bet_type = '複勝'" +
+                "     AND p.combo = CAST(s.horse_number AS VARCHAR) " +
+                "WHERE s.rank_position = 1 AND s.horse_number IS NOT NULL " +
+                "  AND EXISTS (SELECT 1 FROM race_payout x WHERE x.race_id = s.race_id AND x.bet_type = '単勝')");
+            long races = ((Number) r.get("races")).longValue();
+            if (races == 0) return null;
+            long winRet = ((Number) r.get("win_return")).longValue();
+            long placeRet = ((Number) r.get("place_return")).longValue();
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("races", races);
+            m.put("win", ((Number) r.get("win")).longValue());
+            m.put("place", ((Number) r.get("place")).longValue());
+            m.put("winRecovery", Math.round(winRet * 1.0 / races));
+            m.put("placeRecovery", Math.round(placeRet * 1.0 / races));
+            m.put("recovery", Math.round((winRet + placeRet) / 2.0 / races));
+            m.put("since", String.valueOf(r.get("since")));
+            return m;
+        } catch (Exception e) {
+            return null;   // テーブルがまだ無い環境など。通算の欄を出さないだけ
+        }
+    }
+
     private Map<String, Object> tenkaiSummary() {
         try {
             Map<String, Object> m = jdbc.queryForMap(

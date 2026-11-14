@@ -150,7 +150,7 @@
     <div class="page-body">
         <div class="page-header">
             <div class="page-title">的中率の記録</div>
-            <div class="page-subtitle">予測精度モニタリング / 旧システム・新システム並行表示</div>
+            <div class="page-subtitle">統計スコアの順位がどれだけ当たっているかの記録</div>
         </div>
 
         <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
@@ -166,11 +166,15 @@
         </div>
 
         <!-- システム別 精度比較 -->
-        <div class="section-heading">方式の比較</div>
+        <div class="section-heading">統計スコアの順位の成績</div>
+        <p style="font-size:12px;opacity:.75;margin:0 0 12px;line-height:1.7;">
+            このページの数字は、顔面の点を混ぜる前の「統計スコアの順位」で数えた成績です（統計1位の馬が1着だった割合など）。
+            鬼眼の印（◎○▲…）そのものの成績と馬券の収支は <a href="/review" style="color:inherit;text-decoration:underline;">答え合わせ</a> で見られます。
+        </p>
         <div class="compare-grid">
 
             <!-- 旧システム -->
-            <div class="system-card legacy">
+            <div class="system-card legacy" th:if="${totalRaces != null and totalRaces > 0}">
                 <div class="system-card-title">旧方式 — 類似度スコア</div>
                 <div class="stat-row">
                     <div class="stat-card">
@@ -190,7 +194,7 @@
 
             <!-- 新システム -->
             <div class="system-card new-sys">
-                <div class="system-card-title">新方式 — 顔面傾向分析予想</div>
+                <div class="system-card-title">統計スコアの順位（顔面を混ぜる前）</div>
                 <div class="stat-row">
                     <div class="stat-card">
                         <div class="stat-num" th:text="${v2TotalRaces}">0</div>
@@ -198,7 +202,7 @@
                     </div>
                     <div class="stat-card highlight">
                         <div class="stat-num" th:text="${v2WinHitRate} + '%'">0%</div>
-                        <div class="stat-label">1着の的中率</div>
+                        <div class="stat-label">統計1位が1着</div>
                     </div>
                     <div class="stat-card highlight">
                         <div class="stat-num" th:text="${v2Top5HitRate} + '%'">0%</div>
@@ -211,8 +215,8 @@
         <!-- 詳細記録タブ -->
         <div class="section-heading">詳細の記録</div>
         <div class="tab-bar">
-            <button class="tab-btn active" onclick="showTab('old', this)">旧方式</button>
-            <button class="tab-btn"        onclick="showTab('new', this)">新方式 — 顔面傾向分析</button>
+            <button class="tab-btn active" onclick="showTab('old', this)">旧方式（いまは使っていません）</button>
+            <button class="tab-btn"        onclick="showTab('new', this)">統計スコアの順位</button>
         </div>
 
         <!-- 旧システムタブ -->
@@ -452,7 +456,8 @@
         }
 
         // URLハッシュで新タブを開く
-        if (window.location.hash === '#tab-new') {
+        // 旧方式はいまは使っていないので、最初から「統計スコアの順位」のタブを開く
+        if (window.location.hash !== '#tab-old') {
             showTab('new', document.querySelectorAll('.tab-btn')[1]);
         }
     </script>

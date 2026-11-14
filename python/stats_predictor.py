@@ -26,7 +26,7 @@ Claude Vision API は一切使用しない。
 import sys, os, re, time, json
 import psycopg2
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, date
 from dotenv import load_dotenv
 from constants import HEADERS, fetch_with_retry, polite_sleep, decode_netkeiba, surface_of_distance_cell, is_race_id, is_abroad
 from race_condition import resolve_condition
@@ -430,56 +430,87 @@ def grade_of(race_name):
     # 障害重賞（JGI〜JGIII）は平地の重賞とは別物として 'JG1' 等で返す
     return ('JG' if m.group(1) else 'G') + level
 
-def fetch_horse_results(horse_id, horse_name):
-    """直近20走を取得"""
+def _result_date(text):
+    """成績表の日付セル（例 2026/11/08）→ date。読めなければ None"""
+    m = re.match(r'(\d{4})[/-](\d{1,2})[/-](\d{1,2})', (text or '').strip())
+    if not m:
+        return None
+    try:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def parse_horse_results(text, before=None):
+    """馬の成績ページのHTML → 直近20走のリスト（新しい順）。
+
+    before（今回のレースの日付）を渡すと、その日より前の走だけを数える。
+    レースが終わったあとに予想を作り直すと、そのレース自身や後の成績が「近走」に入り、
+    予想が実際より良く見えてしまうため（2026-11-14）。日付の読めない行は before 指定時は使わない。
+    成績表そのものが無いページ（デビュー前の馬）は空のリスト。"""
+    soup = BeautifulSoup(text, 'lxml')
+    table = soup.find('table', class_='db_h_race_results')
+    if not table:
+        return []
+    results = []
+    for row in table.find_all('tr')[1:]:
+        if len(results) >= 20:   # 直近20走
+            break
+        cols = [td.text.strip() for td in row.find_all('td')]
+        if len(cols) < 15:
+            continue
+        if before is not None:
+            d = _result_date(cols[0])
+            if d is None or d >= before:
+                continue
+        results.append(cols)
+    return [r for r in (_result_row(c) for c in results) if r]
+
+
+def fetch_horse_results(horse_id, horse_name, before=None):
+    """直近20走を取得。ページを読めなかったときは None（デビュー前で成績が無い馬の [] と区別する）"""
     url = f'https://db.netkeiba.com/horse/result/{horse_id}/'
     try:
         r = fetch_with_retry(url, timeout=15, min_sleep=1.5, max_sleep=3.0)
-        text = decode_netkeiba(r)
-        soup = BeautifulSoup(text, 'lxml')
-        table = soup.find('table', class_='db_h_race_results')
-        if not table:
-            return []
-        results = []
-        for row in table.find_all('tr')[1:21]:  # 直近20走
-            cols = [td.text.strip() for td in row.find_all('td')]
-            if len(cols) < 15:
-                continue
-            # 着順: 「3(降)」は降着後の着順、「中」(競走中止)は最下位扱い。
-            # 「取」「除」(出走取消・競走除外)は走っていないので成績に数えない
-            # （旧実装は一律10着扱いで、取消が「大敗」として減点されていた）
-            m_rank = re.match(r'(\d+)', cols[11])
-            if m_rank:
-                finish = int(m_rank.group(1))
-            elif cols[11].startswith('中'):
-                finish = int(cols[6]) if cols[6].strip().isdigit() else 18
-            else:
-                continue
-            try:
-                results.append({
-                    'date':      cols[0],
-                    'race_name': cols[4],
-                    'horses':    int(cols[6]) if cols[6].strip().isdigit() else 10,
-                    'odds':      (lambda v: float(v) if v.replace('.','',1).isdigit() else 10.0)(cols[9].strip()),
-                    'popularity':int(cols[10]) if cols[10].strip().isdigit() else 10,
-                    'rank':      finish,
-                    'distance':  int(re.sub(r'\D','', cols[14])) if re.search(r'\d', cols[14]) else 2000,
-                    'surface':   surface_of_distance_cell(cols[14]),
-                    'condition': cols[16] if len(cols) > 16 else '良',
-                    # 以下は同じテーブルに元から含まれる列（追加リクエストなし）
-                    'weather':   cols[2]  if len(cols) > 2  else '',
-                    'venue':     cols[1]  if len(cols) > 1  else '',   # 開催（例: 4東京2 / シャティン）
-                    'passing':   cols[25] if len(cols) > 25 else '',   # 通過順位 例:13-12-12-7
-                    'pace':      cols[26] if len(cols) > 26 else '',   # 例:37.1-33.4
-                    'agari':     cols[27] if len(cols) > 27 else '',   # 上がり3F
-                    'grade':     grade_of(cols[4]),
-                })
-            except Exception:
-                continue
-        return results
+        return parse_horse_results(decode_netkeiba(r), before)
     except Exception as e:
         print(f'    [警告] {horse_name} の成績取得失敗: {e}')
-        return []
+        return None
+
+
+def _result_row(cols):
+    """成績表の1行（セルの文字列のリスト）→ 1走分の dict。数えない行（取消・除外）は None"""
+    # 着順: 「3(降)」は降着後の着順、「中」(競走中止)は最下位扱い。
+    # 「取」「除」(出走取消・競走除外)は走っていないので成績に数えない
+    # （旧実装は一律10着扱いで、取消が「大敗」として減点されていた）
+    m_rank = re.match(r'(\d+)', cols[11])
+    if m_rank:
+        finish = int(m_rank.group(1))
+    elif cols[11].startswith('中'):
+        finish = int(cols[6]) if cols[6].strip().isdigit() else 18
+    else:
+        return None
+    try:
+        return ({
+            'date':      cols[0],
+            'race_name': cols[4],
+            'horses':    int(cols[6]) if cols[6].strip().isdigit() else 10,
+            'odds':      (lambda v: float(v) if v.replace('.','',1).isdigit() else 10.0)(cols[9].strip()),
+            'popularity':int(cols[10]) if cols[10].strip().isdigit() else 10,
+            'rank':      finish,
+            'distance':  int(re.sub(r'\D','', cols[14])) if re.search(r'\d', cols[14]) else 2000,
+            'surface':   surface_of_distance_cell(cols[14]),
+            'condition': cols[16] if len(cols) > 16 else '良',
+            # 以下は同じテーブルに元から含まれる列（追加リクエストなし）
+            'weather':   cols[2]  if len(cols) > 2  else '',
+            'venue':     cols[1]  if len(cols) > 1  else '',   # 開催（例: 4東京2 / シャティン）
+            'passing':   cols[25] if len(cols) > 25 else '',   # 通過順位 例:13-12-12-7
+            'pace':      cols[26] if len(cols) > 26 else '',   # 例:37.1-33.4
+            'agari':     cols[27] if len(cols) > 27 else '',   # 上がり3F
+            'grade':     grade_of(cols[4]),
+        })
+    except Exception:
+        return None
 
 # ----------------------------------------------------------------
 # スコア計算
@@ -662,6 +693,27 @@ def build_comment(results, dist, surf, detail, today_condition=None):
 
     return "。".join(parts) if parts else "特徴的なポイントなし"
 
+def previous_scores(conn, race_id):
+    """この開催に保存済みの統計予想 {horse_id: {score, detail, comment}}（直前の再評価で読めなかった馬の保険）"""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT horse_id, score, score_detail, comment FROM stats_prediction "
+                    "WHERE race_id = %s AND horse_id IS NOT NULL AND score IS NOT NULL", (race_id,))
+        out = {}
+        for hid, score, detail, comment in cur.fetchall():
+            try:
+                d = json.loads(detail) if detail else {}
+            except Exception:
+                d = {}
+            out[hid] = {'score': float(score), 'detail': d, 'comment': comment or ''}
+        return out
+    except Exception:
+        conn.rollback()
+        return {}
+    finally:
+        cur.close()
+
+
 def save_tenkai(conn, race_id, scored):
     """展開想定図の材料（tenkai.horse_features → tenkai 列）と、週中コラム用の近走の事実
     （race_facts.horse_recent → recent 列）を保存する。
@@ -672,8 +724,8 @@ def save_tenkai(conn, race_id, scored):
     cur = conn.cursor()
     try:
         for h in scored:
-            if not h.get('horse_id'):
-                continue
+            if not h.get('horse_id') or h.get('kept'):
+                continue   # 前回の点を維持した馬は、展開図の材料も前回のまま
             # 今回取れなかった馬は NULL で上書きする（前回の古い材料を新しい事実として使わないため）
             for c in cols:
                 cur.execute(f"UPDATE stats_prediction SET {c} = %s WHERE race_id = %s AND horse_id = %s",
@@ -754,18 +806,44 @@ def main():
     else:
         print("調教評価: 取得なし（中立扱い）\n")
 
+    # 成績は今回のレースの日より前の走だけを使う（終わったレースを作り直しても、後の成績を混ぜない）
+    before = race_date if isinstance(race_date, date) else None
+    prev = previous_scores(conn, race_id) if update_mode else {}
+    fetch_failed = []   # 成績ページを読めなかった馬（デビュー前で成績が無い馬とは別）
+
     scored = []
     for horse_name, horse_id, horse_num, jockey, dist, surf, _, _rid in entries:
         print(f"  {horse_num}番 {horse_name} ({jockey})")
         if not horse_id:
-            print(f"    [スキップ] horse_id なし")
+            # horse_id が無い馬も、成績の無い馬と同じ物差し（調教・血統は中立）で点を付ける
+            print(f"    [注意] horse_id なし → 成績なしとして評価")
+            score, detail, _c = calc_score([], target_distance or 2000, target_surface or '芝',
+                                           training=oikiri.get(horse_name),
+                                           today_condition=today_condition)
             scored.append({
                 'horse_name': horse_name, 'horse_id': horse_id,
                 'horse_num': horse_num, 'jockey': jockey,
-                'score': 40.0, 'detail': {}, 'comment': '成績データなし'
+                'score': score, 'detail': detail, 'comment': '成績データなし'
             })
             continue
-        results = fetch_horse_results(horse_id, horse_name)
+        results = fetch_horse_results(horse_id, horse_name, before)
+        if results is None:
+            polite_sleep(3.0, 5.0)   # 一時的な失敗に備えて1回だけ読み直す
+            results = fetch_horse_results(horse_id, horse_name, before)
+        if results is None:
+            fetch_failed.append(horse_name)
+            old = prev.get(horse_id)
+            if old:
+                # 直前の再評価で読めなかった馬は、前回の点をそのまま使う（急に低評価へ落とさない）
+                print(f"    [注意] 成績を読めず → 前回の点（{old['score']:.1f}点）を維持")
+                scored.append({
+                    'horse_name': horse_name, 'horse_id': horse_id,
+                    'horse_num': horse_num, 'jockey': jockey,
+                    'score': old['score'], 'detail': old['detail'], 'comment': old['comment'],
+                    'kept': True,
+                })
+                continue
+            results = []
         blood   = fetch_blood(horse_id)
         score, detail, comment = calc_score(results, target_distance or 2000, target_surface or '芝',
                                             training=oikiri.get(horse_name),
@@ -774,6 +852,9 @@ def main():
         style_info = running_style(results)
         feats = tenkai.horse_features(results)
         recent = race_facts.horse_recent(results, target_surface, target_distance)
+        if horse_name in fetch_failed:
+            detail['注意'] = '成績を読み込めなかったため、調教と血統だけの暫定評価'
+            comment = '成績を読み込めず暫定評価（あとで再評価されます）'
         if style_info:
             detail['脚質'] = (f"{style_info['style']}（直近{style_info['samples']}走の平均通過"
                              f"{style_info['ratio']:.0%}"
@@ -820,6 +901,8 @@ def main():
         print(f"専門紙補正: {len(tospo_adj)}頭分を反映\n")
 
     for h in scored:
+        if h.get('kept'):
+            continue   # 前回の点（補正込み）をそのまま使う
         st = h['style']['style'] if h.get('style') else None
         adj, adj_desc = pace_adjustment(st, pace_info['pace'],
                                         target_surface, today_condition)
@@ -909,8 +992,13 @@ def main():
         print(f"   → /stats-predict?raceName={race_name} で確認")
 
     conn.close()
+    if fetch_failed:
+        print(f"\n⚠️ 成績を読み込めなかった馬: {len(fetch_failed)}頭（{'、'.join(fetch_failed)}）")
+        if not dry_run:
+            _notify_discord(f"⚠️ **{race_name}** の統計予想で、成績を読み込めなかった馬が {len(fetch_failed)}頭 "
+                            f"（{'、'.join(fetch_failed[:8])}）。この馬の点は暫定です。")
     print(f"\n{'='*60}")
-    print(f"  RESULT:{json.dumps({'success':True,'race':race_name,'top3':[s['horse_name'] for s in scored[:3]]}, ensure_ascii=False)}")
+    print(f"  RESULT:{json.dumps({'success':True,'race':race_name,'top3':[s['horse_name'] for s in scored[:3]],'fetch_failed':len(fetch_failed)}, ensure_ascii=False)}")
 
 if __name__ == '__main__':
     main()

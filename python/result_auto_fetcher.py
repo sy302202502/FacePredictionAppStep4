@@ -333,7 +333,11 @@ def find_unrecorded_stats(conn):
           -- JST基準の「今日まで」を対象にする。CURRENT_DATE(サーバ=UTC)だと
           -- 土日夜のcronで当日レースが対象外になり、記録が翌朝まで遅れる。
           -- 当日でも結果未公開なら scrape が空を返しスキップ→次回再試行される。
-          AND re.race_date <= (NOW() AT TIME ZONE 'Asia/Tokyo')::date
+          -- ただし当日のレースを読みに行くのは 16時以降だけ（毎朝10時の回が、まだ走っていない
+          -- 当日のレースの結果ページを最大30件読みに行っていた。2026-11-14）
+          AND (re.race_date < (NOW() AT TIME ZONE 'Asia/Tokyo')::date
+               OR (re.race_date = (NOW() AT TIME ZONE 'Asia/Tokyo')::date
+                   AND EXTRACT(HOUR FROM NOW() AT TIME ZONE 'Asia/Tokyo') >= 16))
           AND NOT EXISTS (
               SELECT 1 FROM race_specific_accuracy rsa
               WHERE rsa.race_id = sp.race_id AND rsa.data_source = 'stats'

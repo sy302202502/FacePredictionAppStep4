@@ -297,6 +297,21 @@ def save_entries(conn, race_id, race_name, race_date, grade, venue, distance, su
     finally:
         cur.close()
 
+def is_final_field(entries, db_names):
+    """取得した出馬表が「枠順まで確定した全頭分」だと言えるか。
+
+    馬番が 1〜頭数 で欠けなくそろい（途中までしか読めなかった表ではない）、頭数が中央競馬の
+    出走頭数の範囲（5〜18頭）で、ほぼ全頭が登録済みの馬（別のレースの表を読んでいない）のとき True。"""
+    nums = [e.get('horse_number') for e in entries]
+    n = len(entries)
+    if not (5 <= n <= 18) or any(not isinstance(x, int) for x in nums):
+        return False
+    if sorted(nums) != list(range(1, n + 1)):
+        return False
+    names = {e['horse_name'] for e in entries}
+    return len(names & set(db_names)) >= n * 0.8
+
+
 def sync_with_latest_shutuba(days=1, only_ids=None):
     """
     DBのrace_entryを出馬表と同期し、除外・取消馬を自動削除 + race_specific_resultを再ランク付け
@@ -366,7 +381,11 @@ def sync_with_latest_shutuba(days=1, only_ids=None):
             # 安全ガード: 半数以上が「除外」と判定された場合はスクレイピング異常
             # （netkeibaのHTML変更等で出馬表が部分的にしか取れなかった）の可能性が高い。
             # 正常な馬まで大量削除しないようスキップして警告する。
-            if db_names and len(removed) > max(3, len(db_names) * 0.5):
+            # ただし、特別登録（出走しない馬も載る。50頭を超えることもある）から確定した出馬表に
+            # 変わったときも半数以上が減る。枠順まで確定した出馬表だと確かめられたら信用して反映する
+            # （以前はここで永久にスキップされ、出走しない馬が予想に残り続けた。2026-11-14）
+            if db_names and len(removed) > max(3, len(db_names) * 0.5) \
+                    and not is_final_field(entries, db_names):
                 print(f"  ⚠️ 除外判定が{len(removed)}/{len(db_names)}頭と異常に多いためスキップ"
                       f"（スクレイピング失敗の可能性）")
                 failed.append(race_name)

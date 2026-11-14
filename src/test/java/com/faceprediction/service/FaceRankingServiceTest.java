@@ -25,16 +25,34 @@ class FaceRankingServiceTest {
     }
 
     @Test
-    void 写真の無い海外馬は統計で順位に入り日本馬の未分析は末尾() {
+    void 顔面の点が無い馬も統計で順位に入る() {
         List<RaceSpecificResult> r = ranking.rank(List.of(
             row("A", "000a000001", 80.0, 50.0, 1),
-            row("B", "000a000002", null, 70.0, 2),   // 写真なしの海外馬・統計は最上位
+            row("B", "000a000002", null, 70.0, 2),   // 写真なしの海外馬
             row("C", "2021100001", 85.0, 55.0, 3),
-            row("D", "2021100002", null, 90.0, 4)));  // 日本馬の未分析は従来どおり末尾
-        assertEquals("B", r.get(0).getHorseName());
+            row("D", "2021100002", null, 90.0, 4)));  // 日本馬で顔面の点が無い・統計は最上位
+        // 2026-11-14: 日本馬も末尾に回さない（統計2位の馬が無印のまま勝つことがあった）
+        assertEquals("D", r.get(0).getHorseName());
         assertNotNull(r.get(0).getScore());
         assertEquals("写真がないため鬼眼の対象外（統計で評価）", r.get(0).getComment());
-        assertEquals("D", r.get(3).getHorseName());
-        assertNull(r.get(3).getScore());
+        assertEquals("B", r.get(1).getHorseName());
+        assertEquals("写真がないため鬼眼の対象外（統計で評価）", r.get(1).getComment());
+    }
+
+    @Test
+    void 写真はあるが分析がまだの馬は分析待ちと表示する() {
+        Map<String, Object> d = row("D", "2021100002", null, 90.0, 2);
+        d.put("image_path", "/uploads/candidates/2021100002.jpg");
+        List<RaceSpecificResult> r = ranking.rank(List.of(row("A", "2021100001", 80.0, 50.0, 1), d));
+        assertEquals("D", r.get(0).getHorseName());
+        assertEquals("鬼眼の分析がまだのため統計で評価", r.get(0).getComment());
+    }
+
+    @Test
+    void 全頭が未分析ならスコア無しのまま() {
+        List<RaceSpecificResult> r = ranking.rank(List.of(
+            row("A", "2021100001", null, 50.0, 1), row("B", "2021100002", null, 70.0, 2)));
+        assertNull(r.get(0).getScore());
+        assertNull(r.get(1).getScore());
     }
 }

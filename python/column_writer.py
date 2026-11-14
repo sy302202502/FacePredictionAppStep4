@@ -261,12 +261,13 @@ def load_facts(conn, race_id, grade=None):
 
     shutuba = race_diagram.shutuba_info(race_id)   # 回り・騎手（展開図の材料）
     horses = []
-    # 写真が無く鬼眼で見られない海外馬は、顔の点数の代わりにレース内の平均を使う（FaceRankingService と同じ）
+    # 顔面の点が無い馬（写真なし・海外馬）は、顔の点数の代わりにレース内の平均を使う（FaceRankingService と同じ。
+    # 2026-11-14 に海外馬だけの扱いから全馬へ広げた）
     faces = [r[3] for r in rows if r[3] is not None]
     face_mean = sum(faces) / len(faces) if faces else None
     abroad = not str(race_id).isdigit()
     for name, num, waku, face, stats, detail_json, comment, face_comment, *_, venue_db, tenkai_json, hid in rows:
-        no_photo = face is None and abroad and hid and not str(hid).isdigit() and face_mean is not None and stats is not None
+        no_photo = face is None and face_mean is not None and stats is not None
         if no_photo:
             face = face_mean
         try:

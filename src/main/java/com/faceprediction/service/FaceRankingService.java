@@ -44,7 +44,8 @@ public class FaceRankingService {
 
     /**
      * 顔面スコアと統計スコアを半々で合成し、レース内でコントラストを強調して
-     * スコアの団子状態を解消する。顔面分析済みの馬のみ対象（未分析は末尾・スコア無し）。
+     * スコアの団子状態を解消する。顔面の点が無い馬は、レース内の顔面の平均点を代わりに使って
+     * 統計の点で比べる（全頭が未分析のレースだけは、スコア無しのまま）。
      * rows には horse_name / image_path / face_comment / face_score / score /
      * horse_number / post_position（任意で actual_rank）を含めること。
      */
@@ -80,14 +81,20 @@ public class FaceRankingService {
             if (ar != null) r.setActualRank(((Number) ar).intValue());
 
             Object fs = row.get("face_score");
-            boolean noPhotoAbroad = fs == null && isAbroadHorse(r.getHorseId()) && !Double.isNaN(faceMean)
-                && row.get("score") != null;
+            // 2026-11-14: 海外馬に限らず、顔面の点が無い馬（写真なし・分析がまだ）も同じ扱いにする。
+            // 以前は印の対象から外れて末尾に回り、統計2位の馬が無印のまま勝つことがあった
+            boolean noPhotoAbroad = fs == null && !Double.isNaN(faceMean) && row.get("score") != null;
             if (fs == null && !noPhotoAbroad) {
                 r.setScore(null);
                 unanalyzed.add(r);
                 continue;
             }
-            if (noPhotoAbroad) r.setComment("写真がないため鬼眼の対象外（統計で評価）");
+            if (noPhotoAbroad) {
+                String img = (String) row.get("image_path");
+                r.setComment(img == null || img.isEmpty() || isAbroadHorse(r.getHorseId())
+                    ? "写真がないため鬼眼の対象外（統計で評価）"
+                    : "鬼眼の分析がまだのため統計で評価");
+            }
             double face  = noPhotoAbroad ? faceMean : ((Number) fs).doubleValue();
             Object ss = row.get("score");
             double stats = ss != null ? ((Number) ss).doubleValue() : face;

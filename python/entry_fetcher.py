@@ -574,6 +574,7 @@ def main():
 
     print(f"{len(races)}件のレースを発見\n")
     conn = get_conn()
+    errors = []   # 取得の途中でエラーになったレース（確定前で出走馬が無いだけのレースは含めない）
     try:
         for race_info in races:
             print(f"【{race_info['race_name']}】{race_info['race_date']} race_id={race_info['race_id']}")
@@ -591,8 +592,13 @@ def main():
                 polite_sleep(2.0, 4.0)
             except Exception as ex:
                 print(f"  [エラー] {ex}")
+                errors.append(race_info['race_name'])
     finally:
         conn.close()
+    if errors:
+        # 一部でも失敗したら失敗で終わる（以前は「取得完了」と出て成功で終わり、取りこぼしに気づけなかった）
+        print(f"\n=== 取得に失敗したレースがあります: {'、'.join(errors)} ===")
+        sys.exit(1)
     print("\n=== 取得完了 ===")
 
     # ── レース名正規化（netkeibaが切り詰めた名前を完全名に補正） ──

@@ -403,8 +403,8 @@
                     <span style="flex:1; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:3px; color:var(--purple);"
                           th:text="${selectedRace} + ' — 顔面分析'"></span>
                     <button class="btn-face" id="face-btn"
-                            th:data-race="${selectedRace}"
-                            onclick="runFaceAnalysis(this.dataset.race)">
+                            th:data-race="${selectedRace}" th:data-race-id="${selectedRaceId}"
+                            onclick="runFaceAnalysis(this.dataset.race, this.dataset.raceId)">
                         顔面分析を実行
                     </button>
                 </div>
@@ -550,6 +550,7 @@
         .then(r => r.json())
         .then(data => {
             if (data.error) { addLog(data.error, 'log-err'); resetBtn(); return; }
+            if (data.mode === 'update') addLog('顔面分析の済んだレースなので、点だけを再評価します（顔面の結果は残ります）', 'log-info');
             const key = data.key;
 
             if (es) es.close();
@@ -598,7 +599,7 @@
     // ── 顔面分析 ────────────────────────────────────
     let faceEs = null;
 
-    function runFaceAnalysis(raceName) {
+    function runFaceAnalysis(raceName, raceId) {
         const btn = document.getElementById('face-btn');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> 分析中...';
@@ -610,7 +611,7 @@
         fetch('/stats-predict/run-face', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-            body: 'raceName=' + encodeURIComponent(raceName)
+            body: 'raceName=' + encodeURIComponent(raceName) + (raceId ? '&raceId=' + encodeURIComponent(raceId) : '')
         })
         .then(r => r.json())
         .then(data => {

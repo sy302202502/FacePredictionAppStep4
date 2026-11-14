@@ -66,6 +66,12 @@ public class BettingService {
         List<Integer> trifectaRanks = settled ? podiumRanks.subList(0, 3) : List.of();
         long starters = ranked.stream().filter(r -> r.getActualRank() != null).count();
         int placeLimit = starters > 0 && starters <= SMALL_FIELD ? 2 : 3;
+        // 着順の付いた馬が7頭以下でも、競走中止の馬がいれば実際の出走は8頭以上で、複勝は3着まで払われる。
+        // 着順からは中止と取消を見分けられないので、馬番のある馬が8頭以上いて ◎ が3着のときは
+        // 複勝を「外れ」と決めつけず、判定保留にする（払戻表が取れれば正しく決まる）
+        long numbered = ranked.stream().filter(r -> r.getHorseNumber() != null).count();
+        Integer honmeiRank = picks.get(0).getActualRank();
+        boolean placeUnclear = placeLimit == 2 && numbered > SMALL_FIELD && honmeiRank != null && honmeiRank == 3;
 
         List<BetLine> lines = new ArrayList<>();
 
@@ -74,7 +80,7 @@ public class BettingService {
         lines.add(win);
 
         BetLine place = new BetLine("複勝", "◎ 1点", true);
-        addCombo(place, picks, settled, pay, "", c -> within(c[0], placeLimit), 0);
+        addCombo(place, picks, settled && !(pay == null && placeUnclear), pay, "", c -> within(c[0], placeLimit), 0);
         lines.add(place);
 
         BetLine wide = new BetLine("ワイド", "◎-○▲ 2点");

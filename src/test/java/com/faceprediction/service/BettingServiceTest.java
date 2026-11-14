@@ -1,5 +1,6 @@
 package com.faceprediction.service;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -87,7 +88,7 @@ class BettingServiceTest {
     }
 
     @Test
-    void 七頭以下なら複勝は二着まで() {
+    void 着順が七頭分で馬番は八頭あり本命が三着なら複勝は判定保留() {
         Map<String, Integer> finish = new HashMap<>();
         finish.put("B", 1);
         finish.put("C", 2);
@@ -96,9 +97,11 @@ class BettingServiceTest {
         finish.put("E", 5);
         finish.put("F", 6);
         finish.put("G", 7);
-        // H は取消（着順なし）→ 7頭立て
+        // H は着順なし。取消なら7頭立てで複勝は2着まで（外れ）、競走中止なら8頭立てで3着まで（的中）。
+        // 着順からは見分けられないので、払戻表が無いうちは「外れ」と決めつけず保留にする
         List<BetLine> lines = betting.suggest(race(finish));
-        assertEquals(false, line(lines, "複勝").getHit());
+        assertNull(line(lines, "複勝").getHit());
+        assertEquals(Boolean.FALSE, line(lines, "単勝").getHit());
     }
 
     @Test
@@ -182,5 +185,15 @@ class BettingServiceTest {
         List<BetLine> lines = betting.suggest(race(Map.of("A", 1, "B", 2, "C", 3)), pay);
         assertEquals(true, line(lines, "三連単").getHit());       // 着順で判定
         assertNull(line(lines, "三連単").getReturnAmount());      // 払戻額は不明
+    }
+
+    @Test
+    void 単勝と複勝が基本の買い目でほかは参考() {
+        List<BetLine> lines = betting.suggest(race(new HashMap<>()));
+        assertEquals(2, betting.corePoints(lines));
+        assertEquals(20, betting.totalPoints(lines));
+        assertTrue(line(lines, "単勝").isCore());
+        assertTrue(line(lines, "複勝").isCore());
+        assertFalse(line(lines, "三連単").isCore());
     }
 }

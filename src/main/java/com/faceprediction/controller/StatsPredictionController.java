@@ -133,7 +133,8 @@ public class StatsPredictionController {
     // ──────────────────────────────────────────────
     @PostMapping("/run")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> run(@RequestParam String raceName) {
+    public ResponseEntity<Map<String, Object>> run(@RequestParam String raceName,
+                                                   @RequestParam(required = false) String raceId) {
         Map<String, Object> resp = new LinkedHashMap<>();
         if (!SAFE_INPUT.matcher(raceName).matches()) {
             resp.put("error", "レース名に使用できない文字が含まれています");
@@ -146,8 +147,16 @@ public class StatsPredictionController {
             return ResponseEntity.ok(resp);
         }
 
+        // どの開催を作り直すかを race_id で固定して Python に渡す（名前だけだと、同名の別開催に向くことがある）。
+        // すでに顔面分析の済んだ開催は --update（点だけ再評価）にする。付けないと予想の行を入れ替えるため、
+        // 顔面のコメントと点が消えていた（2026-11-14）
+        String target = resolveRaceId(raceName, raceId);
         String script = pythonScriptDir + File.separator + "stats_predictor.py";
-        List<String> cmd = List.of("python3", script, raceName);
+        List<String> cmd = new java.util.ArrayList<>(List.of("python3", script, target != null ? target : raceName));
+        if (target != null && hasFaceData(target)) {
+            cmd.add("--update");
+            resp.put("mode", "update");
+        }
         startScript(key, cmd);
 
         resp.put("key", key);
@@ -160,7 +169,8 @@ public class StatsPredictionController {
     // ──────────────────────────────────────────────
     @PostMapping("/run-face")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> runFace(@RequestParam String raceName) {
+    public ResponseEntity<Map<String, Object>> runFace(@RequestParam String raceName,
+                                                       @RequestParam(required = false) String raceId) {
         Map<String, Object> resp = new LinkedHashMap<>();
         if (!SAFE_INPUT.matcher(raceName).matches()) {
             resp.put("error", "レース名に使用できない文字が含まれています");
@@ -174,12 +184,49 @@ public class StatsPredictionController {
         }
 
         String script = pythonScriptDir + File.separator + "face_analyzer_local.py";
-        List<String> cmd = List.of("python3", script, raceName);
+        String target = resolveRaceId(raceName, raceId);
+        List<String> cmd = target != null ? List.of("python3", script, raceName, target)
+                                          : List.of("python3", script, raceName);
         startScript(key, cmd);
 
         resp.put("key", key);
         resp.put("message", "顔面分析を開始しました");
         return ResponseEntity.ok(resp);
+    }
+
+    private static final Pattern RACE_ID = Pattern.compile("^[0-9A-Za-z]{10,14}$");
+
+    /**
+     * 実行の対象にする開催。画面から race_id が来ていて、その名前の出馬表が実在すればそれを使う。
+     * 無ければ、その名前でいちばん新しい開催（Python が名前から選ぶのと同じ規則）。見つからなければ null
+     */
+    String resolveRaceId(String raceName, String raceId) {
+        try {
+            if (raceId != null && RACE_ID.matcher(raceId).matches()) {
+                Integer n = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM race_entry WHERE race_id = ? AND race_name = ?",
+                    Integer.class, raceId, raceName);
+                if (n != null && n > 0) return raceId;
+            }
+            List<String> ids = jdbc.queryForList(
+                "SELECT race_id FROM race_entry WHERE race_name = ? AND race_id IS NOT NULL " +
+                "ORDER BY race_date DESC, race_id DESC LIMIT 1", String.class, raceName);
+            return ids.isEmpty() ? null : ids.get(0);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** この開催に、顔面分析の結果がすでにあるか */
+    private boolean hasFaceData(String raceId) {
+        try {
+            Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM stats_prediction WHERE race_id = ? AND face_comment IS NOT NULL",
+                Integer.class, raceId);
+            return n != null && n > 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void startScript(String key, List<String> cmd) {

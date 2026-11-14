@@ -260,6 +260,32 @@ def face_analysis_done(conn, race_id):
     finally:
         cur.close()
 
+
+def face_nearly_done(heads, done):
+    """顔面分析が「ほぼ完了」か: 欠けが2頭以内で、8割以上は済んでいる。
+
+    写真の無い馬や、何度やっても分析できない写真の馬が1〜2頭いるだけのレースを、毎朝「失敗」と数えて
+    いた（直近45日で46回中28回が失敗終了になり、本当の失敗が埋もれていた。2026-11-14）。
+    欠けた馬は、順位付けでレース内の顔面の平均点を使って補う（FaceRankingService）ので、予想は成立する。"""
+    return heads > 0 and done >= heads - 2 and done >= heads * 0.8
+
+
+def face_counts(conn, race_id):
+    """(出走頭数, 顔面分析の済んだ頭数)。face_analysis_done と同じ数え方"""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM race_entry WHERE race_id = %s),
+                (SELECT COUNT(*) FROM stats_prediction sp
+                 WHERE sp.race_id = %s
+                   AND sp.face_comment IS NOT NULL
+                   AND sp.horse_id IN (SELECT horse_id FROM race_entry WHERE race_id = %s))
+        """, (race_id, race_id, race_id))
+        return cur.fetchone()
+    finally:
+        cur.close()
+
 def has_race_column(conn, race_id):
     """鬼眼コラム（race_column）が公開済みか。テーブルが無ければ False"""
     cur = conn.cursor()
@@ -475,14 +501,23 @@ def main():
             log(f"  → 顔面分析: スキップ（全馬完了済み）")
             ok3 = True
         else:
+            # 分析できない馬が1〜2頭残っているレースも、毎朝もう一度だけ試す（写真が後から載ることがある）
             ok3, _ = run_script('face_analyzer_local.py', [race_name, race_id], '顔面分析（llava）')
             # G1〜G3は最重要。失敗 or 未完了なら即時もう一度だけ再試行する。
             if is_graded and not face_analysis_done(conn, race_id):
                 log(f"  ⚠️ [重賞] {race_name} の顔面分析が未完了 → 即時リトライ")
                 polite_sleep(3.0, 5.0)
                 ok3, _ = run_script('face_analyzer_local.py', [race_name, race_id], '顔面分析リトライ（重賞）')
-            # 終了コードだけでなく DB 上の完了も確認する（重賞以外も同じ基準で判定）
-            ok3 = ok3 and face_analysis_done(conn, race_id)
+            # 終了コードだけでなく DB 上の完了も確認する（重賞以外も同じ基準で判定）。
+            # 1〜2頭だけ分析できない馬が残ったレースは失敗にしない（その馬は統計で順位に入る）
+            heads_n, done_n = face_counts(conn, race_id)
+            if done_n >= heads_n > 0:
+                ok3 = ok3 and True
+            elif face_nearly_done(heads_n, done_n):
+                log(f"  → 顔面分析: {done_n}/{heads_n}頭（残り{heads_n - done_n}頭は分析できず、統計で順位に入れます）")
+                ok3 = True
+            else:
+                ok3 = False
 
         # 5. 鬼眼コラム（重賞のみ）。公開は夜（night_columns.py: 金曜夜=土曜の重賞、土曜夜=日曜の重賞）。
         #    朝は、レース当日なのにまだコラムが無いとき（夜の処理の失敗など）だけ作る。書き直しはしない
@@ -552,11 +587,12 @@ def main():
             heads, face_done = vcur.fetchone()
             vcur.close()
             label = {1: 'G1', 2: 'G2', 3: 'G3'}[r['grade_no']]
-            if heads == 0 or face_done < heads:
+            if heads == 0 or not face_nearly_done(heads, face_done):
                 graded_problems.append(f"{label} {r['race']}: 出走{heads}頭 / 顔面分析{face_done}頭")
                 log(f"  ⛔ [重賞未完了] {label} {r['race']} 出走{heads} 顔面{face_done}")
             else:
-                log(f"  ✅ [重賞OK] {label} {r['race']} {face_done}/{heads}頭")
+                log(f"  ✅ [重賞OK] {label} {r['race']} {face_done}/{heads}頭"
+                    + ("" if face_done >= heads else "（欠けた馬は統計で順位に入ります）"))
     finally:
         vconn.close()
 

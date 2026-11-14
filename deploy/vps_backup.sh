@@ -21,6 +21,15 @@ MIN_BYTES=100000  # これ未満のダンプは「中身が無い」とみなし
 mkdir -p "$BACKUP_DIR"
 cd "$APP_DIR"
 
+# 失敗を Discord に知らせる（cron のログに出るだけで、何日止まっても気づけなかった。2026-11-14）
+notify_fail() {
+    local url
+    url=$(grep -E '^DISCORD_WEBHOOK_URL=' "$APP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d "\"'")
+    [ -n "$url" ] || return 0
+    curl -s -m 15 -H 'Content-Type: application/json' \
+        -d "{\"content\": \"🚨 **本番のバックアップに失敗しました**: $1\"}" "$url" >/dev/null 2>&1 || true
+}
+
 STAMP=$(date +%F)
 OUT="$BACKUP_DIR/db_${STAMP}.sql.gz"
 
@@ -32,11 +41,13 @@ if ! docker compose exec -T python sh -c \
     | gzip > "$OUT"; then
     echo "[$(date '+%F %T')] ❌ バックアップ失敗（pg_dump エラー）" >&2
     rm -f "$OUT"
+    notify_fail "DBのダンプ（pg_dump）がエラーで終わりました"
     exit 1
 fi
 BYTES=$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT")
 if [ "$BYTES" -lt "$MIN_BYTES" ]; then
     echo "[$(date '+%F %T')] ❌ ダンプが小さすぎます (${BYTES}B < ${MIN_BYTES}B)。接続先DBが空の可能性。ファイルは残すが失敗扱い" >&2
+    notify_fail "DBのダンプが小さすぎます（${BYTES}バイト）"
     exit 1
 fi
 SIZE=$(du -h "$OUT" | cut -f1)
@@ -45,3 +56,21 @@ echo "[$(date '+%F %T')] 完了 ($SIZE)"
 # 古い世代を削除（KEEP_DAYS 日より古いもの）
 find "$BACKUP_DIR" -name 'db_*.sql.gz' -mtime +$KEEP_DAYS -delete
 echo "[$(date '+%F %T')] 世代整理完了（保持 ${KEEP_DAYS} 日）"
+
+# ── 馬の写真（uploads）: 週1回（日曜）まるごと固める。4世代保持 ──
+# DBのバックアップだけでは写真は戻せない（Docker の volume が消えると全部取り直しになり、
+# netkeiba への大量アクセスが要る）。写真は増えるだけなので週1回で足りる。
+# 注意: これも同じVPSの中の保存。VPSごと失う事故には、ときどき手元へコピーして備える
+if [ "$(date +%u)" = "7" ] || ! ls "$BACKUP_DIR"/uploads_*.tar.gz >/dev/null 2>&1; then
+    UP="$BACKUP_DIR/uploads_${STAMP}.tar.gz"
+    echo "[$(date '+%F %T')] 写真のバックアップ開始 → $UP"
+    if docker compose exec -T python tar -C /data -czf - uploads > "$UP" && [ -s "$UP" ]; then
+        echo "[$(date '+%F %T')] 写真のバックアップ完了 ($(du -h "$UP" | cut -f1))"
+        ls -1t "$BACKUP_DIR"/uploads_*.tar.gz | tail -n +5 | xargs -r rm -f
+    else
+        echo "[$(date '+%F %T')] ❌ 写真のバックアップ失敗" >&2
+        rm -f "$UP"
+        notify_fail "馬の写真（uploads）を固められませんでした"
+        exit 1
+    fi
+fi

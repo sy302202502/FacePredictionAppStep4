@@ -1,6 +1,7 @@
 package com.faceprediction.service;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -72,6 +73,10 @@ public class SnapshotService {
                     "  AND NOT EXISTS (SELECT 1 FROM race_specific_accuracy rsa " +
                     "                  WHERE rsa.race_id = sp.race_id AND rsa.data_source = 'stats')",
                     String.class, today)) {
+                // 発走の時刻が近づいたら、もう上書きしない（発走後に統計の再評価や顔面の再分析が走ると、
+                // 「実際に見て買った印」が後から変わってしまうため。2026-11-14）。
+                // まだ1度も保存していないレースだけは、時刻を過ぎていても保存する
+                if (isFrozen(id, LocalTime.now()) && hasSnapshot(id)) continue;
                 save(id, false);
             }
             // 結果記録済み・未保存 → 1度だけ（馬番がそろってから）
@@ -85,6 +90,30 @@ public class SnapshotService {
         } catch (Exception e) {
             log.warn("予想の固定保存に失敗: {}", e.getMessage());
         }
+    }
+
+    /**
+     * レース番号ごとの「これ以降は上書きしない」時刻。中央競馬の各レースのいちばん早い発走時刻より
+     * 少し前に置く（発走時刻そのものは保存していないため、番号から決める。実際の発走より最大で
+     * 40分ほど早く凍結するが、遅れて後付けの予想に変わるよりよい）。1R〜12R の順
+     */
+    private static final LocalTime[] FREEZE_AT = {
+        LocalTime.of(9, 40), LocalTime.of(10, 5), LocalTime.of(10, 35), LocalTime.of(11, 5),
+        LocalTime.of(11, 50), LocalTime.of(12, 20), LocalTime.of(12, 50), LocalTime.of(13, 20),
+        LocalTime.of(13, 50), LocalTime.of(14, 25), LocalTime.of(15, 10), LocalTime.of(15, 45),   // 11R・12R は15時の出馬表同期（取消の反映）を待つ
+    };
+
+    /** 当日のこのレースは、もう固定保存を上書きしない時刻になったか。海外レース（英字入りの race_id）は対象外 */
+    static boolean isFrozen(String raceId, LocalTime now) {
+        if (raceId == null || raceId.length() != 12 || !raceId.chars().allMatch(Character::isDigit)) return false;
+        int no = Integer.parseInt(raceId.substring(10));
+        if (no < 1 || no > FREEZE_AT.length) return false;
+        return !now.isBefore(FREEZE_AT[no - 1]);
+    }
+
+    private boolean hasSnapshot(String raceId) {
+        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM prediction_snapshot WHERE race_id = ?", Integer.class, raceId);
+        return n != null && n > 0;
     }
 
     /**

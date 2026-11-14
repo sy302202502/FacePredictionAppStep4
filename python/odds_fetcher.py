@@ -43,7 +43,27 @@ def ensure_table(conn):
             fetched_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    # 取得のたびに追記する履歴（race_odds は最新だけを残すため、あとから「見た時点のオッズ」で
+    # 買い目を検証できなかった。2026-11-14）。アクセスは増やさず、同じ取得結果を残すだけ
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS race_odds_history (
+            id BIGSERIAL PRIMARY KEY,
+            race_id VARCHAR(20) NOT NULL,
+            horse_id VARCHAR(20),
+            horse_number INTEGER,
+            win_odds FLOAT,
+            popularity INTEGER,
+            fetched_at TIMESTAMP NOT NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_race_odds_history_race ON race_odds_history (race_id, fetched_at)")
     conn.commit()
+    try:
+        # Supabase では public のテーブルに行レベルセキュリティが無いと警告が出る（接続は postgres なので影響なし）
+        cur.execute("ALTER TABLE race_odds_history ENABLE ROW LEVEL SECURITY")
+        conn.commit()
+    except Exception:
+        conn.rollback()
     cur.close()
 
 def fetch_horse_numbers(race_id):
@@ -139,6 +159,10 @@ def save_odds(conn, race_id, race_name, horse_map, odds_map):
             INSERT INTO race_odds (race_id, race_name, horse_name, horse_id, win_odds, popularity, fetched_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW() AT TIME ZONE 'Asia/Tokyo')
         """, (race_id, race_name, horse_name, horse_id, odds_val, pop))   # 画面の「オッズ更新」時刻は日本時間で出す
+        cur.execute("""
+            INSERT INTO race_odds_history (race_id, horse_id, horse_number, win_odds, popularity, fetched_at)
+            VALUES (%s, %s, %s, %s, %s, NOW() AT TIME ZONE 'Asia/Tokyo')
+        """, (race_id, horse_id, horse_num, odds_val, pop))
     conn.commit()
     cur.close()
 

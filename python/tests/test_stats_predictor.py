@@ -89,3 +89,48 @@ class BaselineTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def run(rank, horses, name):
+    return {'rank': rank, 'horses': horses, 'race_name': name}
+
+
+class RecentFormTest(unittest.TestCase):
+    def test_クラスの読み取り(self):
+        self.assertEqual(sp.class_level('太秦S(OP)'), 4)
+        self.assertEqual(sp.class_level('天皇賞(秋)(GI)'), 6.4)
+        self.assertEqual(sp.class_level('3歳以上2勝クラス'), 2)
+        self.assertEqual(sp.class_level('2歳未勝利'), 0)
+        self.assertIsNone(sp.class_level('中山グランドジャンプ(JGI)'))   # 障害は補正しない
+        self.assertIsNone(sp.class_level('C1'))
+
+    def test_今回のクラスは出走馬の前走の中央値(self):
+        res = [[run(1, 16, '○○特別(2勝クラス)')], [run(3, 16, '3歳以上2勝クラス')],
+               [run(5, 16, '△△S(3勝クラス)')], []]
+        self.assertEqual(sp.race_class_level(res), 2)
+        self.assertIsNone(sp.race_class_level([[], []]))
+
+    def test_同じ着順でも多頭数のほうが高い(self):
+        small = sp.recent_form_pt([run(5, 6, '2勝クラス')] * 5, 2)
+        big = sp.recent_form_pt([run(5, 18, '2勝クラス')] * 5, 2)
+        self.assertGreater(big, small)
+
+    def test_上のクラスで走った着順は割り引いて良く見る(self):
+        same = sp.recent_form_pt([run(6, 16, '3歳以上2勝クラス')] * 5, 2)
+        upper = sp.recent_form_pt([run(6, 16, '○○S(GIII)')] * 5, 2)
+        lower = sp.recent_form_pt([run(6, 16, '3歳以上1勝クラス')] * 5, 2)
+        self.assertGreater(upper, same)
+        self.assertGreater(same, lower)
+
+    def test_1戦1勝だけでは満点にしない(self):
+        one = sp.recent_form_pt([run(1, 16, '2歳新馬')], 0)
+        five = sp.recent_form_pt([run(1, 16, '2歳新馬')] * 5, 0)
+        self.assertLess(one, five)
+        self.assertLess(five, 27.0)
+        self.assertGreater(one, 13.0)   # それでも中立よりは上
+
+    def test_点は4点台から27点の間(self):
+        worst = sp.recent_form_pt([run(18, 18, '2歳未勝利')] * 5, 6.4)
+        best = sp.recent_form_pt([run(1, 18, '○○(GI)')] * 5, 0)
+        self.assertGreaterEqual(worst, 4.3)
+        self.assertLessEqual(best, 27.0)

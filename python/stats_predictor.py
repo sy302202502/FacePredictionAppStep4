@@ -5,7 +5,7 @@ netkeiba から各馬の過去成績をスクレイピングし、以下の指�
 Claude Vision API は一切使用しない。
 
 スコア要素:
-  1. 直近5走平均着順 (27pt)  ← 低いほど良い
+  1. 直近5走の着順 (27pt)  ← 頭数に対する着順の割合で見て、クラスの上下を加味（2026-11-14 に本番106レースで検証）
   2. G1/G2 好走実績 (15pt)
   3. 同距離±200m 勝率 (17pt)
   4. 芝/ダート 適性 (10pt)
@@ -551,8 +551,55 @@ def calc_condition_pt(results, today_condition):
                           f'{note} → {pt:.1f}pt')
 
 
+# 近走の評価に使うクラスの高さ（成績表のレース名から読む）。数字の差が「何クラス上か」
+CLASS_LEVEL = {'新馬': 0, '未勝利': 0, '1勝クラス': 1, '2勝クラス': 2, '3勝クラス': 3,
+               'OP': 4, 'L': 4.3, 'GIII': 5, 'JpnIII': 4.5, 'GII': 5.6, 'JpnII': 5,
+               'GI': 6.4, 'JpnI': 5.5, '重賞': 4.5,
+               'G3': 5, 'G2': 5.6, 'G1': 6.4}
+CLASS_K = 0.05        # 1クラス上で走った着順は、頭数に対する着順の割合を 0.05 だけ良く見る
+RECENT_NEUTRAL = 0.45  # 走数の少ない馬を寄せる中立の値（着順÷頭数）
+
+
+def class_level(race_name):
+    """成績表のレース名（例: 太秦S(OP) / 3歳以上2勝クラス / 天皇賞(秋)(GI)）→ クラスの高さ。
+    障害・地方の条件戦など読めないものは None（補正しない）"""
+    name = race_name or ''
+    m = re.search(r'\(([^)]*)\)$', name)
+    if m and m.group(1) in CLASS_LEVEL:
+        return CLASS_LEVEL[m.group(1)]
+    for k in ('新馬', '未勝利', '1勝クラス', '2勝クラス', '3勝クラス'):
+        if k in name:
+            return CLASS_LEVEL[k]
+    return None
+
+
+def race_class_level(all_results):
+    """今回のレースのクラスの高さ。出馬表にクラスが無いため、出走馬の前走のクラスの中央値で代える。
+    all_results は各馬の成績のリスト（新しい順）。読める馬がいなければ None"""
+    levels = sorted(lv for lv in (class_level(rs[0]['race_name']) for rs in all_results if rs) if lv is not None)
+    return levels[len(levels) // 2] if levels else None
+
+
+def recent_form_pt(recent5, race_level=None):
+    """直近5走の点（27点満点）。着順そのものではなく「頭数に対する着順の割合」で見て、
+    今回より上のクラスで走った着順は割り引いて良く、下のクラスの着順は割り増して悪く見る。
+    走数の少ない馬は中立へ少し寄せる（1戦1勝だけで満点にしない）。
+
+    2026-11-14 に本番106レースで検証: 統計1位が1着 24.5%→30.2%、3着内 47.2%→53.8%、
+    着順との順位相関 0.399→0.418（前半・後半、奇数・偶数のどの分け方でも同じか上）。"""
+    vals = []
+    for r in recent5:
+        q = (r['rank'] - 1) / max(1, r['horses'] - 1)
+        lv = class_level(r.get('race_name'))
+        if lv is not None and race_level is not None:
+            q -= CLASS_K * (lv - race_level)
+        vals.append(q)
+    v = (sum(vals) + RECENT_NEUTRAL) / (len(vals) + 1)
+    return max(4.3, min(27.0, 27.0 - 29.5 * v))
+
+
 def calc_score(results, target_distance, target_surface,
-               training=None, blood=None, today_condition=None):
+               training=None, blood=None, today_condition=None, race_level=None):
     """
     0〜100点のスコアと詳細コメントを返す
     training: fetch_oikiri_data() の1頭分 dict or None
@@ -570,10 +617,10 @@ def calc_score(results, target_distance, target_surface,
         recent5 = [r for r in results[:5] if r['rank'] <= r['horses']]
         if recent5:
             avg_rank = sum(r['rank'] for r in recent5) / len(recent5)
-            # 1着→27pt、5着→約18pt、10着以下→約4pt 線形補間
-            pt = max(4.0, 25.0 - (avg_rank - 1) * 2.1) * 27.0 / 25.0
+            # 頭数に対する着順の割合＋クラスの上下で点を付ける（recent_form_pt）
+            pt = recent_form_pt(recent5, race_level)
             score += pt
-            detail['直近5走平均'] = f"{avg_rank:.1f}着 → {pt:.0f}pt"
+            detail['直近5走平均'] = f"{avg_rank:.1f}着（頭数・クラスを加味）→ {pt:.0f}pt"
         else:
             score += 13.0
             detail['直近5走平均'] = "データ不足 → 13pt"
@@ -810,6 +857,7 @@ def main():
     before = race_date if isinstance(race_date, date) else None
     prev = previous_scores(conn, race_id) if update_mode else {}
     fetch_failed = []   # 成績ページを読めなかった馬（デビュー前で成績が無い馬とは別）
+    all_results = []    # 各馬の成績（今回のレースのクラスを決めるのに使う）
 
     scored = []
     for horse_name, horse_id, horse_num, jockey, dist, surf, _, _rid in entries:
@@ -845,6 +893,7 @@ def main():
                 continue
             results = []
         blood   = fetch_blood(horse_id)
+        all_results.append(results)
         score, detail, comment = calc_score(results, target_distance or 2000, target_surface or '芝',
                                             training=oikiri.get(horse_name),
                                             blood=blood,
@@ -870,8 +919,30 @@ def main():
             'style': style_info,
             'tenkai': feats,
             'recent': recent,
+            '_inputs': (results, oikiri.get(horse_name), blood),
         })
         polite_sleep(1.5, 3.0)
+
+    # ── 全頭の成績がそろったら、今回のレースのクラス（出走馬の前走のクラスの中央値）を決めて
+    #    近走の点を付け直す（上のクラスから来た馬の着順を割り引いて見るため）──
+    race_level = race_class_level(all_results)
+    if race_level is not None:
+        print(f"\n今回のクラスの目安: {race_level}（出走馬の前走のクラスの中央値）")
+        for h in scored:
+            if '_inputs' not in h:
+                continue
+            res, tr, bl = h['_inputs']
+            score, detail, comment = calc_score(res, target_distance or 2000, target_surface or '芝',
+                                                training=tr, blood=bl,
+                                                today_condition=today_condition, race_level=race_level)
+            for k in ('脚質', '注意'):
+                if k in h['detail']:
+                    detail[k] = h['detail'][k]
+            h['score'], h['detail'] = score, detail
+            if '注意' not in detail:
+                h['comment'] = comment
+    for h in scored:
+        h.pop('_inputs', None)
 
     # ── 2パス目: 全頭の脚質が出そろってから展開を想定し、補正を適用 ──
     pace_info = predict_pace([h['style']['style'] if h.get('style') else None for h in scored])

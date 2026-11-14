@@ -586,6 +586,82 @@ def backfill_horse_numbers(conn, race_id, soup):
         num = cols[2].get_text(strip=True)
         if m_id and num.isdigit():
             nums[m_id.group(1)] = int(num)
+    return apply_horse_numbers(conn, race_id, nums)
+
+
+QUICK_BET_NAMES = {'3連複': '三連複', '3連単': '三連単'}
+QUICK_COMBO_SIZE = {'単勝': 1, '複勝': 1, '枠連': 2, '馬連': 2, 'ワイド': 2, '馬単': 2, '三連複': 3, '三連単': 3}
+
+
+def parse_quick_result(soup):
+    """レース当日の結果ページ（race.netkeiba.com/race/result.html）→ 着順・馬番・払戻。
+
+    db.netkeiba の結果ページは月曜の午後まで載らず、土日のレースの答え合わせが毎週月曜18時まで
+    遅れていた（2026-11-14）。当日の夜に記録できるよう、db に無いときだけこちらを読む。
+    返り値 {'results': {horse_id: 着順}, 'numbers': {horse_id: 馬番}, 'payouts': [(券種, 組番キー, 払戻円, 人気)]}。
+    結果表が無ければ None。取消・除外・中止（数字でない着順）は着順なし。"""
+    table = soup.find('table', class_=re.compile(r'RaceTable01')) if soup else None
+    if not table:
+        return None
+    results, numbers = {}, {}
+    for row in table.find_all('tr')[1:]:
+        cols = row.find_all('td')
+        link = row.find('a', href=re.compile(r'/horse/'))
+        m_id = re.search(r'/horse/(\w+)', link.get('href', '')) if link else None
+        if len(cols) < 3 or not m_id:
+            continue
+        num = cols[2].get_text(strip=True)
+        if num.isdigit():
+            numbers[m_id.group(1)] = int(num)
+        m_rank = re.match(r'(\d+)', cols[0].get_text(strip=True))
+        if m_rank:
+            results[m_id.group(1)] = int(m_rank.group(1))
+    payouts = []
+    for pt in soup.find_all('table', class_=re.compile(r'Payout_Detail_Table')):
+        for tr in pt.find_all('tr'):
+            th, res, pay = tr.find('th'), tr.find('td', class_='Result'), tr.find('td', class_='Payout')
+            if not th or not res or not pay:
+                continue
+            name = th.get_text(strip=True)
+            bet_type = QUICK_BET_NAMES.get(name, name)
+            size = QUICK_COMBO_SIZE.get(bet_type)
+            if not size:
+                continue
+            nums = re.findall(r'\d+', res.get_text('/', strip=True))
+            pays = [int(re.sub(r'\D', '', x)) for x in pay.get_text('/', strip=True).split('/') if re.search(r'\d', x)]
+            nin = tr.find('td', class_='Ninki')
+            pops = [re.sub(r'\D', '', x) for x in nin.get_text('/', strip=True).split('/')] if nin else []
+            if len(nums) != size * len(pays):
+                continue   # 組番と払戻の数が合わない行は使わない（読み違いで誤った的中を作らない）
+            for i, p_ in enumerate(pays):
+                combo = nums[i * size:(i + 1) * size]
+                pop = int(pops[i]) if i < len(pops) and pops[i].isdigit() else None
+                payouts.append((bet_type, payout_key(bet_type, combo), p_, pop))
+    return {'results': results, 'numbers': numbers, 'payouts': payouts}
+
+
+def fetch_quick_result(race_id):
+    """レース当日の結果ページを読む。払戻（単勝と三連単）まで出そろっていなければ None（次回に回す）。"""
+    try:
+        resp = requests.get(f"https://race.netkeiba.com/race/result.html?race_id={race_id}",
+                            headers=HEADERS, timeout=15)
+        if resp.status_code != 200:
+            return None
+        quick = parse_quick_result(BeautifulSoup(decode_netkeiba(resp), 'lxml'))
+    except Exception as e:
+        print(f"    [当日の結果ページ] 読めませんでした: {e}")
+        return None
+    if not quick or not quick['results']:
+        return None
+    kinds = {p[0] for p in quick['payouts']}
+    if not {'単勝', '複勝', '馬連', '三連複', '三連単'} <= kinds:
+        print("    [当日の結果ページ] 払戻がまだ出そろっていません → 次回に回します")
+        return None
+    return quick
+
+
+def apply_horse_numbers(conn, race_id, nums):
+    """馬番が未反映（NULL）の出走馬に、結果ページの馬番 {horse_id: 馬番} を埋める。埋めた頭数を返す"""
     cur = conn.cursor()
     n = 0
     for hid, num in nums.items():
@@ -856,13 +932,24 @@ def main():
                 continue
             soup = fetch_result_page(race_id)
             actual = scrape_actual_results_by_id(race_id, soup) if soup else {}
+            quick = None
+            if not actual:
+                # db.netkeiba にまだ載っていない（レース当日〜翌々日）→ 当日の結果ページを読む
+                time.sleep(1)
+                quick = fetch_quick_result(race_id)
+                actual = quick['results'] if quick else {}
             if not actual:
                 print(f"    [スキップ] 結果取得失敗")
                 time.sleep(1)
                 continue
-            print(f"    {len(actual)}頭分の着順を取得")
+            print(f"    {len(actual)}頭分の着順を取得" + ("（当日の結果ページ）" if quick else ""))
             n = record_stats_system(conn, race_id, race_name, actual)
-            if n:
+            if n and quick:
+                np_ = save_payouts(conn, race_id, quick['payouts'])
+                nb = apply_horse_numbers(conn, race_id, quick['numbers'])
+                print(f"    払戻 {np_}件を保存" + (f"・馬番 {nb}頭を補完" if nb else ""))
+                # 展開図の答え合わせは db.netkeiba のページが載ってから、下の補完で行う
+            elif n:
                 np_ = save_payouts(conn, race_id, parse_payouts(soup))
                 nb = backfill_horse_numbers(conn, race_id, soup)
                 print(f"    払戻 {np_}件を保存" + (f"・馬番 {nb}頭を補完" if nb else ""))

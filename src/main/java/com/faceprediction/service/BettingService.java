@@ -13,7 +13,10 @@ import com.faceprediction.entity.RaceSpecificResult;
 
 /**
  * 鬼眼スコア上位5頭（◎○▲△注）から買い目を組み立てる。
- * 各券種 100円 × 点数で、合計 20点（2,000円）の構成:
+ * 基本の買い目は ◎の単勝・複勝の2点（200円）。ワイド以下の18点は「参考」として並べる
+ * （2026-11-14: 本番401レースの検証で、三連複・三連単を毎回買う形は投資の6割を占めて全体の回収率を
+ *  大きく下げていた。投資・払戻・回収率の集計は基本の2点だけで行う）。
+ * 参考まで含めると 各券種 100円 × 点数で、合計 20点（2,000円）の構成:
  *   単勝 ◎ / 複勝 ◎ / ワイド ◎-○▲ / 馬連 ◎-○▲△注
  *   三連複 ◎軸1頭流し ○▲△注 / 三連単 ◎→○▲→○▲△注
  * レース後は netkeiba の払戻表（race_payout）に照らして的中と払戻を判定する。
@@ -66,11 +69,11 @@ public class BettingService {
 
         List<BetLine> lines = new ArrayList<>();
 
-        BetLine win = new BetLine("単勝", "◎ 1点");
+        BetLine win = new BetLine("単勝", "◎ 1点", true);
         addCombo(win, picks, settled, pay, "", c -> within(c[0], 1), 0);
         lines.add(win);
 
-        BetLine place = new BetLine("複勝", "◎ 1点");
+        BetLine place = new BetLine("複勝", "◎ 1点", true);
         addCombo(place, picks, settled, pay, "", c -> within(c[0], placeLimit), 0);
         lines.add(place);
 
@@ -109,6 +112,11 @@ public class BettingService {
         lines.add(trifecta);
 
         return lines;
+    }
+
+    /** 基本の買い目（単勝・複勝）の点数 */
+    public int corePoints(List<BetLine> lines) {
+        return lines.stream().filter(BetLine::isCore).mapToInt(BetLine::getPoints).sum();
     }
 
     /** 全券種の合計点数 */

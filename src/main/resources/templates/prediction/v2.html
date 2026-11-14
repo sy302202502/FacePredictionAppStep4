@@ -1179,6 +1179,18 @@
             white-space: nowrap;
         }
         .bet-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+        .check-table { width: 100%; border-collapse: collapse; font-size: 13px; background: transparent !important; }
+        .check-table thead, .check-table tbody, .check-table tr, .check-table th, .check-table td {
+            background: transparent !important; color: var(--text); }
+        .check-table th { text-align: left; font-size: 11px; color: var(--text-muted) !important; font-weight: 600; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+        .check-table td { padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); white-space: nowrap; }
+        .check-table td.ck-name { white-space: normal; }
+        .check-table td.ck-mark { color: var(--gold-light) !important; font-weight: 700; }
+        .check-table td.ck-gap { font-size: 11px; color: var(--text-muted) !important; white-space: normal; }
+        .check-table tr.gap td.ck-gap { color: var(--gold-light) !important; }
+        @media (max-width: 520px) { .check-table { font-size: 12px; } .check-table td, .check-table th { padding: 5px 3px; } }
+        .bet-ref { margin-top: 10px; opacity: 0.85; }
+        .bet-ref summary { cursor: pointer; font-size: 12px; color: var(--text-muted); padding: 6px 0; }
         .entry-notice {
             margin: -4px 0 14px; padding: 9px 12px; border-radius: 4px;
             font-size: 12px; line-height: 1.7; color: var(--text);
@@ -1378,6 +1390,7 @@
                     <a th:if="${column != null}" href="#column">📝 鬼眼コラム</a>
                     <a href="#ranking">🏆 ランキング</a>
                     <a th:if="${(bets != null and !#lists.isEmpty(bets)) or betReason != null}" href="#bets">🎫 鬼眼買い目</a>
+                    <a th:if="${checkRows != null and !#lists.isEmpty(checkRows)}" href="#check">📋 馬券検討メモ</a>
                 </div>
             </div>
 
@@ -1589,20 +1602,61 @@
                 <div class="glass-card">
                     <div class="bet-card-inner">
                         <div class="bet-head">
-                            <span class="bet-total">各100円 ／ 合計 <strong th:text="${betPoints}">20</strong> 点
-                                （<span th:text="${#numbers.formatInteger(betPoints * 100, 1, 'COMMA')}">2,000</span>円）</span>
+                            <span class="bet-total">基本の買い目　各100円 ／ 合計 <strong th:text="${corePoints}">2</strong> 点
+                                （<span th:text="${#numbers.formatInteger(corePoints * 100, 1, 'COMMA')}">200</span>円）</span>
                         </div>
-                        <div class="bet-row" th:each="b : ${bets}">
-                            <div class="bet-type" th:text="${b.type}">馬連</div>
+                        <div class="bet-row" th:each="b : ${bets}" th:if="${b.core}">
+                            <div class="bet-type" th:text="${b.type}">単勝</div>
                             <div>
-                                <div class="bet-method" th:text="${b.method}">◎-○▲△注 流し</div>
+                                <div class="bet-method" th:text="${b.method}">◎ 1点</div>
                                 <div class="bet-combos">
-                                    <span class="bet-combo" th:each="c : ${b.combos}" th:text="${c.label}">◎3 - ○7</span>
+                                    <span class="bet-combo" th:each="c : ${b.combos}" th:text="${c.label}">◎3 馬名</span>
                                 </div>
                             </div>
                         </div>
+                        <details class="bet-ref">
+                            <summary>参考：相手まで買う場合（<span th:text="${betPoints - corePoints}">18</span>点）</summary>
+                            <div class="bet-row" th:each="b : ${bets}" th:unless="${b.core}">
+                                <div class="bet-type" th:text="${b.type}">馬連</div>
+                                <div>
+                                    <div class="bet-method" th:text="${b.method}">◎-○▲△注 流し</div>
+                                    <div class="bet-combos">
+                                        <span class="bet-combo" th:each="c : ${b.combos}" th:text="${c.label}">◎3 - ○7</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bet-note">
+                                参考の組み方は、これまでの成績では三連複・三連単の回収率が低く、毎回買うと全体を大きく下げます（答え合わせで確認できます）。
+                            </div>
+                        </details>
                         <div class="bet-note">
                             数字は馬番（枠順発表前は印のみ）。鬼眼スコア上位5頭から機械的に組んだ買い目です。馬券の購入は自己判断で。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 馬券検討メモ（鬼眼の印とは別に、統計の順位と人気を見比べる） -->
+            <div th:if="${checkRows != null and !#lists.isEmpty(checkRows)}">
+                <div class="section-heading" id="check">馬券検討メモ（統計と人気）</div>
+                <div class="glass-card">
+                    <div class="bet-card-inner">
+                        <table class="check-table">
+                            <thead><tr><th>印</th><th>馬番</th><th>馬名</th><th>統計</th><th>人気</th><th>単勝</th><th></th></tr></thead>
+                            <tbody>
+                                <tr th:each="c : ${checkRows}" th:classappend="${c.gap != '' ? 'gap' : ''}">
+                                    <td class="ck-mark" th:text="${c.mark}">◎</td>
+                                    <td th:text="${c.number != null ? c.number : '—'}">3</td>
+                                    <td class="ck-name" th:text="${c.name}">馬名</td>
+                                    <td th:text="${c.statsRank != null ? c.statsRank + '位（' + #numbers.formatDecimal(c.statsScore, 1, 1) + '）' : '—'}">1位（82.8）</td>
+                                    <td th:text="${c.pop != null ? c.pop + '番人気' : '—'}">2番人気</td>
+                                    <td th:text="${c.odds != null ? c.odds + '倍' : '—'}">4.5倍</td>
+                                    <td class="ck-gap" th:text="${c.gap}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="bet-note">
+                            鬼眼の印（顔面50%＋統計50%）とは別に、統計の順位と人気を並べた自分用の見比べ表です。これまでの記録では、着順との関係は「人気 ＞ 統計 ＞ 顔面」の順に強く出ています。人気・単勝は取得時点の数字で、当日以外は「—」です。右端は統計と人気が大きくずれている馬の目印で、当たり外れを示すものではありません。
                         </div>
                     </div>
                 </div>

@@ -72,6 +72,7 @@ public class ReviewController {
         model.addAttribute("selected", selected);
         if (selected != null) {
             model.addAttribute("betPoints", bettingService.totalPoints(selected.getBets()));
+            model.addAttribute("corePoints", bettingService.corePoints(selected.getBets()));
             model.addAttribute("tenkai", loadTenkaiCheck(selected.getRaceId()));
         }
         model.addAttribute("tenkaiSummary", tenkaiSummary());
@@ -184,7 +185,9 @@ public class ReviewController {
         out.put("honmeiNumber", h.getHorseNumber());
         out.put("honmeiRank", h.getActualRank());
         out.put("settled", !r.getBets().isEmpty() && r.getBets().get(0).getHit() != null);
+        // 的中・払戻・投資は基本の買い目（単勝・複勝）のもの。参考の券種の的中は refHitTypes
         out.put("hitTypes", r.getHitTypes());
+        out.put("refHitTypes", r.getRefHitTypes());
         out.put("payoutKnown", r.isPayoutKnown());
         out.put("returnTotal", r.getReturnTotal());
         out.put("invested", r.getInvested());
@@ -199,8 +202,10 @@ public class ReviewController {
         int betRaces = 0;
         // 回収率: 払戻表で判定できたレースだけで計算（投資 = 点数×100円）
         int payoutRaces = 0;
-        long invested = 0;
+        long invested = 0;      // 基本の買い目（単勝・複勝）
         long returned = 0;
+        long allInvested = 0;   // 参考まで全部買った場合
+        long allReturned = 0;
         Map<String, long[]> byType = new LinkedHashMap<>();  // 券種 → {投資, 払戻}
         for (RaceReview r : reviews) {
             Integer rank = r.getHonmei().getActualRank();
@@ -217,8 +222,12 @@ public class ReviewController {
                 for (BetLine line : r.getBets()) {
                     long in = line.getPoints() * 100L;
                     long out = line.getReturnAmount();
-                    invested += in;
-                    returned += out;
+                    if (line.isCore()) {
+                        invested += in;
+                        returned += out;
+                    }
+                    allInvested += in;
+                    allReturned += out;
                     long[] t = byType.computeIfAbsent(line.getType(), k -> new long[2]);
                     t[0] += in;
                     t[1] += out;
@@ -239,6 +248,9 @@ public class ReviewController {
         s.put("invested", invested);
         s.put("returned", returned);
         s.put("recovery", invested > 0 ? Math.round(returned * 100.0 / invested) : 0L);
+        s.put("allInvested", allInvested);
+        s.put("allReturned", allReturned);
+        s.put("allRecovery", allInvested > 0 ? Math.round(allReturned * 100.0 / allInvested) : 0L);
         s.put("recoveryByType", recoveryByType);
         return s;
     }
@@ -272,14 +284,34 @@ public class ReviewController {
                 && b.getCombos().stream().allMatch(c -> c.getHit() != null));
         }
 
-        /** 払戻合計（100円×全組）。払戻表で判定できていなければ null */
+        /** 基本の買い目（単勝・複勝）の払戻合計。払戻表で判定できていなければ null */
         public Integer getReturnTotal() {
+            return isPayoutKnown()
+                ? bets.stream().filter(BetLine::isCore).mapToInt(BetLine::getReturnAmount).sum() : null;
+        }
+
+        /** 基本の買い目の投資額（点数×100円） */
+        public int getInvested() {
+            return bets.stream().filter(BetLine::isCore).mapToInt(BetLine::getPoints).sum() * 100;
+        }
+
+        /** 参考まで全部買った場合の払戻合計。払戻表で判定できていなければ null */
+        public Integer getAllReturnTotal() {
             return isPayoutKnown() ? bets.stream().mapToInt(BetLine::getReturnAmount).sum() : null;
         }
 
-        /** 投資額（点数×100円） */
-        public int getInvested() {
+        /** 参考まで全部買った場合の投資額 */
+        public int getAllInvested() {
             return bets.stream().mapToInt(BetLine::getPoints).sum() * 100;
+        }
+
+        /** 参考の券種で的中したもの（例: ワイド・馬連） */
+        public List<String> getRefHitTypes() {
+            List<String> types = new ArrayList<>();
+            for (BetLine line : bets) {
+                if (!line.isCore() && Boolean.TRUE.equals(line.getHit())) types.add(line.getType());
+            }
+            return types;
         }
 
         /** ◎（鬼眼スコア1位） */
@@ -289,7 +321,7 @@ public class ReviewController {
         public List<String> getHitTypes() {
             List<String> types = new ArrayList<>();
             for (BetLine line : bets) {
-                if (Boolean.TRUE.equals(line.getHit())) types.add(line.getType());
+                if (line.isCore() && Boolean.TRUE.equals(line.getHit())) types.add(line.getType());
             }
             return types;
         }

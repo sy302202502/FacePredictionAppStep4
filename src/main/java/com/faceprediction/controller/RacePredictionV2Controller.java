@@ -1,5 +1,9 @@
 package com.faceprediction.controller;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -85,6 +89,7 @@ public class RacePredictionV2Controller {
             List<BetLine> bets = bettingService.suggest(results);
             model.addAttribute("bets", bets);
             model.addAttribute("betPoints", bettingService.totalPoints(bets));
+            model.addAttribute("corePoints", bettingService.corePoints(bets));
             // 買い目を出せないときの理由（欄ごと消えて理由が分からない、を防ぐ）
             long scored = results.stream().filter(r -> r.getScore() != null).count();
             model.addAttribute("betReason", !results.isEmpty() && bets.isEmpty()
@@ -110,6 +115,7 @@ public class RacePredictionV2Controller {
             Map<String, RaceOdds> oddsMap = oddsList.stream()
                 .collect(Collectors.toMap(RaceOdds::getHorseName, o -> o, (a, b) -> a));
             model.addAttribute("oddsMap", oddsMap);
+            model.addAttribute("checkRows", checkRows(rows, results, oddsMap));
             // オッズの取得時刻（日本時間で保存）。2時間より古ければ「古い」として薄く出す
             java.time.LocalDateTime oddsAt = oddsList.stream().map(RaceOdds::getFetchedAt)
                 .filter(java.util.Objects::nonNull).max(java.util.Comparator.naturalOrder()).orElse(null);
@@ -124,6 +130,47 @@ public class RacePredictionV2Controller {
         }
 
         return "prediction/v2";
+    }
+
+    /**
+     * 馬券検討メモ: 鬼眼の印とは別に、統計の順位と人気（単勝オッズ）を1頭1行で並べる。
+     * 本番の検証（2026-11-14・401レース）では、着順との関係は 人気 ＞ 統計 ＞ 顔面 の順に強かったため、
+     * 自分で馬券を考えるときの材料として統計と人気を見比べられるようにする。印（鬼眼の順位）は変えない。
+     * 統計の点が無い馬は末尾。並びは統計の点の高い順。
+     */
+    static List<Map<String, Object>> checkRows(List<Map<String, Object>> rows, List<RaceSpecificResult> ranked,
+                                               Map<String, RaceOdds> oddsMap) {
+        Map<String, RaceSpecificResult> byName = new HashMap<>();
+        for (RaceSpecificResult r : ranked) byName.put(r.getHorseName(), r);
+        List<Map<String, Object>> sorted = new ArrayList<>(rows);
+        sorted.sort(Comparator.comparing((Map<String, Object> m) -> m.get("score") == null ? Double.NEGATIVE_INFINITY
+            : ((Number) m.get("score")).doubleValue()).reversed());
+        List<Map<String, Object>> out = new ArrayList<>();
+        int rank = 0;
+        for (Map<String, Object> m : sorted) {
+            String name = (String) m.get("horse_name");
+            RaceSpecificResult r = byName.get(name);
+            RaceOdds od = oddsMap.get(name);
+            Integer statsRank = m.get("score") == null ? null : ++rank;
+            Integer pop = od == null ? null : od.getPopularity();
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("mark", r != null && r.getScore() != null ? FaceRankingService.markOf(r.getRankPosition()) : "");
+            row.put("number", m.get("horse_number"));
+            row.put("name", name);
+            row.put("statsRank", statsRank);
+            row.put("statsScore", m.get("score"));
+            row.put("odds", od == null ? null : od.getWinOdds());
+            row.put("pop", pop);
+            // 統計と人気のずれ（3つ以上離れているとき）。当たり外れの保証ではなく、見比べる目印
+            String gap = "";
+            if (statsRank != null && pop != null) {
+                if (statsRank <= 3 && pop >= 6) gap = "統計は上位・人気は低め";
+                else if (pop <= 2 && statsRank >= 6) gap = "人気は上位・統計は低め";
+            }
+            row.put("gap", gap);
+            out.add(row);
+        }
+        return out;
     }
 
     /** race_column の1件（title / paragraphs / generator / updated）。無ければ null */

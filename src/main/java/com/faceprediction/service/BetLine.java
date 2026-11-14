@@ -29,12 +29,22 @@ public class BetLine {
 
     private final String type;
     private final String method;
+    private final boolean core;
     private final List<Combo> combos = new ArrayList<>();
 
     public BetLine(String type, String method) {
+        this(type, method, false);
+    }
+
+    /** @param core 基本の買い目（単勝・複勝）か。false は「参考」（相手まで買う場合の組み方） */
+    public BetLine(String type, String method, boolean core) {
         this.type = type;
         this.method = method;
+        this.core = core;
     }
+
+    /** 基本の買い目か（投資・払戻・回収率の集計はこちらだけで行う） */
+    public boolean isCore() { return core; }
 
     public void addCombo(Combo combo) { combos.add(combo); }
 
